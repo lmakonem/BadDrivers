@@ -1,0 +1,8 @@
+---
+
+cloudflare_tunnel_name: "ludus-kali-tunnel"
+cloudflare_hostname: "kali-range.example.com"
+cloudflare_kali_ip: "10.99.99.1"
+cloudflare_kali_port: 8444
+cloudflare_credentials_file: "/etc/cloudflared/credentials.json"
+cloudflared_package_name: "cloudflared"

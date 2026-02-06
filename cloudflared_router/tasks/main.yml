@@ -1,0 +1,54 @@
+---
+
+- name: Ensure cloudflared is installed
+  ansible.builtin.apt:
+    name: "{{ cloudflared_package_name }}"
+    state: present
+    update_cache: yes
+
+- name: Ensure cloudflared config directory exists
+  ansible.builtin.file:
+    path: /etc/cloudflared
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy cloudflared credentials file (optional, override in prod)
+  ansible.builtin.copy:
+    src: cloudflared-credentials.json
+    dest: "{{ cloudflare_credentials_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: cloudflare_credentials_file is defined
+  no_log: true
+
+- name: Render cloudflared config.yml
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /etc/cloudflared/config.yml
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - restart cloudflared
+    - reload systemd
+
+- name: Deploy cloudflared systemd service unit
+  ansible.builtin.template:
+    src: cloudflared.service.j2
+    dest: /etc/systemd/system/cloudflared.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart cloudflared
+
+- name: Ensure cloudflared service is enabled and started
+  ansible.builtin.systemd:
+    name: cloudflared
+    enabled: true
+    state: started
+    daemon_reload: true
