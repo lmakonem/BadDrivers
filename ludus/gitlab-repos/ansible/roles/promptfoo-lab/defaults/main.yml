@@ -1,0 +1,17 @@
+---
+# PromptFoo Lab default variables
+
+# Ollama configuration
+ollama_model: "llama3.2:3b"
+ollama_port: 11434
+
+# Flask app configuration
+flask_port: 5000
+flask_app_dir: /home/kali/lab
+
+# Node.js version for PromptFoo
+nodejs_version: "20"
+
+# Lab user (Kali default)
+lab_user: kali
+lab_group: kali

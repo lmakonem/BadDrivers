@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: LahiLabs
+  description: Kali Linux student VM with PromptFoo for AI red teaming lab
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Kali
+      versions:
+        - all
+  galaxy_tags:
+    - security
+    - ai
+    - promptfoo
+    - kali
+    - redteam
+
+dependencies: []

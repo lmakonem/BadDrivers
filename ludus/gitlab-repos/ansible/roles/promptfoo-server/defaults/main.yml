@@ -1,0 +1,17 @@
+---
+# Defaults for promptfoo-server role
+# Ubuntu server hosting the vulnerable chatbot and Ollama LLM
+
+# Ollama configuration
+ollama_model: "llama3.2:3b"
+
+# Flask chatbot configuration
+flask_port: 5000
+flask_host: "0.0.0.0"
+
+# Service user (ubuntu default)
+service_user: "ubuntu"
+service_group: "ubuntu"
+
+# Lab directory
+lab_dir: "/opt/chatbot"

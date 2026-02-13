@@ -1,0 +1,136 @@
+---
+# Main tasks for promptfoo-server role
+# Installs Ollama LLM and vulnerable Flask chatbot on Ubuntu server
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install system dependencies
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-packaging
+      - curl
+      - git
+      - jq
+    state: present
+
+# Install Ollama
+- name: Check if Ollama is installed
+  ansible.builtin.command: which ollama
+  register: ollama_check
+  changed_when: false
+  failed_when: false
+
+- name: Download Ollama installer
+  ansible.builtin.get_url:
+    url: https://ollama.com/install.sh
+    dest: /tmp/ollama-install.sh
+    mode: "0755"
+  when: ollama_check.rc != 0
+
+- name: Install Ollama
+  ansible.builtin.shell: /tmp/ollama-install.sh
+  environment:
+    OLLAMA_VERSION: "latest"
+  when: ollama_check.rc != 0
+  changed_when: true
+
+- name: Ensure Ollama service is enabled and running
+  ansible.builtin.systemd:
+    name: ollama
+    enabled: true
+    state: started
+
+- name: Wait for Ollama to be ready
+  ansible.builtin.uri:
+    url: http://localhost:11434/api/tags
+    method: GET
+    status_code: 200
+  register: ollama_ready
+  until: ollama_ready.status == 200
+  retries: 30
+  delay: 5
+
+- name: Pull Ollama model
+  ansible.builtin.command: ollama pull {{ ollama_model }}
+  register: model_pull
+  changed_when: "'pulling' in model_pull.stdout or 'downloading' in model_pull.stdout"
+  retries: 3
+  delay: 10
+
+# Create lab directory and chatbot
+- name: Create lab directory
+  ansible.builtin.file:
+    path: "{{ lab_dir }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0755"
+
+- name: Copy Flask chatbot application
+  ansible.builtin.copy:
+    src: app.py
+    dest: "{{ lab_dir }}/app.py"
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0644"
+  notify: restart chatbot
+
+- name: Create Python virtual environment
+  ansible.builtin.command: python3 -m venv {{ lab_dir }}/venv
+  args:
+    creates: "{{ lab_dir }}/venv/bin/python"
+
+- name: Install Python dependencies
+  ansible.builtin.pip:
+    name:
+      - flask
+      - requests
+    virtualenv: "{{ lab_dir }}/venv"
+    state: present
+
+- name: Create chatbot systemd service
+  ansible.builtin.template:
+    src: chatbot.service.j2
+    dest: /etc/systemd/system/chatbot.service
+    mode: "0644"
+  notify: restart chatbot
+
+- name: Enable and start chatbot service
+  ansible.builtin.systemd:
+    name: chatbot
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for chatbot to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ flask_port }}/health"
+    method: GET
+    status_code: 200
+  register: chatbot_ready
+  until: chatbot_ready.status == 200
+  retries: 30
+  delay: 5
+
+# Configure firewall to allow access from VLAN
+- name: Allow Flask port through UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ flask_port }}"
+    proto: tcp
+  when: ansible_facts.services['ufw.service'] is defined
+  failed_when: false
+
+- name: Display server info
+  ansible.builtin.debug:
+    msg: |
+      PromptFoo Chatbot Server deployed successfully!
+      - Chatbot URL: http://{{ ansible_default_ipv4.address }}:{{ flask_port }}
+      - Health check: http://{{ ansible_default_ipv4.address }}:{{ flask_port }}/health
+      - Ollama model: {{ ollama_model }}

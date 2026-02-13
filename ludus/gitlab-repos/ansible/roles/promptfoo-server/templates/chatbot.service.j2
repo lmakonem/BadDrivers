@@ -1,0 +1,19 @@
+[Unit]
+Description=Vulnerable Chatbot for PromptFoo Lab
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User={{ service_user }}
+Group={{ service_group }}
+WorkingDirectory={{ lab_dir }}
+Environment="PATH={{ lab_dir }}/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="FLASK_HOST={{ flask_host }}"
+Environment="FLASK_PORT={{ flask_port }}"
+ExecStart={{ lab_dir }}/venv/bin/python {{ lab_dir }}/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

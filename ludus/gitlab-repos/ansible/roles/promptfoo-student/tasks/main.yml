@@ -1,0 +1,138 @@
+---
+# Main tasks for promptfoo-student role
+# Installs PromptFoo and lab files on student Kali VMs
+
+# Add Kali GPG key to prevent apt issues
+- name: Ensure Kali GPG key is present
+  ansible.builtin.shell: |
+    wget -q -O - https://archive.kali.org/archive-key.asc | gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg 2>/dev/null || true
+  changed_when: false
+  failed_when: false
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  failed_when: false
+
+- name: Install system dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - jq
+      - python3-packaging
+    state: present
+  failed_when: false
+
+# Install Node.js for PromptFoo
+- name: Check if Node.js is installed
+  ansible.builtin.command: which node
+  register: node_check
+  changed_when: false
+  failed_when: false
+
+- name: Download NodeSource setup script
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/setup_20.x
+    dest: /tmp/nodesource_setup.sh
+    mode: "0755"
+  when: node_check.rc != 0
+
+- name: Run NodeSource setup
+  ansible.builtin.shell: /tmp/nodesource_setup.sh
+  when: node_check.rc != 0
+  changed_when: true
+
+- name: Install Node.js
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+  when: node_check.rc != 0
+
+# Install PromptFoo
+- name: Check if PromptFoo is installed
+  ansible.builtin.command: which promptfoo
+  register: promptfoo_check
+  changed_when: false
+  failed_when: false
+
+- name: Install PromptFoo globally
+  ansible.builtin.command: npm install -g promptfoo
+  when: promptfoo_check.rc != 0
+  changed_when: true
+
+# Create lab directory
+- name: Create lab directory
+  ansible.builtin.file:
+    path: "{{ lab_dir }}"
+    state: directory
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0755"
+
+# Copy lab files
+- name: Copy PromptFoo configuration
+  ansible.builtin.template:
+    src: promptfooconfig.yaml.j2
+    dest: "{{ lab_dir }}/promptfooconfig.yaml"
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0644"
+
+- name: Copy chat helper script
+  ansible.builtin.template:
+    src: chat.sh.j2
+    dest: "{{ lab_dir }}/chat.sh"
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0755"
+
+- name: Copy check-status script
+  ansible.builtin.copy:
+    src: check-status.sh
+    dest: "{{ lab_dir }}/check-status.sh"
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0755"
+
+- name: Copy README
+  ansible.builtin.template:
+    src: README.md.j2
+    dest: "{{ lab_dir }}/README.md"
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0644"
+
+# Create desktop shortcut for easy access
+- name: Create Desktop directory
+  ansible.builtin.file:
+    path: "/home/{{ lab_user }}/Desktop"
+    state: directory
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0755"
+
+- name: Create desktop shortcut
+  ansible.builtin.copy:
+    dest: "/home/{{ lab_user }}/Desktop/AI-Security-Lab.desktop"
+    content: |
+      [Desktop Entry]
+      Version=1.0
+      Type=Application
+      Name=AI Security Lab
+      Comment=Open the PromptFoo AI Security Lab
+      Exec=firefox http://{{ chatbot_server_ip }}:{{ chatbot_port }}
+      Icon=firefox
+      Terminal=false
+      Categories=Security;
+    owner: "{{ lab_user }}"
+    group: "{{ lab_group }}"
+    mode: "0755"
+
+- name: Display lab info
+  ansible.builtin.debug:
+    msg: |
+      PromptFoo Student Lab deployed successfully!
+      - Target chatbot: http://{{ chatbot_server_ip }}:{{ chatbot_port }}
+      - Lab directory: {{ lab_dir }}
+      - Run ./check-status.sh to verify setup

@@ -1,0 +1,6 @@
+---
+- name: restart chatbot
+  systemd:
+    name: chatbot
+    state: restarted
+    daemon_reload: yes
