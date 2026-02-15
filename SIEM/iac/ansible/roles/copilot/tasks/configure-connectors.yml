@@ -1,0 +1,102 @@
+---
+# Configure CoPilot connectors via API
+
+- name: Login to CoPilot
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ copilot.admin_user }}"
+      password: "{{ copilot.admin_password }}"
+    status_code: 200
+  register: copilot_login
+  retries: 5
+  delay: 10
+
+- name: Set auth token
+  set_fact:
+    copilot_token: "{{ copilot_login.json.token }}"
+
+- name: Configure Wazuh Indexer connector
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/connectors/wazuh_indexer"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      connector_url: "https://{{ network.vm1_ip }}:9200"
+      connector_username: "admin"
+      connector_password: "{{ wazuh.indexer.admin_password }}"
+      connector_verify_ssl: false
+    status_code: [200, 201, 400]
+  register: wazuh_indexer_connector
+
+- name: Configure Wazuh Manager connector
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/connectors/wazuh_manager"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      connector_url: "https://{{ network.vm2_ip }}:55000"
+      connector_username: "{{ wazuh.manager.api_user }}"
+      connector_password: "{{ wazuh.manager.api_password }}"
+      connector_verify_ssl: false
+    status_code: [200, 201, 400]
+  register: wazuh_manager_connector
+
+- name: Configure Graylog connector
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/connectors/graylog"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      connector_url: "http://{{ network.vm2_ip }}:9000"
+      connector_username: "{{ graylog.admin_user }}"
+      connector_password: "{{ graylog.admin_password }}"
+    status_code: [200, 201, 400]
+  register: graylog_connector
+
+- name: Configure Grafana connector
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/connectors/grafana"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      connector_url: "http://localhost:{{ grafana.http_port }}"
+      connector_username: "{{ grafana.admin_user }}"
+      connector_password: "{{ grafana.admin_password }}"
+    status_code: [200, 201, 400]
+  register: grafana_connector
+
+- name: Configure Shuffle connector
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/connectors/shuffle"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      connector_url: "http://{{ network.vm2_ip }}:5001"
+    status_code: [200, 201, 400]
+  register: shuffle_connector
+
+- name: Create SIEMLAB customer
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/customers"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ copilot_token }}"
+    body_format: json
+    body:
+      customer_name: "{{ customer.name }}"
+      customer_code: "{{ customer.code }}"
+    status_code: [200, 201, 400]
+  register: customer_create

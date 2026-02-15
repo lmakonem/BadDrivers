@@ -1,0 +1,6 @@
+---
+# Default variables for wazuh-indexer role
+# These can be overridden in group_vars/all.yml
+
+wazuh_indexer_java_heap: "4g"
+wazuh_indexer_data_path: "/opt/siem/wazuh-indexer"

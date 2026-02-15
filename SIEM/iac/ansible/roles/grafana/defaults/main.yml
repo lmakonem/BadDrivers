@@ -1,0 +1,4 @@
+---
+# Default variables for grafana role
+
+grafana_data_path: "/opt/siem/grafana"

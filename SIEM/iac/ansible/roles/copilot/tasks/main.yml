@@ -1,0 +1,60 @@
+---
+# SOCFortress CoPilot deployment role for VM3
+
+- name: Create CoPilot directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/siem/copilot
+    - /opt/siem/copilot/patches
+    - /opt/siem/copilot/config
+
+- name: Copy CoPilot Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/siem/copilot/docker-compose.yml
+    mode: '0644'
+
+- name: Create CoPilot .env file
+  template:
+    src: env.j2
+    dest: /opt/siem/copilot/.env
+    mode: '0600'
+
+- name: Copy CoPilot auth.py patch (async login fix)
+  copy:
+    src: patches/auth.py
+    dest: /opt/siem/copilot/patches/auth.py
+    mode: '0644'
+
+- name: Start CoPilot stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/siem/copilot
+    state: present
+  register: copilot_compose
+
+- name: Wait for CoPilot backend to be ready
+  uri:
+    url: "http://localhost:{{ copilot.backend_port }}/api/health"
+    method: GET
+    status_code: [200, 404]
+  register: copilot_health
+  until: copilot_health.status in [200, 404]
+  retries: 60
+  delay: 10
+
+- name: Wait for CoPilot frontend to be ready
+  uri:
+    url: "http://localhost:{{ copilot.http_port }}"
+    method: GET
+    status_code: [200, 302]
+  register: copilot_frontend
+  until: copilot_frontend.status in [200, 302]
+  retries: 30
+  delay: 10
+
+- name: Configure CoPilot connectors
+  include_tasks: configure-connectors.yml
+  when: copilot_compose.changed

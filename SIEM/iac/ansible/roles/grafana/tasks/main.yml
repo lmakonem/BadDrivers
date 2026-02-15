@@ -1,0 +1,111 @@
+---
+# Grafana deployment role for VM3
+
+- name: Create Grafana directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/siem/grafana
+    - /opt/siem/grafana/provisioning
+    - /opt/siem/grafana/provisioning/datasources
+    - /opt/siem/grafana/provisioning/dashboards
+    - /opt/siem/grafana/dashboards
+
+- name: Copy datasources provisioning
+  template:
+    src: datasources.yml.j2
+    dest: /opt/siem/grafana/provisioning/datasources/datasources.yml
+    mode: '0644'
+
+- name: Copy dashboard provisioning
+  template:
+    src: dashboards.yml.j2
+    dest: /opt/siem/grafana/provisioning/dashboards/dashboards.yml
+    mode: '0644'
+
+- name: Copy Grafana dashboards
+  copy:
+    src: "dashboards/"
+    dest: "/opt/siem/grafana/dashboards/"
+    mode: '0644'
+
+- name: Wait for Grafana to be ready
+  uri:
+    url: "http://localhost:{{ grafana.http_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 30
+  delay: 10
+
+- name: Configure MISP Infinity datasource
+  uri:
+    url: "http://localhost:{{ grafana.http_port }}/api/datasources"
+    method: POST
+    user: "{{ grafana.admin_user }}"
+    password: "{{ grafana.admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "MISP-Infinity"
+      type: "yesoreyeram-infinity-datasource"
+      uid: "misp-infinity"
+      access: "proxy"
+      isDefault: false
+      jsonData:
+        auth_method: "apiKey"
+        apiKeyKey: "Authorization"
+        apiKeyValue: "{{ misp.api_key }}"
+      secureJsonFields: {}
+    status_code: [200, 409]
+  register: misp_datasource
+
+- name: Configure Wazuh Indexer datasource
+  uri:
+    url: "http://localhost:{{ grafana.http_port }}/api/datasources"
+    method: POST
+    user: "{{ grafana.admin_user }}"
+    password: "{{ grafana.admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "Wazuh-Indexer"
+      type: "elasticsearch"
+      uid: "wazuh-indexer"
+      access: "proxy"
+      url: "https://{{ network.vm1_ip }}:9200"
+      basicAuth: true
+      basicAuthUser: "admin"
+      database: "wazuh-alerts-*"
+      jsonData:
+        esVersion: "8.0.0"
+        tlsSkipVerify: true
+        timeField: "timestamp"
+      secureJsonData:
+        basicAuthPassword: "{{ wazuh.indexer.admin_password }}"
+    status_code: [200, 409]
+  register: wazuh_datasource
+
+- name: Configure Graylog datasource
+  uri:
+    url: "http://localhost:{{ grafana.http_port }}/api/datasources"
+    method: POST
+    user: "{{ grafana.admin_user }}"
+    password: "{{ grafana.admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "Graylog"
+      type: "elasticsearch"
+      uid: "graylog"
+      access: "proxy"
+      url: "http://{{ network.vm2_ip }}:9201"
+      database: "graylog_*"
+      jsonData:
+        esVersion: "8.0.0"
+        timeField: "timestamp"
+    status_code: [200, 409]
+  register: graylog_datasource

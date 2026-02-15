@@ -1,0 +1,169 @@
+{
+  "extractors": [
+    {
+      "title": "meraki_device",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 0,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "meraki_device",
+      "extractor_config": {
+        "regex_value": "\\d+\\.\\d+ (MX\\d+|MS\\d+|MR\\d+|MV\\d+|Z\\d+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "MX|MS|MR|MV|Z\\d+"
+    },
+    {
+      "title": "meraki_event_type",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 1,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "meraki_event_type",
+      "extractor_config": {
+        "regex_value": "\\d+ (\\w+) (src|urls|events|ids|flows)"
+      },
+      "condition_type": "regex",
+      "condition_value": "MX|MS|MR"
+    },
+    {
+      "title": "src_ip",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 2,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "src_ip",
+      "extractor_config": {
+        "regex_value": "src=([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "src="
+    },
+    {
+      "title": "dst_ip",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 3,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "dst_ip",
+      "extractor_config": {
+        "regex_value": "dst=([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "dst="
+    },
+    {
+      "title": "src_port",
+      "extractor_type": "regex",
+      "converters": [
+        {
+          "type": "numeric",
+          "config": {}
+        }
+      ],
+      "order": 4,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "src_port",
+      "extractor_config": {
+        "regex_value": "sport=([0-9]+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "sport="
+    },
+    {
+      "title": "dst_port",
+      "extractor_type": "regex",
+      "converters": [
+        {
+          "type": "numeric",
+          "config": {}
+        }
+      ],
+      "order": 5,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "dst_port",
+      "extractor_config": {
+        "regex_value": "dport=([0-9]+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "dport="
+    },
+    {
+      "title": "protocol",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 6,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "protocol",
+      "extractor_config": {
+        "regex_value": "protocol=(\\w+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "protocol="
+    },
+    {
+      "title": "fw_action",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 7,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "fw_action",
+      "extractor_config": {
+        "regex_value": "pattern: \\d+ (allow|deny|all)"
+      },
+      "condition_type": "regex",
+      "condition_value": "pattern:"
+    },
+    {
+      "title": "mac_address",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 8,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "mac_address",
+      "extractor_config": {
+        "regex_value": "mac=([0-9A-Fa-f:]{17})"
+      },
+      "condition_type": "regex",
+      "condition_value": "mac="
+    },
+    {
+      "title": "request_url",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 9,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "request_url",
+      "extractor_config": {
+        "regex_value": "request: (\\S+)"
+      },
+      "condition_type": "regex",
+      "condition_value": "request:"
+    },
+    {
+      "title": "http_method",
+      "extractor_type": "regex",
+      "converters": [],
+      "order": 10,
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "http_method",
+      "extractor_config": {
+        "regex_value": "urls (GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)"
+      },
+      "condition_type": "regex",
+      "condition_value": "urls"
+    }
+  ],
+  "version": "5.2.0"
+}

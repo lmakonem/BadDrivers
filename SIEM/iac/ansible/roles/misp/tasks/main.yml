@@ -1,0 +1,85 @@
+---
+# MISP deployment role for VM2
+
+- name: Create MISP directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/siem/misp
+    - /opt/siem/misp/scripts
+    - /opt/siem/misp/config
+
+- name: Copy MISP Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/siem/misp/docker-compose.yml
+    mode: '0644'
+
+- name: Create MISP .env file
+  template:
+    src: env.j2
+    dest: /opt/siem/misp/.env
+    mode: '0600'
+
+- name: Start MISP stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/siem/misp
+    state: present
+  register: misp_compose
+
+- name: Wait for MISP to be ready
+  uri:
+    url: "https://localhost:8443"
+    method: GET
+    validate_certs: no
+    status_code: [200, 302]
+  register: misp_health
+  until: misp_health.status in [200, 302]
+  retries: 60
+  delay: 10
+
+- name: Store MISP API key
+  copy:
+    content: "{{ misp.api_key }}"
+    dest: /opt/siem/misp/.misp_api_key
+    mode: '0600'
+
+- name: Copy MISP feed configuration script
+  template:
+    src: configure-feeds.py.j2
+    dest: /opt/siem/misp/scripts/configure-feeds.py
+    mode: '0755'
+
+- name: Copy MISP daily sync script
+  template:
+    src: misp-daily-sync.sh.j2
+    dest: /opt/siem/misp/scripts/misp-daily-sync.sh
+    mode: '0755'
+
+- name: Copy MISP health check script
+  template:
+    src: misp-health.sh.j2
+    dest: /opt/siem/misp/scripts/misp-health.sh
+    mode: '0755'
+
+- name: Configure MISP feeds
+  command: python3 /opt/siem/misp/scripts/configure-feeds.py
+  register: feed_config
+  changed_when: "'Enabled' in feed_config.stdout"
+  failed_when: false
+
+- name: Setup MISP daily sync cron
+  cron:
+    name: "MISP daily feed sync"
+    minute: "0"
+    hour: "0"
+    job: "/opt/siem/misp/scripts/misp-daily-sync.sh >> /var/log/misp-sync.log 2>&1"
+
+- name: Setup MISP health check cron
+  cron:
+    name: "MISP health check"
+    minute: "0"
+    hour: "*/6"
+    job: "/opt/siem/misp/scripts/misp-health.sh >> /var/log/misp-health.log 2>&1"

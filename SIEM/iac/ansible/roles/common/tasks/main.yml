@@ -1,0 +1,71 @@
+---
+# Common tasks for all SIEM nodes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - python3-pip
+      - python3-docker
+      - jq
+      - htop
+      - net-tools
+      - vim
+      - wget
+      - unzip
+      - open-iscsi
+      - nfs-common
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: America/Chicago
+
+- name: Configure sysctl for Elasticsearch/OpenSearch
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: "vm.max_map_count", value: "262144" }
+    - { name: "net.core.somaxconn", value: "65535" }
+    - { name: "net.ipv4.ip_forward", value: "1" }
+
+- name: Create SIEM directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/siem
+    - /opt/siem/config
+    - /opt/siem/scripts
+    - /opt/siem/certs
+    - /opt/siem/data
+    - /opt/siem/logs
+    - /opt/siem/backups
+
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Update /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item }}"
+    state: present
+  loop:
+    - "{{ network.vm1_ip }} siem-data"
+    - "{{ network.vm2_ip }} siem-detect"
+    - "{{ network.vm3_ip }} siem-mgmt"

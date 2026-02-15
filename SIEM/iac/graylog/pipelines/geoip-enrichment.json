@@ -1,0 +1,22 @@
+{
+  "title": "GeoIP Enrichment Pipeline",
+  "description": "Enriches messages with GeoIP location data",
+  "source": "pipeline \"GeoIP Enrichment\"\nstage 0 match either\nrule \"GeoIP Lookup Source IP\"\nrule \"GeoIP Lookup Destination IP\"\nend",
+  "stages": [
+    {
+      "stage": 0,
+      "rules": [
+        {
+          "title": "GeoIP Lookup Source IP",
+          "description": "Looks up source IP geolocation",
+          "source": "rule \"GeoIP Lookup Source IP\"\nwhen\n  has_field(\"src_ip\") AND\n  ! cidr_match(\"10.0.0.0/8\", to_ip($message.src_ip)) AND\n  ! cidr_match(\"172.16.0.0/12\", to_ip($message.src_ip)) AND\n  ! cidr_match(\"192.168.0.0/16\", to_ip($message.src_ip))\nthen\n  let geo = geoip_lookup(to_ip($message.src_ip));\n  set_field(\"src_geo_country\", geo[\"country\"].iso_code);\n  set_field(\"src_geo_city\", geo[\"city\"].names.en);\n  set_field(\"src_geo_latitude\", geo[\"location\"].latitude);\n  set_field(\"src_geo_longitude\", geo[\"location\"].longitude);\nend"
+        },
+        {
+          "title": "GeoIP Lookup Destination IP",
+          "description": "Looks up destination IP geolocation",
+          "source": "rule \"GeoIP Lookup Destination IP\"\nwhen\n  has_field(\"dst_ip\") AND\n  ! cidr_match(\"10.0.0.0/8\", to_ip($message.dst_ip)) AND\n  ! cidr_match(\"172.16.0.0/12\", to_ip($message.dst_ip)) AND\n  ! cidr_match(\"192.168.0.0/16\", to_ip($message.dst_ip))\nthen\n  let geo = geoip_lookup(to_ip($message.dst_ip));\n  set_field(\"dst_geo_country\", geo[\"country\"].iso_code);\n  set_field(\"dst_geo_city\", geo[\"city\"].names.en);\n  set_field(\"dst_geo_latitude\", geo[\"location\"].latitude);\n  set_field(\"dst_geo_longitude\", geo[\"location\"].longitude);\nend"
+        }
+      ]
+    }
+  ]
+}

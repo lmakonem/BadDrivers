@@ -1,0 +1,32 @@
+{
+  "title": "Meraki Security Detection Pipeline",
+  "description": "Detects security threats from Meraki firewall logs",
+  "source": "pipeline \"Meraki Security Detection\"\nstage 0 match either\nrule \"Meraki C2 Port Detection\"\nrule \"Meraki External Database Access\"\nrule \"Meraki Cryptomining Detection\"\nrule \"Meraki IRC Botnet Detection\"\nend",
+  "stages": [
+    {
+      "stage": 0,
+      "rules": [
+        {
+          "title": "Meraki C2 Port Detection",
+          "description": "Detects traffic to known C2/backdoor ports",
+          "source": "rule \"Meraki C2 Port Detection\"\nwhen\n  has_field(\"dst_port\") AND\n  to_string($message.syslog_type) == \"meraki\" AND\n  (\n    to_long($message.dst_port) == 4444 OR\n    to_long($message.dst_port) == 5555 OR\n    to_long($message.dst_port) == 6666 OR\n    to_long($message.dst_port) == 1337 OR\n    to_long($message.dst_port) == 8443 OR\n    to_long($message.dst_port) == 9999\n  )\nthen\n  set_field(\"alert_type\", \"c2_traffic\");\n  set_field(\"rule_level\", 12);\n  set_field(\"rule_description\", \"Meraki: Traffic to suspicious C2/backdoor port\");\n  set_field(\"mitre_id\", \"T1571\");\n  set_field(\"alert_severity\", \"high\");\nend"
+        },
+        {
+          "title": "Meraki External Database Access",
+          "description": "Detects external access to database ports",
+          "source": "rule \"Meraki External Database Access\"\nwhen\n  has_field(\"dst_port\") AND\n  to_string($message.syslog_type) == \"meraki\" AND\n  (\n    to_long($message.dst_port) == 1433 OR\n    to_long($message.dst_port) == 3306 OR\n    to_long($message.dst_port) == 5432 OR\n    to_long($message.dst_port) == 1521 OR\n    to_long($message.dst_port) == 27017\n  )\nthen\n  set_field(\"alert_type\", \"external_db_access\");\n  set_field(\"rule_level\", 11);\n  set_field(\"rule_description\", \"Meraki: External access to database port\");\n  set_field(\"mitre_id\", \"T1190\");\n  set_field(\"alert_severity\", \"critical\");\nend"
+        },
+        {
+          "title": "Meraki Cryptomining Detection",
+          "description": "Detects traffic to cryptomining pool ports",
+          "source": "rule \"Meraki Cryptomining Detection\"\nwhen\n  has_field(\"dst_port\") AND\n  to_string($message.syslog_type) == \"meraki\" AND\n  (\n    to_long($message.dst_port) == 3333 OR\n    to_long($message.dst_port) == 14444 OR\n    to_long($message.dst_port) == 45560 OR\n    to_long($message.dst_port) == 45700\n  )\nthen\n  set_field(\"alert_type\", \"cryptomining\");\n  set_field(\"rule_level\", 10);\n  set_field(\"rule_description\", \"Meraki: Traffic to cryptomining pool port\");\n  set_field(\"mitre_id\", \"T1496\");\n  set_field(\"alert_severity\", \"high\");\nend"
+        },
+        {
+          "title": "Meraki IRC Botnet Detection",
+          "description": "Detects IRC traffic indicating possible botnet",
+          "source": "rule \"Meraki IRC Botnet Detection\"\nwhen\n  has_field(\"dst_port\") AND\n  to_string($message.syslog_type) == \"meraki\" AND\n  (\n    to_long($message.dst_port) == 6667 OR\n    to_long($message.dst_port) == 6668 OR\n    to_long($message.dst_port) == 6669 OR\n    to_long($message.dst_port) == 6697 OR\n    to_long($message.dst_port) == 7000\n  )\nthen\n  set_field(\"alert_type\", \"irc_botnet\");\n  set_field(\"rule_level\", 9);\n  set_field(\"rule_description\", \"Meraki: IRC traffic detected - possible botnet\");\n  set_field(\"mitre_id\", \"T1071.001\");\n  set_field(\"alert_severity\", \"medium\");\nend"
+        }
+      ]
+    }
+  ]
+}

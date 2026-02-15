@@ -1,0 +1,310 @@
+{
+  "dashboard": {
+    "uid": "misp-dashboard",
+    "title": "MISP Threat Intelligence",
+    "tags": ["misp", "threat-intel", "siem"],
+    "timezone": "browser",
+    "refresh": "5m",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "type": "row",
+        "title": "System Overview",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+        "id": 100,
+        "collapsed": false
+      },
+      {
+        "id": 1,
+        "type": "table",
+        "title": "MISP Status",
+        "gridPos": {"h": 3, "w": 4, "x": 0, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/servers/getVersion",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "version", "text": "Status", "type": "string"}]
+        }],
+        "fieldConfig": {
+          "overrides": [{
+            "matcher": {"id": "byName", "options": "Status"},
+            "properties": [{"id": "mappings", "value": [{"type": "regex", "options": {"pattern": ".*", "result": {"text": "ONLINE", "color": "green"}}}]}]
+          }]
+        },
+        "options": {"showHeader": false, "cellHeight": "lg"}
+      },
+      {
+        "id": 2,
+        "type": "table",
+        "title": "Version",
+        "gridPos": {"h": 3, "w": 4, "x": 4, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/servers/getVersion",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "version", "text": "Version", "type": "string"}]
+        }],
+        "options": {"showHeader": false, "cellHeight": "lg"}
+      },
+      {
+        "id": 3,
+        "type": "gauge",
+        "title": "Total Events",
+        "gridPos": {"h": 5, "w": 4, "x": 8, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/events/index",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "id", "text": "id", "type": "number"}]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "purple", "value": null}]}, "unit": "short", "min": 0, "max": 3000}},
+        "options": {"reduceOptions": {"calcs": ["count"]}, "showThresholdLabels": false, "showThresholdMarkers": false}
+      },
+      {
+        "id": 4,
+        "type": "gauge",
+        "title": "Total Feeds",
+        "gridPos": {"h": 5, "w": 4, "x": 12, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/feeds/index",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "Feed.id", "text": "id", "type": "number"}]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short", "min": 0, "max": 150}},
+        "options": {"reduceOptions": {"calcs": ["count"]}, "showThresholdLabels": false, "showThresholdMarkers": false}
+      },
+      {
+        "id": 5,
+        "type": "gauge",
+        "title": "Galaxies",
+        "gridPos": {"h": 5, "w": 4, "x": 16, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/galaxies/index",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "Galaxy.id", "text": "id", "type": "number"}]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "yellow", "value": null}]}, "unit": "short", "min": 0, "max": 150}},
+        "options": {"reduceOptions": {"calcs": ["count"]}, "showThresholdLabels": false, "showThresholdMarkers": false}
+      },
+      {
+        "id": 6,
+        "type": "gauge",
+        "title": "Taxonomies",
+        "gridPos": {"h": 5, "w": 4, "x": 20, "y": 1},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/taxonomies/index",
+          "url_options": {"method": "GET"},
+          "columns": [{"selector": "Taxonomy.id", "text": "id", "type": "number"}]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]}, "unit": "short", "min": 0, "max": 200}},
+        "options": {"reduceOptions": {"calcs": ["count"]}, "showThresholdLabels": false, "showThresholdMarkers": false}
+      },
+      {
+        "id": 7,
+        "type": "table",
+        "title": "Total IOCs by Type",
+        "gridPos": {"h": 4, "w": 24, "x": 0, "y": 6},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/attributes/attributeStatistics/type",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "ip-dst", "text": "IP Addresses", "type": "number"},
+            {"selector": "hostname", "text": "Hostnames", "type": "number"},
+            {"selector": "domain", "text": "Domains", "type": "number"},
+            {"selector": "url", "text": "URLs", "type": "number"},
+            {"selector": "md5", "text": "MD5", "type": "number"},
+            {"selector": "sha256", "text": "SHA256", "type": "number"},
+            {"selector": "sha1", "text": "SHA1", "type": "number"},
+            {"selector": "link", "text": "Links", "type": "number"},
+            {"selector": "filename", "text": "Filenames", "type": "number"},
+            {"selector": "email-src", "text": "Emails", "type": "number"}
+          ]
+        }],
+        "options": {"showHeader": true, "cellHeight": "md", "footer": {"show": true, "reducer": ["sum"], "countRows": false}}
+      },
+      {
+        "type": "row",
+        "title": "IOC Analytics",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 10},
+        "id": 101,
+        "collapsed": false
+      },
+      {
+        "id": 10,
+        "type": "bargauge",
+        "title": "Top IOC Types",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 11},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/attributes/attributeStatistics/type",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "ip-dst", "text": "IP Addresses", "type": "number"},
+            {"selector": "hostname", "text": "Hostnames", "type": "number"},
+            {"selector": "domain", "text": "Domains", "type": "number"},
+            {"selector": "url", "text": "URLs", "type": "number"},
+            {"selector": "md5", "text": "MD5 Hashes", "type": "number"},
+            {"selector": "sha256", "text": "SHA256", "type": "number"}
+          ]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}},
+        "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "values": true}, "showUnfilled": true, "minVizWidth": 8, "minVizHeight": 16}
+      },
+      {
+        "id": 11,
+        "type": "piechart",
+        "title": "IOC Categories",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 11},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/attributes/attributeStatistics/category",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "Network activity", "text": "Network", "type": "number"},
+            {"selector": "Payload delivery", "text": "Payload", "type": "number"},
+            {"selector": "External analysis", "text": "External", "type": "number"},
+            {"selector": "Artifacts dropped", "text": "Artifacts", "type": "number"},
+            {"selector": "Other", "text": "Other", "type": "number"}
+          ]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}}},
+        "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["percent"]}, "pieType": "donut", "reduceOptions": {"calcs": ["lastNotNull"], "values": true}}
+      },
+      {
+        "id": 12,
+        "type": "piechart",
+        "title": "Feeds by Provider",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 11},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/feeds/index",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "Feed.provider", "text": "Provider", "type": "string"},
+            {"selector": "Feed.id", "text": "id", "type": "number"}
+          ]
+        }],
+        "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}}},
+        "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value"]}, "pieType": "donut", "reduceOptions": {"calcs": ["count"], "fields": "/^Provider$/"}},
+        "transformations": [{"id": "groupBy", "options": {"fields": {"Provider": {"operation": "groupby"}, "id": {"aggregations": ["count"], "operation": "aggregate"}}}}]
+      },
+      {
+        "type": "row",
+        "title": "Data Tables",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 19},
+        "id": 102,
+        "collapsed": false
+      },
+      {
+        "id": 20,
+        "type": "table",
+        "title": "Recent Threat Events",
+        "gridPos": {"h": 10, "w": 12, "x": 0, "y": 20},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/events/index",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "id", "text": "ID", "type": "number"},
+            {"selector": "date", "text": "Date", "type": "string"},
+            {"selector": "info", "text": "Event Info", "type": "string"},
+            {"selector": "threat_level_id", "text": "Threat", "type": "string"},
+            {"selector": "attribute_count", "text": "IOCs", "type": "number"}
+          ]
+        }],
+        "fieldConfig": {
+          "defaults": {"custom": {"filterable": true}},
+          "overrides": [
+            {"matcher": {"id": "byName", "options": "ID"}, "properties": [{"id": "custom.width", "value": 60}]},
+            {"matcher": {"id": "byName", "options": "Date"}, "properties": [{"id": "custom.width", "value": 100}]},
+            {"matcher": {"id": "byName", "options": "Event Info"}, "properties": [{"id": "custom.width", "value": 300}]},
+            {"matcher": {"id": "byName", "options": "Threat"}, "properties": [{"id": "custom.width", "value": 70}, {"id": "mappings", "value": [{"type": "value", "options": {"1": {"text": "HIGH", "color": "red"}, "2": {"text": "MED", "color": "orange"}, "3": {"text": "LOW", "color": "yellow"}, "4": {"text": "N/A", "color": "blue"}}}]}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]},
+            {"matcher": {"id": "byName", "options": "IOCs"}, "properties": [{"id": "custom.width", "value": 60}]}
+          ]
+        },
+        "options": {"cellHeight": "sm", "showHeader": true, "footer": {"show": true, "reducer": ["count"]}},
+        "transformations": [{"id": "sortBy", "options": {"sort": [{"field": "ID", "desc": true}]}}, {"id": "limit", "options": {"limitField": 30}}]
+      },
+      {
+        "id": 21,
+        "type": "table",
+        "title": "Active Intelligence Feeds",
+        "gridPos": {"h": 10, "w": 12, "x": 12, "y": 20},
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "misp-infinity"},
+        "targets": [{
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "https://${MISP_HOST}:8443/feeds/index",
+          "url_options": {"method": "GET"},
+          "columns": [
+            {"selector": "Feed.id", "text": "ID", "type": "number"},
+            {"selector": "Feed.name", "text": "Feed Name", "type": "string"},
+            {"selector": "Feed.provider", "text": "Provider", "type": "string"},
+            {"selector": "Feed.enabled", "text": "Active", "type": "string"},
+            {"selector": "Feed.source_format", "text": "Format", "type": "string"}
+          ]
+        }],
+        "fieldConfig": {
+          "defaults": {"custom": {"filterable": true}},
+          "overrides": [
+            {"matcher": {"id": "byName", "options": "ID"}, "properties": [{"id": "custom.width", "value": 50}]},
+            {"matcher": {"id": "byName", "options": "Feed Name"}, "properties": [{"id": "custom.width", "value": 250}]},
+            {"matcher": {"id": "byName", "options": "Active"}, "properties": [{"id": "custom.width", "value": 70}, {"id": "mappings", "value": [{"type": "value", "options": {"true": {"text": "YES", "color": "green"}, "false": {"text": "NO", "color": "red"}}}]}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}
+          ]
+        },
+        "options": {"cellHeight": "sm", "showHeader": true, "footer": {"show": true, "reducer": ["count"]}}
+      }
+    ]
+  },
+  "overwrite": true
+}

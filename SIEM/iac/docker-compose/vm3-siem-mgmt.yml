@@ -1,0 +1,164 @@
+---
+# VM3: SIEM-CoPilot-Mgmt - CoPilot, Grafana, Velociraptor
+# Docker Compose for management/UI layer
+
+version: "3.8"
+
+services:
+  # ==========================================================================
+  # SOCFORTRESS COPILOT
+  # ==========================================================================
+  copilot-mysql:
+    image: mysql:8.0
+    container_name: copilot-mysql
+    hostname: copilot-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${COPILOT_MYSQL_ROOT_PASSWORD:-CoPilotRoot123!}
+      - MYSQL_DATABASE=copilot
+      - MYSQL_USER=copilot
+      - MYSQL_PASSWORD=${COPILOT_MYSQL_PASSWORD:-CoPilotMySQL123!}
+    volumes:
+      - copilot_mysql_data:/var/lib/mysql
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  copilot-minio:
+    image: minio/minio:latest
+    container_name: copilot-minio
+    hostname: copilot-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=copilot
+      - MINIO_ROOT_PASSWORD=${COPILOT_MINIO_PASSWORD:-MinioPass123!}
+    volumes:
+      - copilot_minio_data:/data
+    ports:
+      - "9001:9001"
+    networks:
+      - siem-network
+
+  copilot-backend:
+    image: ghcr.io/socfortress/copilot-backend:latest
+    container_name: copilot-backend
+    hostname: copilot-backend
+    restart: unless-stopped
+    environment:
+      # Database
+      - MYSQL_HOST=copilot-mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=copilot
+      - MYSQL_PASSWORD=${COPILOT_MYSQL_PASSWORD:-CoPilotMySQL123!}
+      - MYSQL_DATABASE=copilot
+      # MinIO
+      - MINIO_ENDPOINT=copilot-minio:9000
+      - MINIO_ACCESS_KEY=copilot
+      - MINIO_SECRET_KEY=${COPILOT_MINIO_PASSWORD:-MinioPass123!}
+      # Wazuh Indexer
+      - WAZUH_INDEXER_URL=https://${VM1_IP:-172.16.0.83}:9200
+      - WAZUH_INDEXER_USERNAME=admin
+      - WAZUH_INDEXER_PASSWORD=${INDEXER_PASSWORD:-SecretPassword123!}
+      # Wazuh Manager
+      - WAZUH_MANAGER_URL=https://${VM2_IP:-172.16.0.53}:55000
+      - WAZUH_MANAGER_USERNAME=${WAZUH_API_USER:-wazuh-wui}
+      - WAZUH_MANAGER_PASSWORD=${WAZUH_API_PASSWORD:-WazuhApiPass123!}
+      # Graylog
+      - GRAYLOG_URL=http://${VM2_IP:-172.16.0.53}:9000
+      - GRAYLOG_USERNAME=admin
+      - GRAYLOG_PASSWORD=${GRAYLOG_PASSWORD:-admin}
+      # Shuffle
+      - SHUFFLE_URL=http://${VM2_IP:-172.16.0.53}:5001
+      # Grafana
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_USERNAME=admin
+      - GRAFANA_PASSWORD=${GRAFANA_PASSWORD:-GrafanaPass123!}
+      # Velociraptor
+      - VELOCIRAPTOR_URL=https://velociraptor:8001
+      # License
+      - COPILOT_LICENSE_KEY=${COPILOT_LICENSE_KEY:-LXBDU-DOCTF-XRRVF-CRKKV}
+    volumes:
+      - copilot_backend_data:/opt/copilot/backend/data
+      - ./patches/auth.py:/opt/copilot/backend/app/auth/routes/auth.py:ro
+    ports:
+      - "5000:5000"
+    networks:
+      - siem-network
+    depends_on:
+      - copilot-mysql
+      - copilot-minio
+
+  copilot-frontend:
+    image: ghcr.io/socfortress/copilot-frontend:latest
+    container_name: copilot-frontend
+    hostname: copilot-frontend
+    restart: unless-stopped
+    environment:
+      - NUXT_PUBLIC_API_BASE_URL=http://copilot-backend:5000
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - siem-network
+    depends_on:
+      - copilot-backend
+
+  # ==========================================================================
+  # GRAFANA
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana-oss:${GRAFANA_VERSION:-12.3.3}
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-GrafanaPass123!}
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+      - GF_SERVER_ROOT_URL=http://${VM3_IP:-172.16.0.86}:3000
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - siem-network
+
+  # ==========================================================================
+  # VELOCIRAPTOR
+  # ==========================================================================
+  velociraptor:
+    image: velocidex/velociraptor:latest
+    container_name: velociraptor
+    hostname: velociraptor
+    restart: unless-stopped
+    command: >
+      --config /etc/velociraptor/server.config.yaml frontend
+    volumes:
+      - velociraptor_data:/velociraptor
+      - ./velociraptor/server.config.yaml:/etc/velociraptor/server.config.yaml:ro
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8889:8889"
+    networks:
+      - siem-network
+
+volumes:
+  copilot_mysql_data:
+  copilot_minio_data:
+  copilot_backend_data:
+  grafana_data:
+  velociraptor_data:
+
+networks:
+  siem-network:
+    driver: bridge
+    name: siem-network
