@@ -1,7 +1,6 @@
 [Unit]
-Description=Vulnerable Chatbot for PromptFoo Lab
-After=network.target ollama.service
-Wants=ollama.service
+Description=Vulnerable Chatbot for PromptFoo Lab (HuggingFace)
+After=network.target
 
 [Service]
 Type=simple
@@ -11,6 +10,9 @@ WorkingDirectory={{ lab_dir }}
 Environment="PATH={{ lab_dir }}/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="FLASK_HOST={{ flask_host }}"
 Environment="FLASK_PORT={{ flask_port }}"
+Environment="HF_MODEL={{ hf_model }}"
+Environment="HF_API_URL={{ hf_api_url }}"
+Environment="HF_TOKEN={{ hf_token }}"
 ExecStart={{ lab_dir }}/venv/bin/python {{ lab_dir }}/app.py
 Restart=always
 RestartSec=5

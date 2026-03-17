@@ -1,9 +1,11 @@
 ---
 # Defaults for promptfoo-server role
-# Ubuntu server hosting the vulnerable chatbot and Ollama LLM
+# Ubuntu server hosting the vulnerable chatbot with HuggingFace LLM
 
-# Ollama configuration
-ollama_model: "llama3.2:3b"
+# HuggingFace configuration
+hf_model: "mistralai/Mistral-7B-Instruct-v0.3"
+hf_api_url: "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+hf_token: ""  # Set via role_vars or environment - required for rate limits
 
 # Flask chatbot configuration
 flask_port: 5000

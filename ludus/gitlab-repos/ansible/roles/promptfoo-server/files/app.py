@@ -10,6 +10,8 @@ This chatbot has INTENTIONAL security vulnerabilities for educational purposes:
 5. Debug mode enabled (information disclosure)
 
 DO NOT deploy this in production!
+
+Supports HuggingFace Inference API for fast responses.
 """
 
 import os
@@ -39,8 +41,10 @@ INSTRUCTIONS:
 - For billing issues, direct users to billing@securecorp.com
 """
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+# HuggingFace Router API configuration (OpenAI-compatible format)
+HF_API_URL = os.environ.get("HF_API_URL", "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.3/v1/chat/completions")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+HF_MODEL = os.environ.get("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
 
 # HTML template for the chat interface
 HTML_TEMPLATE = """
@@ -115,6 +119,10 @@ HTML_TEMPLATE = """
             margin-bottom: 20px;
             font-size: 12px;
         }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -142,6 +150,11 @@ HTML_TEMPLATE = """
             history.innerHTML += `<div class="message user">${message}</div>`;
             input.value = '';
             
+            // Add loading indicator
+            const loadingId = 'loading-' + Date.now();
+            history.innerHTML += `<div class="message assistant loading" id="${loadingId}">Thinking...</div>`;
+            history.scrollTop = history.scrollHeight;
+            
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
@@ -149,8 +162,17 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({message: message})
                 });
                 const data = await response.json();
-                history.innerHTML += `<div class="message assistant">${data.response}</div>`;
+                
+                // Remove loading indicator
+                document.getElementById(loadingId).remove();
+                
+                if (data.error) {
+                    history.innerHTML += `<div class="message assistant">Error: ${data.error}</div>`;
+                } else {
+                    history.innerHTML += `<div class="message assistant">${data.response}</div>`;
+                }
             } catch (error) {
+                document.getElementById(loadingId).remove();
                 history.innerHTML += `<div class="message assistant">Error: ${error.message}</div>`;
             }
             
@@ -160,6 +182,50 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+
+
+def call_huggingface(user_message: str) -> str:
+    """
+    Call HuggingFace Router API using OpenAI-compatible chat completions format.
+    """
+    headers = {
+        "Content-Type": "application/json",
+    }
+    
+    # Add authorization if token is provided
+    if HF_TOKEN:
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+    
+    # OpenAI-compatible chat completions format
+    payload = {
+        "model": HF_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message}
+        ],
+        "max_tokens": 512,
+        "temperature": 0.7
+    }
+    
+    response = requests.post(
+        HF_API_URL,
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
+    
+    if response.status_code == 200:
+        result = response.json()
+        # OpenAI-compatible response format
+        choices = result.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "").strip()
+        return str(result)
+    elif response.status_code == 503:
+        # Model is loading
+        return "The AI model is loading, please try again in a few seconds."
+    else:
+        raise Exception(f"HuggingFace API error: {response.status_code} - {response.text}")
 
 
 @app.route("/")
@@ -185,38 +251,14 @@ def chat():
         # VULNERABILITY: No input validation
         user_message = data.get("message", "")
         
-        # VULNERABILITY: User input directly concatenated with system prompt
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
-        ]
+        # Call HuggingFace API
+        assistant_message = call_huggingface(user_message)
         
-        # Call Ollama API
-        response = requests.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": messages,
-                "stream": False
-            },
-            timeout=120
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            assistant_message = result.get("message", {}).get("content", "")
-            
-            # VULNERABILITY: No output filtering - raw LLM response returned
-            return jsonify({
-                "response": assistant_message,
-                "model": OLLAMA_MODEL
-            })
-        else:
-            # VULNERABILITY: Detailed error messages exposed
-            return jsonify({
-                "error": f"Ollama error: {response.status_code}",
-                "details": response.text
-            }), 500
+        # VULNERABILITY: No output filtering - raw LLM response returned
+        return jsonify({
+            "response": assistant_message,
+            "model": HF_MODEL
+        })
             
     except requests.exceptions.Timeout:
         return jsonify({"error": "Request timed out"}), 504
@@ -228,7 +270,11 @@ def chat():
 @app.route("/health")
 def health():
     """Health check endpoint."""
-    return jsonify({"status": "healthy", "model": OLLAMA_MODEL})
+    return jsonify({
+        "status": "healthy", 
+        "model": HF_MODEL,
+        "backend": "huggingface"
+    })
 
 
 @app.route("/api/prompt", methods=["POST"])
@@ -241,28 +287,12 @@ def api_prompt():
         data = request.get_json()
         prompt = data.get("prompt", "")
         
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
+        # Call HuggingFace API
+        response_text = call_huggingface(prompt)
         
-        response = requests.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": messages,
-                "stream": False
-            },
-            timeout=120
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            return jsonify({
-                "output": result.get("message", {}).get("content", "")
-            })
-        else:
-            return jsonify({"error": "Ollama error"}), 500
+        return jsonify({
+            "output": response_text
+        })
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -275,8 +305,10 @@ if __name__ == "__main__":
     print("=" * 60)
     print("VULNERABLE AI CHATBOT - FOR SECURITY TESTING ONLY")
     print("=" * 60)
-    print(f"Ollama URL: {OLLAMA_URL}")
-    print(f"Model: {OLLAMA_MODEL}")
+    print(f"Backend: HuggingFace Inference API")
+    print(f"Model: {HF_MODEL}")
+    print(f"API URL: {HF_API_URL}")
+    print(f"Token configured: {'Yes' if HF_TOKEN else 'No'}")
     print(f"Starting on http://{host}:{port}")
     print("=" * 60)
     
