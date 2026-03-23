@@ -196,16 +196,31 @@ WAN1 (216.66.77.183) and WAN2 (216.66.77.184) are both active.
 
 ##### Physical Server to iDRAC/NIC Mapping (confirmed via Redfish)
 
-| Physical Server | ServiceTag | iDRAC MAC           | iDRAC IP       | OS NIC MAC                 | OS Hostname          | OS IP          |
-| --------------- | ---------- | ------------------- | -------------- | -------------------------- | -------------------- | -------------- |
-| node01 (R730)   | G875KH2    | `18:66:da:9f:0d:0d` | 172.16.0.5     | `24:6E:96:5F:37:5C` (NIC3) | controller01         | 172.16.0.29    |
-| node02 (R730)   | 4ZCX942    | `44:A8:42:15:2A:70` | 172.16.0.6     | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01          | 172.16.0.22    |
-| node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    |
-| ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01              | 192.168.38.195 |
+| Physical Server | ServiceTag | iDRAC MAC           | iDRAC IP       | OS NIC MACs (Cavium/Dell)  | OS Hostname          | OS IP          | Status |
+| --------------- | ---------- | ------------------- | -------------- | -------------------------- | -------------------- | -------------- | ------ |
+| node01 (R730)   | G875KH2    | `18:66:da:9f:0d:0d` | 172.16.0.5     | `24:6E:96:5F:37:5C` (NIC3) | controller01         | 172.16.0.29    | **REINSTALL — Kypo CRP target** |
+| node02 (R730)   | 4ZCX942    | `44:A8:42:15:2A:70` | 172.16.0.6     | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01          | 172.16.0.22    | WORKING |
+| node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    | WORKING |
+| ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01 (Proxmox)    | 192.168.38.195 | WORKING |
+| kypo-node1 (R640) | 52XLK93 | `2C:EA:7F:FC:E2:74` | 172.16.0.51    | `34:80:0D:BD:8C:10-13` (NIC1-4) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — needs OS install + network cable** |
+| kypo-node2 (R640) | 532GK93 | `2C:EA:7F:FC:D3:98` | 172.16.0.53    | `34:80:0D:BD:87:C4-C7` (NIC1-4) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — needs OS install + network cable** |
 
 **Note:** iDRACs and OS NICs are on **separate physical interfaces** with separate cables.
 The iDRAC hostname in Redfish does NOT match the OS hostname. Node03's iDRAC says "esxi02"
 but the OS running on it is Proxmox (compute001 at 172.16.0.41 hosting VMs including VM 801).
+
+##### Kypo Cyber Range Platform (CRP) Deployment Plan
+
+The following 3 servers are designated for Kypo CRP deployment:
+
+| Server | ServiceTag | iDRAC | CPUs | RAM | Current State | Action Needed |
+|--------|-----------|-------|------|-----|---------------|---------------|
+| node01 (R730) | G875KH2 | 172.16.0.5 | 2x Xeon (see BIOS) | TBD | OS installed (OpenStack/VRRP), marked for reinstall | Wipe and reinstall for Kypo CRP |
+| kypo-node1 (R640) | 52XLK93 | 172.16.0.51 | 2x Xeon Gold 6140 | 238 GB | Powered on, `MINWINPC`, no OS NIC link | Plug OS NIC cables, install OS for Kypo CRP |
+| kypo-node2 (R640) | 532GK93 | 172.16.0.53 | 2x Xeon Gold 6140 | 238 GB | Powered on, `MINWINPC`, no OS NIC link | Plug OS NIC cables, install OS for Kypo CRP |
+
+All 3 iDRACs are accessible for remote management. The R640s have no OS network cables
+connected — needs physical access to plug cables into MS120 or MX65 ports.
 
 ##### Current MX65 Port Assignments (after cable move + fixes)
 
