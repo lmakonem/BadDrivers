@@ -196,12 +196,12 @@ WAN1 (216.66.77.183) and WAN2 (216.66.77.184) are both active.
 
 ##### Physical Server to iDRAC/NIC Mapping (confirmed via Redfish)
 
-| Physical Server | ServiceTag | iDRAC MAC | iDRAC IP | OS NIC MAC | OS Hostname | OS IP |
-|-----------------|-----------|-----------|----------|------------|-------------|-------|
-| node01 (R730) | G875KH2 | `18:66:da:9f:0d:0d` | 172.16.0.5 | `24:6E:96:5F:37:5C` (NIC3) | controller01 | 172.16.0.29 |
-| node02 (R730) | 4ZCX942 | `44:A8:42:15:2A:70` | 172.16.0.6 | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01 | 172.16.0.22 |
-| node03 (R730) | 7Y1KB42 | `44:A8:42:03:C1:48` | 172.16.0.7 | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41 |
-| ludus (R640) | 5DQQK93 | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00` | ludus01 | 192.168.38.195 |
+| Physical Server | ServiceTag | iDRAC MAC           | iDRAC IP       | OS NIC MAC                 | OS Hostname          | OS IP          |
+| --------------- | ---------- | ------------------- | -------------- | -------------------------- | -------------------- | -------------- |
+| node01 (R730)   | G875KH2    | `18:66:da:9f:0d:0d` | 172.16.0.5     | `24:6E:96:5F:37:5C` (NIC3) | controller01         | 172.16.0.29    |
+| node02 (R730)   | 4ZCX942    | `44:A8:42:15:2A:70` | 172.16.0.6     | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01          | 172.16.0.22    |
+| node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    |
+| ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01              | 192.168.38.195 |
 
 **Note:** iDRACs and OS NICs are on **separate physical interfaces** with separate cables.
 The iDRAC hostname in Redfish does NOT match the OS hostname. Node03's iDRAC says "esxi02"
@@ -293,7 +293,7 @@ but the OS running on it is Proxmox (compute001 at 172.16.0.41 hosting VMs inclu
 
 | Step | Priority | Action | Notes |
 |------|----------|--------|-------|
-| 1 | **HIGH** | Fix **controller01** (172.16.0.29) | Physical server: node01 (R730, G875KH2, iDRAC .5 at 172.16.0.5). Server is ON (force restarted at ~17:20 UTC via Redfish). NIC3 (`24:6E:96:5F:37:5C`) has link at 1 Gbps, NIC4 (`:5D`) at 100 Mbps. OS NIC is on an **unknown MX65 port** — could be on a VLAN 2 port (5/7/9/10) which means it won't get VLAN 1 DHCP. Meraki last saw it at **172.16.0.245** (wrong DHCP lease) at 14:57 UTC, then went offline. Hostname was `WINDOWS-37USESV`. SOL serial console not available on this server. DHCP reservation exists on Meraki VLAN 1 (`24:6e:96:5f:37:5c` -> 172.16.0.29). iDRAC SSH: `sshpass -p Lahilabs2018 ssh root@172.16.0.5`. **Next steps:** 1) Open iDRAC virtual console at https://172.16.0.5 via browser. 2) Check `ip addr show` and `ip route show`. 3) Find which MX65 port the OS NIC is on (toggle ports 5/7/9/10 — skip 4/6/8 PROTECTED). 4) Ensure port is VLAN 1 (or trunk native VLAN 1). 5) Set static IP .29 and add `172.17.1.0/24 via 172.16.0.1` route if Docker is running. |
+| 1 | **HIGH** | Fix **controller01** (172.16.0.29) | Physical server: node01 (R730, G875KH2, iDRAC .5 at 172.16.0.5). Server is ON (force restarted at ~17:20 UTC via Redfish). **The OS is NOT sending any traffic despite NIC having link.** NIC3 (`24:6E:96:5F:37:5C`) at 1 Gbps is on **MS120 port 3** (access VLAN 1 — correct VLAN). NIC4 (`:5D`) at 100 Mbps is on **MS120 port 4** (access VLAN 1, no IP). Both VLAN 1 ports are correct. We tested all MX65 ports 5/7/9/10 — controller01 is NOT on any of them. Port 3 was bounced, port was set to access VLAN 1. The NIC has link but Meraki sees 0 clients. Last known IP was 172.16.0.245 at 14:57 UTC. Hostname was `esxi04` / `WINDOWS-37USESV`. SOL serial console did not produce a login prompt. DHCP reservation exists on Meraki VLAN 1. iDRAC SSH works: `sshpass -p Lahilabs2018 ssh root@172.16.0.5`. **The OS appears hung or stuck at boot.** **Next steps:** 1) Open iDRAC virtual console at https://172.16.0.5 via browser to see the screen. 2) If stuck at boot, may need another force restart or BIOS config check. 3) Once OS is up, check `ip addr show` and set static IP .29 with route fix for Docker bridge. |
 | 2 | **HIGH** | **ITSL-NAS** (192.168.38.232) — **NEEDS PHYSICAL ACCESS** | NAS is powered on but has NO link on any Meraki port. Both NICs (`00:11:32:e9:1f:c7` and `:c8`) last seen on MS120 port 5 on 2026-03-21, port is now disconnected. Cable may be unplugged, broken, or in a dead port. Needs physical trace and replug at the rack into an MX65 VLAN 2 port (5, 7, 9, or 10). |
 | 3 | **MED** | Start **cyberrange VM** on ludus01 | Via Proxmox UI at https://192.168.38.195:8006 — cyberrange (MAC `bc:24:11:c0:bd:5b`) is a VM on the ludus Proxmox server, expected IP 192.168.38.188 on VLAN 2. |
 | 4 | **MED** | Start other VMs on compute001 | Via Proxmox UI at https://172.16.0.41:8006 — grafana-loki (.189), vault-gitlab (.190), etc. Note: compute001 is on MX65 port 6 (trunk native VLAN 1). VMs needing VLAN 2 must have VLAN tagging configured in Proxmox bridge. |
