@@ -201,8 +201,8 @@ WAN1 (216.66.77.183) and WAN2 (216.66.77.184) are both active.
 | node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    | **WORKING** |
 | acirt01 (R720)  | DLSHSW1    | *no iDRAC documented* | *unknown*   | `00:10:18:F6:45:9B` (Broadcom enp66s0f3) | ludus02 (Proxmox/Ludus) | 192.168.38.187 | **WORKING — 18 VMs running** |
 | ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01 (Proxmox/Ludus) | 192.168.38.195 | **WORKING — 27 VMs running** |
-| kypo-node1 (R640) | 52XLK93 | `2C:EA:7F:FC:E2:74` | 172.16.0.51    | `34:80:0D:BD:8C:10-13` (QLogic QL41162HMRJ 1G+10GE) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — OS NIC cables NOT connected (confirmed via Redfish LinkStatus=Down on all 4 ports). Needs physical cable run.** |
-| kypo-node2 (R640) | 532GK93 | `2C:EA:7F:FC:D3:98` | 172.16.0.53    | `34:80:0D:BD:87:C4-C7` (QLogic QL41162HMRJ 1G+10GE) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — OS NIC cables NOT connected (confirmed via Redfish LinkStatus=Down on all 4 ports). Needs physical cable run.** |
+| kypo-node1 (R640) | 52XLK93 | `2C:EA:7F:FC:E2:74` | 172.16.0.51    | `34:80:0D:BD:8C:10-13` (QLogic QL41162HMRJ 1G+10GE) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — SHELVED. OS NIC cables NOT connected. AutoNeg enabled via RACADM (NIC3-4 1GE=True, NIC1-2 10GE=False). Confirmed LinkStatus=Down on all 4 ports via Redfish. Needs physical verification at rack.** |
+| kypo-node2 (R640) | 532GK93 | `2C:EA:7F:FC:D3:98` | 172.16.0.53    | `34:80:0D:BD:87:C4-C7` (QLogic QL41162HMRJ 1G+10GE) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — SHELVED. OS NIC cables NOT connected. AutoNeg enabled via RACADM (NIC3-4 1GE=True, NIC1-2 10GE=False). Confirmed LinkStatus=Down on all 4 ports via Redfish. Needs physical verification at rack.** |
 
 **Note:** iDRACs and OS NICs are on **separate physical interfaces** with separate cables.
 The iDRAC hostname in Redfish does NOT match the OS hostname. Node03's iDRAC says "esxi02"
