@@ -67,15 +67,13 @@ The "5th iDRAC" (node03-test, 172.16.0.8) and "client access" port are no longer
 Two new Dell iDRACs (idrac-52XLK93 and idrac-532GK93) have appeared since the replug.
 
 ### Devices Connected to MX65 LAN Ports (VLAN 2)
-- idrac-5DQQK93 - 192.168.38.160 (iDRAC for **ludus physical server**, will be reinstalled)
-- cyberrange VM - 192.168.38.188 (VM on compute001, offline)
-- grafana-loki-prometheus VM - 192.168.38.189 (VM on compute001, offline)
-- vault-gitlab VM - 192.168.38.190 (VM on compute001, offline)
-- taranis VM - 192.168.38.197 (undocumented Proxmox VM, online)
+- idrac-5DQQK93 - 192.168.38.160 (iDRAC for **ludus physical server** 5DQQK93) — MX65 port 5
+- acirt01 / ludus02 - 192.168.38.187 (**Proxmox/Ludus host**, 18 VMs) — MX65 port 4
+- ludus01 - 192.168.38.195 (**Proxmox/Ludus host**, 27 VMs) — MX65 port 4
+- taranis VM - 192.168.38.197 (Proxmox VM on compute001, online)
 
-**Should be on MX65 LAN (VLAN 2) but currently on MS120 (VLAN 1) — WRONG:**
-- ITSL-NAS (Synology) - 192.168.38.232 — currently on MS120 port 5
-- acirt01 - 192.168.38.187 — currently on MS120 port 3
+**Down / needs physical access:**
+- ITSL-NAS (Synology) - 192.168.38.232 — no link on any port, cable disconnected
 - ludus01 - 192.168.38.195 — currently on MS120 port 5
 
 ---
@@ -196,12 +194,13 @@ WAN1 (216.66.77.183) and WAN2 (216.66.77.184) are both active.
 
 ##### Physical Server to iDRAC/NIC Mapping (confirmed via Redfish)
 
-| Physical Server | ServiceTag | iDRAC MAC           | iDRAC IP       | OS NIC MACs (Cavium/Dell)  | OS Hostname          | OS IP          | Status |
+| Physical Server | ServiceTag | iDRAC MAC           | iDRAC IP       | OS NIC MACs                | OS Hostname          | OS IP          | Status |
 | --------------- | ---------- | ------------------- | -------------- | -------------------------- | -------------------- | -------------- | ------ |
 | node01 (R730)   | G875KH2    | `18:66:da:9f:0d:0d` | 172.16.0.5     | `24:6E:96:5F:37:5C` (NIC3) | controller01         | 172.16.0.29    | **REINSTALL — Kypo CRP target** |
-| node02 (R730)   | 4ZCX942    | `44:A8:42:15:2A:70` | 172.16.0.6     | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01          | 172.16.0.22    | WORKING |
-| node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    | WORKING |
-| ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01 (Proxmox)    | 192.168.38.195 | WORKING |
+| node02 (R730)   | 4ZCX942    | `44:A8:42:15:2A:70` | 172.16.0.6     | `EC:F4:BB:D3:04:A8` (NIC1) | iservices01 (Docker) | 172.16.0.22    | **WORKING** |
+| node03 (R730)   | 7Y1KB42    | `44:A8:42:03:C1:48` | 172.16.0.7     | `EC:F4:BB:D5:2A:D4` (NIC3) | compute001 (Proxmox) | 172.16.0.41    | **WORKING** |
+| acirt01 (R720)  | DLSHSW1    | *no iDRAC documented* | *unknown*   | `00:10:18:F6:45:9B` (Broadcom enp66s0f3) | ludus02 (Proxmox/Ludus) | 192.168.38.187 | **WORKING — 18 VMs running** |
+| ludus (R640)    | 5DQQK93    | `2C:EA:7F:FC:DB:2A` | 192.168.38.160 | `34:80:0D:BF:36:00`        | ludus01 (Proxmox/Ludus) | 192.168.38.195 | **WORKING — 27 VMs running** |
 | kypo-node1 (R640) | 52XLK93 | `2C:EA:7F:FC:E2:74` | 172.16.0.51    | `34:80:0D:BD:8C:10-13` (NIC1-4) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — needs OS install + network cable** |
 | kypo-node2 (R640) | 532GK93 | `2C:EA:7F:FC:D3:98` | 172.16.0.53    | `34:80:0D:BD:87:C4-C7` (NIC1-4) | MINWINPC (fresh) | — (no link) | **Kypo CRP target — needs OS install + network cable** |
 
@@ -289,8 +288,12 @@ connected — needs physical access to plug cables into MS120 or MX65 ports.
 5. **Two undocumented iDRACs** on MS120:
    - **idrac-52XLK93** (`2c:ea:7f:fc:e2:74`) at 172.16.0.51 on MS120 port 7
    - **idrac-532GK93** (`2c:ea:7f:fc:d3:98`) at 172.16.0.53 on MS120 port 8
-6. **acirt01** is on MX65 port 4 (shared with iservices01 via unmanaged switch).
-7. **ITSL-NAS**, **ludus01** — locations need confirmation, currently unreachable.
+6. **acirt01** (192.168.38.187) is actually a **7th physical server** — Dell PowerEdge R720
+   (ServiceTag DLSHSW1, 2x E5-2640, 125 GB RAM). Runs Proxmox/Ludus as **ludus02**.
+   OS NIC is Broadcom `00:10:18:F6:45:9B` (enp66s0f3) on MX65 port 4. Has 4x Dell NICs
+   (eno1-4, `d4:ae:52:ad:77:b7-ba`, all DOWN) and 4x Broadcom NICs (enp66s0f0-3).
+   **WORKING — 18 VMs running** (Cyberrange, Grafana-loki, Vault, 3x SIEM teams).
+7. **ITSL-NAS** — powered on but no link on any port. Needs physical cable trace.
 8. **taranis** (`bc:24:11:2b:3c:66`) is an undocumented Proxmox VM, currently online.
 
 ### Completed Fixes
@@ -302,7 +305,7 @@ connected — needs physical access to plug cables into MS120 or MX65 ports.
 | iservices01 (Docker) | 172.16.0.22 | MX65 port 8 (trunk) | Port set to trunk native VLAN 1, static IP via netplan, added route for 172.17.1.0/24 to fix Docker bridge overlap | **WORKING — PROTECTED** |
 | ludus01 (Proxmox) | 192.168.38.195 | MX65 port 4 (access VLAN 2) | Port set to access VLAN 2, static IP in /etc/network/interfaces, added route for 172.17.1.0/24 via 192.168.38.1 to fix Docker bridge overlap | **WORKING — PROTECTED** |
 | idrac-5DQQK93 (ludus iDRAC) | 192.168.38.160 | MX65 port 5 or 7 (access VLAN 2) | Ports restored to access VLAN 2 (were stuck in trunk mode) | **WORKING** |
-| acirt01 | 192.168.38.187 | MX65 port 4 or 5/7 (access VLAN 2) | Ports restored to access VLAN 2 | **WORKING** |
+| acirt01 / ludus02 (R720, Proxmox) | 192.168.38.187 | MX65 port 4 (access VLAN 2) | Ports restored to access VLAN 2. All 18 VMs started. | **WORKING — 18 VMs running** |
 
 ### Remaining Fixes (Next Session)
 
@@ -333,26 +336,36 @@ connected — needs physical access to plug cables into MS120 or MX65 ports.
 
 **After fixes, verify all clients are online via Meraki API or VPN ping test.**
 
-### Final State — 2026-03-23 ~17:20 UTC
+### Final State — 2026-03-23 ~19:00 UTC
 
-| Device                | IP             | Ping     | Location            | Status                                                      |
-| --------------------- | -------------- | -------- | ------------------- | ----------------------------------------------------------- |
-| MX65 gateway (VLAN 1) | 172.16.0.1     | UP       | —                   | OK                                                          |
-| MX65 gateway (VLAN 2) | 192.168.38.1   | UP       | —                   | OK                                                          |
-| node01 iDRAC          | 172.16.0.5     | UP       | MS120 port 6        | OK                                                          |
-| node02 iDRAC          | 172.16.0.6     | UP       | MS120 port 2        | OK                                                          |
-| node03 iDRAC          | 172.16.0.7     | UP       | MX65 port 6         | OK — PROTECTED                                              |
-| iservices01           | 172.16.0.22    | UP       | MX65 port 8         | OK — PROTECTED, static IP via netplan                       |
-| controller01          | 172.16.0.29    | **DOWN** | MX65 port (unknown) | Server ON, NIC has link, wrong IP (.245), needs console fix |
-| compute001            | 172.16.0.41    | UP       | MX65 port 6         | OK — PROTECTED, Proxmox HTTP 200                            |
-| idrac-52XLK93         | 172.16.0.51    | UP       | MS120 port 7        | OK                                                          |
-| idrac-532GK93         | 172.16.0.53    | UP       | MS120 port 8        | OK                                                          |
-| idrac-5DQQK93         | 192.168.38.160 | UP       | MX65 port 5/7/9/10  | OK — ludus iDRAC                                            |
-| acirt01               | 192.168.38.187 | UP       | MX65 port 4 or 5/7  | OK                                                          |
-| ludus01               | 192.168.38.195 | UP       | MX65 port 4         | OK — PROTECTED, Proxmox HTTP 200                            |
-| ITSL-NAS              | 192.168.38.232 | **DOWN** | No link anywhere    | Powered on, cable disconnected                              |
+**7 physical servers | 6 iDRACs accessible | 4 hypervisors running | 50+ VMs active**
 
-**12 UP / 2 DOWN**
+| Device                | IP             | Ping     | Location     | Role | Status |
+| --------------------- | -------------- | -------- | ------------ | ---- | ------ |
+| MX65 gateway (VLAN 1) | 172.16.0.1     | UP       | —            | Gateway | OK |
+| MX65 gateway (VLAN 2) | 192.168.38.1   | UP       | —            | Gateway | OK |
+| node01 iDRAC          | 172.16.0.5     | UP       | MS120 port 6 | iDRAC (R730 G875KH2) | OK |
+| node02 iDRAC          | 172.16.0.6     | UP       | MS120 port 2 | iDRAC (R730 4ZCX942) | OK |
+| node03 iDRAC          | 172.16.0.7     | UP       | MX65 port 6  | iDRAC (R730 7Y1KB42) | OK — PROTECTED |
+| iservices01           | 172.16.0.22    | UP       | MX65 port 8  | Ubuntu Docker host | **WORKING — PROTECTED** |
+| controller01          | 172.16.0.29    | **DOWN** | MS120 port 3 | OpenStack (broken VRRP) | **MARKED FOR REINSTALL** — Kypo CRP target |
+| compute001            | 172.16.0.41    | UP       | MX65 port 6  | Proxmox (5+ VMs) | **WORKING — PROTECTED** |
+| idrac-52XLK93         | 172.16.0.51    | UP       | MS120 port 7 | iDRAC (R640 52XLK93) | OK — Kypo CRP target |
+| idrac-532GK93         | 172.16.0.53    | UP       | MS120 port 8 | iDRAC (R640 532GK93) | OK — Kypo CRP target |
+| idrac-5DQQK93         | 192.168.38.160 | UP       | MX65 port 5  | iDRAC (R640 5DQQK93) | OK |
+| acirt01 / ludus02     | 192.168.38.187 | UP       | MX65 port 4  | Proxmox/Ludus (R720, 18 VMs) | **WORKING — 18 VMs running** |
+| ludus01               | 192.168.38.195 | UP       | MX65 port 4  | Proxmox/Ludus (R640, 27 VMs) | **WORKING — PROTECTED, 27 VMs running** |
+| ITSL-NAS              | 192.168.38.232 | **DOWN** | No link      | Synology NAS | Cable disconnected — needs physical access |
+
+**13 UP / 1 DOWN** (controller01 is reachable via iDRAC but OS has network issues)
+
+#### VM Summary
+
+| Hypervisor | IP | VMs Running | VMs Stopped | Key VMs |
+|------------|-----|------------|-------------|---------|
+| compute001 | 172.16.0.41 | 5+ | unknown | securityonion, taranis, openclaw, k3s-01, WIN-LKQOJ7A2DQC |
+| ludus01 | 192.168.38.195 | 27 | 7 (templates) | 3x admin, 9x SIEM, 9x NEON labs |
+| ludus02 (acirt01) | 192.168.38.187 | 18 | 11 (templates) | Cyberrange, Grafana-loki, Vault, 3x SIEM teams |
 
 ---
 
