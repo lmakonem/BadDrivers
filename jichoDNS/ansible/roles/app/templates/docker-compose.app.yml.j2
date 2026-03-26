@@ -1,0 +1,120 @@
+---
+# =============================================================================
+# JichoDNS Application Services - Production
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy (ONLY publicly exposed service)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: jichodns-nginx
+    restart: always
+    ports:
+      - "{{ expose_http_port }}:80"
+    volumes:
+      - {{ app_dir }}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: {{ app_dir }}/src/backend
+      dockerfile: Dockerfile
+    container_name: jichodns-api
+    restart: always
+    env_file:
+      - {{ app_dir }}/.env.prod
+    environment:
+      - DATABASE_URL=postgresql://{{ postgres_user }}:{{ vault_postgres_password }}@jichodns-postgres:5432/{{ postgres_db }}
+      - CLICKHOUSE_URL=clickhouse://{{ clickhouse_user }}:{{ vault_clickhouse_password }}@jichodns-clickhouse:9000/{{ clickhouse_db }}
+      - REDIS_URL=redis://:{{ vault_redis_password }}@jichodns-redis:6379/0
+      - ELASTICSEARCH_URL=http://elastic:{{ vault_elasticsearch_password }}@jichodns-elasticsearch:9200
+    volumes:
+      - {{ app_dir }}/credentials:/app/credentials:ro
+    expose:
+      - "{{ api_port }}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ api_port }}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: uvicorn app.main:app --host 0.0.0.0 --port {{ api_port }} --workers 4
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: {{ app_dir }}/src/backend
+      dockerfile: Dockerfile
+    container_name: jichodns-worker
+    restart: always
+    env_file:
+      - {{ app_dir }}/.env.prod
+    environment:
+      - DATABASE_URL=postgresql://{{ postgres_user }}:{{ vault_postgres_password }}@jichodns-postgres:5432/{{ postgres_db }}
+      - CLICKHOUSE_URL=clickhouse://{{ clickhouse_user }}:{{ vault_clickhouse_password }}@jichodns-clickhouse:9000/{{ clickhouse_db }}
+      - REDIS_URL=redis://:{{ vault_redis_password }}@jichodns-redis:6379/0
+      - ELASTICSEARCH_URL=http://elastic:{{ vault_elasticsearch_password }}@jichodns-elasticsearch:9200
+    volumes:
+      - {{ app_dir }}/credentials:/app/credentials:ro
+    command: celery -A app.worker worker --loglevel=info --concurrency=4
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Celery Beat Scheduler
+  # ---------------------------------------------------------------------------
+  scheduler:
+    build:
+      context: {{ app_dir }}/src/backend
+      dockerfile: Dockerfile
+    container_name: jichodns-scheduler
+    restart: always
+    env_file:
+      - {{ app_dir }}/.env.prod
+    environment:
+      - DATABASE_URL=postgresql://{{ postgres_user }}:{{ vault_postgres_password }}@jichodns-postgres:5432/{{ postgres_db }}
+      - CLICKHOUSE_URL=clickhouse://{{ clickhouse_user }}:{{ vault_clickhouse_password }}@jichodns-clickhouse:9000/{{ clickhouse_db }}
+      - REDIS_URL=redis://:{{ vault_redis_password }}@jichodns-redis:6379/0
+    depends_on:
+      - worker
+    command: celery -A app.worker beat --loglevel=info
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Next.js Frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: {{ app_dir }}/src/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://{{ server_ip }}"
+        NEXT_PUBLIC_MAPBOX_TOKEN: "{{ vault_mapbox_token }}"
+    container_name: jichodns-frontend
+    restart: always
+    environment:
+      - NODE_ENV=production
+    expose:
+      - "{{ frontend_port }}"
+    networks:
+      - jichodns-network
+
+networks:
+  jichodns-network:
+    external: true
+    name: jichodns-network

@@ -1,0 +1,45 @@
+---
+# Intel Stack Deployment — Tor, TorBot, SpiderFoot, Collectors
+# Runs on the same host as the main JichoSec stack
+
+- name: Create intel directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+  loop:
+    - "{{ app_dir }}/intel-config/torbot"
+    - "{{ app_dir }}/intel-data"
+
+- name: Deploy intel compose file
+  ansible.builtin.template:
+    src: docker-compose.intel.yml.j2
+    dest: "{{ app_dir }}/docker-compose.intel.yml"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Create TorBot seed URLs config
+  ansible.builtin.copy:
+    dest: "{{ app_dir }}/intel-config/torbot/seeds.txt"
+    content: |
+      # Dark web seed URLs for TorBot crawling
+      # Add .onion URLs relevant to African threat landscape
+      # Format: one URL per line
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Start intel stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    files: ["docker-compose.intel.yml"]
+    state: present
+  register: intel_compose
+
+- name: Display intel stack status
+  ansible.builtin.debug:
+    msg: "Intel stack containers: {{ intel_compose.containers | map(attribute='Name') | list }}"
+  when: intel_compose.containers is defined

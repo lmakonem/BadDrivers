@@ -1,0 +1,136 @@
+---
+# =============================================================================
+# JichoDNS Database Services - Production
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 15
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: jichodns-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: {{ postgres_user }}
+      POSTGRES_PASSWORD: "{{ vault_postgres_password }}"
+      POSTGRES_DB: {{ postgres_db }}
+    volumes:
+      - {{ app_dir }}/data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:{{ postgres_port }}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # ClickHouse
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8-alpine
+    container_name: jichodns-clickhouse
+    restart: always
+    environment:
+      CLICKHOUSE_USER: {{ clickhouse_user }}
+      CLICKHOUSE_PASSWORD: "{{ vault_clickhouse_password }}"
+      CLICKHOUSE_DB: {{ clickhouse_db }}
+    volumes:
+      - {{ app_dir }}/data/clickhouse:/var/lib/clickhouse
+    ports:
+      - "127.0.0.1:{{ clickhouse_http_port }}:8123"
+      - "127.0.0.1:{{ clickhouse_native_port }}:9000"
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Redis 7
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: jichodns-redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass "{{ vault_redis_password }}"
+    volumes:
+      - {{ app_dir }}/data/redis:/data
+    ports:
+      - "127.0.0.1:{{ redis_port }}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "{{ vault_redis_password }}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Elasticsearch 8.x
+  # ---------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:{{ elasticsearch_version }}
+    container_name: jichodns-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - ELASTIC_PASSWORD={{ vault_elasticsearch_password }}
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - cluster.name=jichodns
+      - bootstrap.memory_lock=true
+    volumes:
+      - {{ app_dir }}/data/elasticsearch:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:{{ elasticsearch_port }}:9200"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:{{ vault_elasticsearch_password }} http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - jichodns-network
+
+  # ---------------------------------------------------------------------------
+  # Kibana 8.x
+  # ---------------------------------------------------------------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:{{ kibana_version }}
+    container_name: jichodns-kibana
+    restart: always
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD={{ vault_elasticsearch_password }}
+      - SERVER_NAME=jichodns-kibana
+    ports:
+      - "{{ expose_kibana_port }}:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - jichodns-network
+
+networks:
+  jichodns-network:
+    name: jichodns-network
+    driver: bridge

@@ -1,0 +1,5 @@
+---
+- name: restart app services
+  ansible.builtin.shell: |
+    cd {{ app_dir }} && docker compose -f docker-compose.app.yml up -d --build --force-recreate
+  changed_when: true

@@ -1,0 +1,140 @@
+---
+# =============================================================================
+# Common role: OS setup, hardening, firewall
+# =============================================================================
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ server_hostname }}"
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: safe
+  when: app_environment == "production"
+
+- name: Install system packages
+  ansible.builtin.apt:
+    name: "{{ system_packages }}"
+    state: present
+
+- name: Set timezone to UTC
+  ansible.builtin.timezone:
+    name: UTC
+
+# --- SSH hardening ---
+
+- name: Ensure SSH directory exists for deploy user
+  ansible.builtin.file:
+    path: "/home/{{ vault_ssh_user }}/.ssh"
+    state: directory
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0700"
+
+- name: Add SSH public key for deploy user
+  ansible.builtin.authorized_key:
+    user: "{{ vault_ssh_user }}"
+    key: "{{ vault_ssh_public_key }}"
+    state: present
+  when: vault_ssh_public_key | length > 0
+
+- name: Harden SSH config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    validate: "sshd -t -f %s"
+  loop:
+    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
+    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 5" }
+    - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval 300" }
+    - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax 2" }
+  notify: restart sshd
+
+# --- Firewall (UFW) ---
+
+- name: Reset UFW to defaults
+  community.general.ufw:
+    state: reset
+  ignore_errors: true
+
+- name: Set UFW default deny incoming
+  community.general.ufw:
+    direction: incoming
+    default: deny
+
+- name: Set UFW default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    default: allow
+
+- name: Allow ports through UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.split('/')[0] }}"
+    proto: "{{ item.split('/')[1] }}"
+  loop: "{{ firewall_allowed_ports }}"
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+# --- Fail2ban ---
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Configure fail2ban for SSH
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 10
+      bantime = 600
+      findtime = 600
+      ignoreip = 127.0.0.1/8 ::1
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+
+# --- System tuning ---
+
+- name: Set sysctl parameters for production
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    reload: true
+  loop:
+    - { name: "vm.swappiness", value: "10" }
+    - { name: "net.core.somaxconn", value: "65535" }
+    - { name: "net.ipv4.tcp_max_syn_backlog", value: "65535" }
+    - { name: "vm.max_map_count", value: "262144" }  # Required by Elasticsearch
+    - { name: "fs.file-max", value: "65535" }
+  ignore_errors: true
+
+- name: Set file descriptor limits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/jichodns.conf
+    content: |
+      * soft nofile 65535
+      * hard nofile 65535
+      * soft nproc 65535
+      * hard nproc 65535
+    owner: root
+    group: root
+    mode: "0644"

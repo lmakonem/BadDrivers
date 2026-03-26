@@ -165,26 +165,74 @@ export function Hero() {
       setConsole(prev => [e, ...prev].slice(0, 60));
     };
 
-    const startDemo = () => {
-      setWsStatus("demo");
-      demoTimer = setInterval(() => {
-        const src = DEMO_INDICATORS[consoleIdx % DEMO_INDICATORS.length];
-        addEntry({
-          id: ++counterRef.current,
-          ts: new Date().toTimeString().slice(0, 8),
-          type: src.type, indicator: src.indicator,
-          source: ["urlhaus","sslbl","threatfox","phishtank"][Math.floor(Math.random()*4)],
-          country: src.country, risk: src.risk,
+    // Fetch real indicators from the API and replay them as a live-looking feed
+    let replayPool: ConsoleEntry[] = [];
+    let replayIdx = 0;
+
+    const startReplay = () => {
+      setWsStatus("replay");
+      // If we already have data, just start replaying
+      if (replayPool.length > 0) {
+        demoTimer = setInterval(() => {
+          const entry = replayPool[replayIdx % replayPool.length];
+          addEntry({ ...entry, id: ++counterRef.current, ts: new Date().toTimeString().slice(0, 8) });
+          replayIdx++;
+        }, 1200);
+        return;
+      }
+      // Fetch real data from API
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.host}`;
+      fetch(`${apiBase}/api/v1/indicators/live/feed?limit=200&since_minutes=1440`)
+        .then(r => r.json())
+        .then(data => {
+          const indicators = data.indicators || [];
+          if (indicators.length === 0) {
+            // True fallback: use demo data only if API returned nothing
+            replayPool = DEMO_INDICATORS.map((src, i) => ({
+              id: i, ts: "", type: src.type, indicator: src.indicator,
+              source: ["urlhaus","sslbl","threatfox","phishtank"][Math.floor(Math.random()*4)],
+              country: src.country, risk: src.risk,
+            }));
+          } else {
+            replayPool = indicators.map((ioc: Record<string, unknown>, i: number) => ({
+              id: i, ts: "",
+              type: String(ioc.threat_type ?? "malware"),
+              indicator: String(ioc.indicator ?? ""),
+              source: String(ioc.source ?? "feed"),
+              country: String(ioc.country_code ?? "??"),
+              risk: Number(ioc.risk_score ?? Math.floor(Math.random() * 40 + 60)),
+            }));
+          }
+          // Shuffle for visual variety
+          replayPool.sort(() => Math.random() - 0.5);
+          demoTimer = setInterval(() => {
+            const entry = replayPool[replayIdx % replayPool.length];
+            addEntry({ ...entry, id: ++counterRef.current, ts: new Date().toTimeString().slice(0, 8) });
+            replayIdx++;
+          }, 1200);
+        })
+        .catch(() => {
+          // Network error: fall back to demo data
+          setWsStatus("demo");
+          demoTimer = setInterval(() => {
+            const src = DEMO_INDICATORS[consoleIdx % DEMO_INDICATORS.length];
+            addEntry({
+              id: ++counterRef.current, ts: new Date().toTimeString().slice(0, 8),
+              type: src.type, indicator: src.indicator,
+              source: ["urlhaus","sslbl","threatfox","phishtank"][Math.floor(Math.random()*4)],
+              country: src.country, risk: src.risk,
+            });
+            setConsoleIdx(i => i + 1);
+          }, 1400);
         });
-        setConsoleIdx(i => i + 1);
-      }, 1400);
     };
 
     const tryWs = () => {
       try {
-        ws = new WebSocket(`ws://${window.location.hostname}:8000/api/v1/ws/iocs`);
+        const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(`${wsProto}//${window.location.host}/api/v1/ws/iocs`);
         ws.onopen = () => { setWsStatus("live"); clearInterval(demoTimer); };
-        ws.onclose = () => { setWsStatus("demo"); startDemo(); reconnectTimer = setTimeout(tryWs, 8000); };
+        ws.onclose = () => { startReplay(); reconnectTimer = setTimeout(tryWs, 8000); };
         ws.onerror = () => ws?.close();
         ws.onmessage = ev => {
           try {
@@ -204,8 +252,8 @@ export function Hero() {
             }
           } catch { /* ignore */ }
         };
-        setTimeout(() => { if (wsStatus !== "live") { setWsStatus("replay"); startDemo(); } }, 6000);
-      } catch { startDemo(); }
+        setTimeout(() => { if (wsStatus !== "live") { startReplay(); } }, 6000);
+      } catch { startReplay(); }
     };
 
     tryWs();

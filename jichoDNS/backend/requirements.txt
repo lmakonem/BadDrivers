@@ -1,0 +1,85 @@
+# =============================================================================
+# JichoDNS Backend Dependencies
+# =============================================================================
+
+# Web Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+clickhouse-driver==0.2.6
+clickhouse-connect==0.7.0
+
+# Redis & Celery
+redis==5.0.1
+celery==5.3.6
+flower==2.0.1
+
+# HTTP Client
+httpx==0.26.0
+aiohttp==3.9.3
+
+# Elasticsearch
+elasticsearch[async]==8.12.0
+
+# Data Processing
+pydantic[email]==2.6.1
+pydantic-settings==2.1.0
+email-validator==2.1.0
+python-dateutil==2.8.2
+orjson==3.9.13
+
+# GeoIP
+geoip2==4.8.0
+maxminddb==2.6.2
+
+# DNS Analysis
+dnspython==2.5.0
+dnstwist==20240116
+tldextract==5.1.1
+publicsuffix2==2.20191221
+
+# ML / Analysis
+numpy==1.26.4
+scikit-learn==1.4.0
+scipy==1.12.0
+
+# Google Cloud / Vertex AI
+google-cloud-aiplatform==1.42.1
+google-auth==2.27.0
+
+# External APIs
+shodan==1.31.0
+OTXv2==1.5.12
+
+# Payments
+stripe==8.2.0
+# paystack-python==1.4.2  # Will use httpx for Paystack
+
+# Admin Panel
+sqladmin==0.20.1
+itsdangerous==2.2.0
+
+# Utilities
+python-dotenv==1.0.1
+structlog==24.1.0
+tenacity==8.2.3
+apscheduler==3.10.4
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# Development
+black==24.1.1
+ruff==0.2.0
+mypy==1.8.0

@@ -1,0 +1,174 @@
+---
+# =============================================================================
+# App role: Clone repo, build & deploy API, Workers, Frontend, Nginx
+# =============================================================================
+
+# --- Setup directories ---
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0755"
+  loop:
+    - "{{ app_dir }}"
+    - "{{ app_dir }}/nginx"
+    - "{{ app_dir }}/credentials"
+    - "{{ app_dir }}/backups"
+
+# --- Clone/update repository ---
+
+- name: Check if repo is already cloned
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/src/.git"
+  register: repo_stat
+
+- name: Clone application repository
+  ansible.builtin.git:
+    repo: "{{ git_repo }}"
+    dest: "{{ app_dir }}/src"
+    version: "{{ git_branch }}"
+    force: true
+  become_user: "{{ vault_ssh_user }}"
+  when: not repo_stat.stat.exists
+  ignore_errors: true
+
+- name: Create source directory if git clone fails (copy approach)
+  ansible.builtin.file:
+    path: "{{ app_dir }}/src"
+    state: directory
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0755"
+  when: not repo_stat.stat.exists
+
+# --- Deploy config files from templates ---
+
+- name: Deploy production .env file
+  ansible.builtin.template:
+    src: env.prod.j2
+    dest: "{{ app_dir }}/.env.prod"
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0600"
+  notify: restart app services
+
+- name: Deploy Nginx configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ app_dir }}/nginx/nginx.conf"
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0644"
+  notify: restart app services
+
+- name: Deploy application docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.app.yml.j2
+    dest: "{{ app_dir }}/docker-compose.app.yml"
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0640"
+  notify: restart app services
+
+# --- Sync source code to server ---
+# If git clone worked, source is at app_dir/src
+# We need backend/ and frontend/ accessible for docker build
+
+- name: Check if backend source exists locally in repo
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/src/backend"
+  register: backend_src
+
+- name: Copy backend source from sync if needed
+  ansible.builtin.synchronize:
+    src: "{{ playbook_dir }}/../backend/"
+    dest: "{{ app_dir }}/src/backend/"
+    delete: true
+    rsync_opts:
+      - "--exclude=__pycache__"
+      - "--exclude=.pytest_cache"
+      - "--exclude=*.pyc"
+  when: not backend_src.stat.exists | default(true)
+  ignore_errors: true
+
+- name: Check if frontend source exists locally in repo
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/src/frontend"
+  register: frontend_src
+
+- name: Copy frontend source from sync if needed
+  ansible.builtin.synchronize:
+    src: "{{ playbook_dir }}/../frontend/"
+    dest: "{{ app_dir }}/src/frontend/"
+    delete: true
+    rsync_opts:
+      - "--exclude=node_modules"
+      - "--exclude=.next"
+  when: not frontend_src.stat.exists | default(true)
+  ignore_errors: true
+
+# --- Copy kibana dashboards if they exist ---
+
+- name: Check if kibana dashboards exist
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../kibana"
+  register: kibana_dir
+  delegate_to: localhost
+  become: false
+
+- name: Sync kibana dashboards
+  ansible.builtin.synchronize:
+    src: "{{ playbook_dir }}/../kibana/"
+    dest: "{{ app_dir }}/src/kibana/"
+  when: kibana_dir.stat.exists | default(false)
+  ignore_errors: true
+
+# --- Build and start application ---
+
+- name: Build and start application services
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    files:
+      - docker-compose.app.yml
+    build: always
+    state: present
+  register: app_compose_result
+  ignore_errors: true
+
+- name: Fallback - build and start with shell
+  ansible.builtin.shell: |
+    cd {{ app_dir }} && docker compose -f docker-compose.app.yml up -d --build
+  when: app_compose_result is failed
+  changed_when: true
+
+# --- Setup backup cron ---
+
+- name: Deploy backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: "{{ app_dir }}/backup.sh"
+    owner: "{{ vault_ssh_user }}"
+    group: "{{ vault_ssh_user }}"
+    mode: "0750"
+
+- name: Schedule daily database backup
+  ansible.builtin.cron:
+    name: "jichodns-daily-backup"
+    minute: "0"
+    hour: "2"
+    job: "{{ app_dir }}/backup.sh >> /var/log/jichodns-backup.log 2>&1"
+    user: "{{ vault_ssh_user }}"
+
+# --- Docker cleanup cron ---
+
+- name: Schedule weekly Docker cleanup
+  ansible.builtin.cron:
+    name: "docker-weekly-cleanup"
+    minute: "0"
+    hour: "3"
+    weekday: "0"
+    job: "docker system prune -af --volumes --filter 'until=168h' >> /var/log/docker-cleanup.log 2>&1"
+    user: root

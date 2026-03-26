@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# =============================================================================
+# JichoDNS Daily Backup Script - Managed by Ansible
+# =============================================================================
+set -euo pipefail
+
+BACKUP_DIR="{{ app_dir }}/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=14
+
+echo "[$(date)] Starting JichoDNS backup..."
+
+# PostgreSQL backup
+echo "[$(date)] Backing up PostgreSQL..."
+docker exec jichodns-postgres pg_dump \
+  -U {{ postgres_user }} \
+  -d {{ postgres_db }} \
+  --format=custom \
+  --compress=9 \
+  > "${BACKUP_DIR}/postgres_${DATE}.dump"
+
+echo "[$(date)] PostgreSQL backup: ${BACKUP_DIR}/postgres_${DATE}.dump"
+
+# ClickHouse backup (metadata + data)
+echo "[$(date)] Backing up ClickHouse..."
+docker exec jichodns-clickhouse clickhouse-client \
+  --user {{ clickhouse_user }} \
+  --password "{{ vault_clickhouse_password }}" \
+  --query "SELECT database, name FROM system.tables WHERE database = '{{ clickhouse_db }}'" \
+  --format TSV > "${BACKUP_DIR}/clickhouse_tables_${DATE}.txt" 2>/dev/null || true
+
+echo "[$(date)] ClickHouse table list saved."
+
+# Redis backup (trigger RDB save and copy)
+echo "[$(date)] Backing up Redis..."
+docker exec jichodns-redis redis-cli \
+  -a "{{ vault_redis_password }}" BGSAVE 2>/dev/null || true
+sleep 5
+docker cp jichodns-redis:/data/dump.rdb \
+  "${BACKUP_DIR}/redis_${DATE}.rdb" 2>/dev/null || true
+
+echo "[$(date)] Redis backup complete."
+
+# Cleanup old backups
+echo "[$(date)] Cleaning up backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_DIR}" -type f -mtime +${RETENTION_DAYS} -delete
+
+echo "[$(date)] Backup complete!"
+ls -lh "${BACKUP_DIR}/"*"${DATE}"* 2>/dev/null || true

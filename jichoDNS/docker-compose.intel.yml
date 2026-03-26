@@ -1,0 +1,142 @@
+# =============================================================================
+# JichoDNS Intel Stack — Dark Web + OSINT Collection
+#
+# Backend-only services on internal network. No public port exposure.
+# Connects to existing jichodns-network to reach Elasticsearch, Redis, API.
+#
+# Usage:
+#   docker compose -f docker-compose.intel.yml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Tor SOCKS Proxy — provides .onion connectivity for TorBot
+  # ---------------------------------------------------------------------------
+  tor:
+    image: dperson/torproxy:latest
+    container_name: intel-tor
+    restart: unless-stopped
+    networks:
+      - intel-net
+    command: -S 0.0.0.0
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "curl", "-s", "--socks5", "localhost:9050", "https://check.torproject.org/api/ip"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # TorBot — OWASP dark web crawler
+  # Crawls .onion seed URLs, writes JSON to shared volume
+  # ---------------------------------------------------------------------------
+  torbot:
+    image: dedsecinside/torbot:latest
+    container_name: intel-torbot
+    restart: "no"  # Run on-demand via docker exec or Celery task
+    depends_on:
+      tor:
+        condition: service_healthy
+    networks:
+      - intel-net
+    volumes:
+      - intel-data:/output
+      - ./intel-config/torbot:/config:ro
+    environment:
+      - TOR_SOCKS_HOST=tor
+      - TOR_SOCKS_PORT=9050
+    mem_limit: 256m
+    # Default: idle. Crawls triggered by dark-collector via docker exec or CLI.
+    entrypoint: ["sleep", "infinity"]
+
+  # ---------------------------------------------------------------------------
+  # SpiderFoot — OSINT automation engine
+  # Internal API on :5001, NOT exposed to host
+  # ---------------------------------------------------------------------------
+  spiderfoot:
+    image: spiderfoot/spiderfoot:latest
+    container_name: intel-spiderfoot
+    restart: unless-stopped
+    networks:
+      - intel-net
+      - jichodns-network  # Needs access to ES for direct indexing
+    volumes:
+      - spiderfoot-data:/var/lib/spiderfoot
+    environment:
+      - SF_DEBUG=0
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Dark Collector — processes TorBot output → ES + MISP
+  # Uses the same backend image as JichoSec API/worker
+  # ---------------------------------------------------------------------------
+  dark-collector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: intel-dark-collector
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    networks:
+      - intel-net
+      - jichodns-network
+    volumes:
+      - intel-data:/intel-data:ro
+    command: >
+      celery -A app.intel.dark_collector worker
+      --loglevel=info --concurrency=2
+      -Q dark_web
+      -n dark-collector@%h
+    mem_limit: 384m
+    depends_on:
+      - tor
+      - torbot
+
+  # ---------------------------------------------------------------------------
+  # OSINT Collector — drives SpiderFoot scans → ES + MISP
+  # Uses the same backend image as JichoSec API/worker
+  # ---------------------------------------------------------------------------
+  osint-collector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: intel-osint-collector
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      - SPIDERFOOT_URL=http://intel-spiderfoot:5001
+    networks:
+      - intel-net
+      - jichodns-network
+    command: >
+      celery -A app.intel.osint_collector worker
+      --loglevel=info --concurrency=2
+      -Q osint
+      -n osint-collector@%h
+    mem_limit: 384m
+    depends_on:
+      spiderfoot:
+        condition: service_healthy
+
+volumes:
+  intel-data:
+    driver: local
+  spiderfoot-data:
+    driver: local
+
+networks:
+  intel-net:
+    driver: bridge
+    internal: true  # No internet access for intel-net services by default
+  jichodns-network:
+    external: true
+    name: jichodns-network
