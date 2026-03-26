@@ -39,6 +39,15 @@ async def lifespan(app: FastAPI):
     try:
         await es_service.connect()
         logger.info("Connected to Elasticsearch")
+        # Raise max_result_window so searches aren't capped at 10k
+        if es_service.client:
+            try:
+                await es_service.client.indices.put_settings(
+                    index="iocs",
+                    body={"index.max_result_window": 500000},
+                )
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"Could not connect to Elasticsearch: {e}")
     

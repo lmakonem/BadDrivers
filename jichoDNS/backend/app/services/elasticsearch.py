@@ -26,11 +26,23 @@ class ElasticsearchService:
         if self.client is None:
             es_url = settings.ELASTICSEARCH_URL
             if es_url:
-                self.client = AsyncElasticsearch(
+                raw_client = AsyncElasticsearch(
                     [es_url],
                     verify_certs=False,
                     request_timeout=30,
                 )
+                # Wrap search to always include track_total_hits
+                _orig_search = raw_client.search
+
+                async def _search_with_total(*args, **kwargs):
+                    body = kwargs.get("body")
+                    if body and isinstance(body, dict) and "track_total_hits" not in body:
+                        body["track_total_hits"] = True
+                    return await _orig_search(*args, **kwargs)
+
+                raw_client.search = _search_with_total
+                self.client = raw_client
+
                 # Test connection
                 try:
                     await self.client.info()

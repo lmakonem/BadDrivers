@@ -143,33 +143,34 @@ class MISPClient:
 
     async def pull_recent_attributes(
         self,
-        since_days: int = 7,
-        limit: int = 500,
+        since_days: int = 90,
+        limit: int = 10000,
         ioc_types: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Pull recent IOC attributes for ingestion into Elasticsearch.
-
-        Focuses on network indicators that can be mapped to the threat map.
+        Pull ALL recent IOC attributes for ingestion into Elasticsearch.
+        Pulls each type separately to maximize coverage.
         """
         if ioc_types is None:
             ioc_types = [
                 "ip-dst", "ip-src", "domain", "hostname",
                 "url", "md5", "sha256", "sha1",
                 "email-src", "email-dst",
+                "filename", "mutex", "regkey",
             ]
 
         all_attrs = []
+        per_type_limit = max(500, limit // len(ioc_types))
+
         for ioc_type in ioc_types:
             try:
                 attrs = await self.search_attributes(
                     type_attribute=ioc_type,
                     last=f"{since_days}d",
-                    limit=limit,
+                    limit=per_type_limit,
                 )
                 all_attrs.extend(attrs)
-                if len(all_attrs) >= limit:
-                    break
+                logger.info(f"MISP pulled {len(attrs)} {ioc_type} attributes")
             except Exception as e:
                 logger.warning(f"MISP pull type={ioc_type} error: {e}")
                 continue

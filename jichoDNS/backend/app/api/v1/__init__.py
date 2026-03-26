@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     alerts_api,
     auth,
     billing,
+    credentials,
     darkweb_intel,
     indicators,
     intel,
@@ -90,6 +91,10 @@ router.include_router(
 )
 router.include_router(
     alerts_api.router, prefix="/alerts", tags=["Alerts"],
+    dependencies=_auth,
+)
+router.include_router(
+    credentials.router, prefix="/credentials", tags=["Credentials"],
     dependencies=_auth,
 )
 router.include_router(

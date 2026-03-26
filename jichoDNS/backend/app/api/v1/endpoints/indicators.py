@@ -99,7 +99,7 @@ async def lookup_indicator(value: str):
 
 @router.get("/live/feed")
 async def get_live_feed(
-    limit: int = Query(100, ge=1, le=10000, description="Number of recent indicators to return"),
+    limit: int = Query(100, ge=1, le=50000, description="Number of recent indicators to return"),
     since_minutes: int = Query(60, ge=1, le=10080, description="Get indicators from last N minutes (max 7 days)"),
 ):
     """

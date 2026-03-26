@@ -65,15 +65,32 @@ async def universal_search(
 
     for src_name, src_config in search_sources.items():
         try:
-            body = {
-                "query": {
+            # Credential searches need wildcard on keyword fields
+            if src_name == "credentials":
+                q_lower = q.lower()
+                query = {
+                    "bool": {
+                        "should": [
+                            {"wildcard": {"email": {"value": f"*{q_lower}*"}}},
+                            {"wildcard": {"domain": {"value": f"*{q_lower}*"}}},
+                            {"wildcard": {"username": {"value": f"*{q_lower}*"}}},
+                            {"wildcard": {"source_name": {"value": f"*{q_lower}*"}}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            else:
+                query = {
                     "multi_match": {
                         "query": q,
                         "fields": src_config["fields"],
                         "type": "best_fields",
                         "fuzziness": "AUTO",
                     }
-                },
+                }
+
+            body = {
+                "query": query,
                 "sort": [{"_score": "desc"}],
                 "size": per_source_limit,
             }

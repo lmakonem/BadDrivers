@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     networks:
       - intel-net
-    command: -S 0.0.0.0
+    command: ""
     mem_limit: 128m
     healthcheck:
       test: ["CMD", "curl", "-s", "--socks5", "localhost:9050", "https://check.torproject.org/api/ip"]
@@ -32,9 +32,9 @@ services:
   # Crawls .onion seed URLs, writes JSON to shared volume
   # ---------------------------------------------------------------------------
   torbot:
-    image: dedsecinside/torbot:latest
+    image: jichodns-torbot:latest
     container_name: intel-torbot
-    restart: "no"  # Run on-demand via docker exec or Celery task
+    restart: "no"
     depends_on:
       tor:
         condition: service_healthy
@@ -47,7 +47,6 @@ services:
       - TOR_SOCKS_HOST=tor
       - TOR_SOCKS_PORT=9050
     mem_limit: 256m
-    # Default: idle. Crawls triggered by dark-collector via docker exec or CLI.
     entrypoint: ["sleep", "infinity"]
 
   # ---------------------------------------------------------------------------
@@ -55,7 +54,7 @@ services:
   # Internal API on :5001, NOT exposed to host
   # ---------------------------------------------------------------------------
   spiderfoot:
-    image: spiderfoot/spiderfoot:latest
+    image: ctdc/spiderfoot:latest
     container_name: intel-spiderfoot
     restart: unless-stopped
     networks:
@@ -73,59 +72,10 @@ services:
       retries: 3
       start_period: 15s
 
-  # ---------------------------------------------------------------------------
-  # Dark Collector — processes TorBot output → ES + MISP
-  # Uses the same backend image as JichoSec API/worker
-  # ---------------------------------------------------------------------------
-  dark-collector:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: intel-dark-collector
-    restart: unless-stopped
-    env_file:
-      - .env.prod
-    networks:
-      - intel-net
-      - jichodns-network
-    volumes:
-      - intel-data:/intel-data:ro
-    command: >
-      celery -A app.intel.dark_collector worker
-      --loglevel=info --concurrency=2
-      -Q dark_web
-      -n dark-collector@%h
-    mem_limit: 384m
-    depends_on:
-      - tor
-      - torbot
-
-  # ---------------------------------------------------------------------------
-  # OSINT Collector — drives SpiderFoot scans → ES + MISP
-  # Uses the same backend image as JichoSec API/worker
-  # ---------------------------------------------------------------------------
-  osint-collector:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: intel-osint-collector
-    restart: unless-stopped
-    env_file:
-      - .env.prod
-    environment:
-      - SPIDERFOOT_URL=http://intel-spiderfoot:5001
-    networks:
-      - intel-net
-      - jichodns-network
-    command: >
-      celery -A app.intel.osint_collector worker
-      --loglevel=info --concurrency=2
-      -Q osint
-      -n osint-collector@%h
-    mem_limit: 384m
-    depends_on:
-      spiderfoot:
-        condition: service_healthy
+  # NOTE: dark-collector and osint-collector run as Celery tasks
+  # inside the existing jichodns-worker container. They don't need
+  # separate containers — saves ~768MB RAM.
+  # The worker has access to the intel-data volume via docker mount.
 
 volumes:
   intel-data:
@@ -136,7 +86,7 @@ volumes:
 networks:
   intel-net:
     driver: bridge
-    internal: true  # No internet access for intel-net services by default
+    # NOT internal — Tor and SpiderFoot need outbound internet access
   jichodns-network:
     external: true
     name: jichodns-network

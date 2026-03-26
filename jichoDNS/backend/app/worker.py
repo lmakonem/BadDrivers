@@ -140,6 +140,18 @@ celery_app.conf.beat_schedule = {
         "schedule": timedelta(minutes=30),
     },
 
+    # === DARK WEB CRAWL (every 2 hours) ===
+    "crawl-darkweb": {
+        "task": "app.worker.crawl_darkweb",
+        "schedule": timedelta(hours=2),
+    },
+
+    # === CREDENTIAL INGESTION (every 4 hours) ===
+    "ingest-credentials": {
+        "task": "app.worker.ingest_credentials",
+        "schedule": timedelta(hours=4),
+    },
+
     # === MAINTENANCE ===
     "aggregate-regions": {
         "task": "app.worker.aggregate_region_scores",
@@ -330,7 +342,7 @@ async def _import_misp():
         # Pull recent attributes (IOCs) from MISP
         # Use ip-dst, ip-src, domain, url types for map integration
         attrs = await misp_client.pull_recent_attributes(
-            since_days=7,
+            since_days=90,
             limit=settings.MISP_PULL_LIMIT,
             ioc_types=["ip-dst", "ip-src", "domain", "hostname", "url"],
         )
@@ -432,6 +444,67 @@ async def _import_misp():
         }
     finally:
         await misp_client.close()
+
+
+# === CREDENTIAL INGESTION ===
+
+@celery_app.task(name="app.worker.ingest_credentials", soft_time_limit=120, time_limit=180)
+def ingest_credentials():
+    """Ingest credential exposure data from breaches and dark web crawls."""
+    return run_async(_ingest_credentials())
+
+
+async def _ingest_credentials():
+    import time
+    from app.services.elasticsearch import es_service
+    from app.intel.cred_ingestor import run_credential_ingestion
+
+    start = time.monotonic()
+    logger.info("Starting credential ingestion...")
+    try:
+        await es_service.connect()
+        result = await run_credential_ingestion(es_service.client)
+        await es_service.close()
+        duration = time.monotonic() - start
+        logger.info(f"Credential ingestion complete: {result} in {duration:.1f}s")
+        return {**result, "duration_seconds": duration}
+    except Exception as e:
+        logger.error(f"Credential ingestion error: {e}", exc_info=True)
+        return {"error": str(e)}
+
+
+# === DARK WEB CRAWL ===
+
+@celery_app.task(name="app.worker.crawl_darkweb", soft_time_limit=300, time_limit=360)
+def crawl_darkweb(queries=None):
+    """Crawl dark web sources and store in ES."""
+    return run_async(_crawl_darkweb(queries))
+
+
+async def _crawl_darkweb(queries=None):
+    """Async dark web crawl."""
+    import time
+    from app.services.elasticsearch import es_service
+    from app.intel.tor_crawler import run_dark_web_crawl
+
+    start = time.monotonic()
+    logger.info("Starting dark web crawl...")
+
+    try:
+        await es_service.connect()
+        result = await run_dark_web_crawl(
+            es_client=es_service.client,
+            queries=queries,
+        )
+        await es_service.close()
+
+        duration = time.monotonic() - start
+        logger.info(f"Dark web crawl complete: {result} in {duration:.1f}s")
+        return {**result, "duration_seconds": duration}
+
+    except Exception as e:
+        logger.error(f"Dark web crawl error: {e}", exc_info=True)
+        return {"error": str(e), "duration_seconds": time.monotonic() - start}
 
 
 # === BATCH IMPORTS ===

@@ -47,7 +47,7 @@ async def public_indicator_stats():
 
 @router.get("/indicators/live/feed")
 async def public_live_feed(
-    limit: int = Query(100, ge=1, le=10000, description="Number of recent indicators"),
+    limit: int = Query(100, ge=1, le=50000, description="Number of recent indicators"),
     since_minutes: int = Query(10080, ge=1, le=10080),
 ):
     """
