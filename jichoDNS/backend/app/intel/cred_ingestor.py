@@ -185,21 +185,27 @@ WORD_PARTS = ["safari", "mpesa", "bank", "admin", "user", "test", "temp",
 NUMBERS = ["1", "12", "123", "1234", "2025", "2026", "!", "@", "#", "01", "99"]
 
 
-def _generate_password(pw_type: str) -> tuple:
-    """Generate a realistic password and its hash representation."""
+def _generate_password(pw_type: str, rng=None) -> tuple:
+    """Generate a realistic password and its hash representation.
+    
+    Args:
+        pw_type: Password type (plaintext, md5, sha1, sha256, ntlm, bcrypt)
+        rng: Optional seeded Random instance for deterministic output
+    """
+    r = rng or random
     if pw_type == "plaintext":
-        if random.random() < 0.4:
-            pw = random.choice(COMMON_PASSWORDS)
+        if r.random() < 0.4:
+            pw = r.choice(COMMON_PASSWORDS)
         else:
-            pw = random.choice(WORD_PARTS) + random.choice(NUMBERS)
-            if random.random() < 0.3:
+            pw = r.choice(WORD_PARTS) + r.choice(NUMBERS)
+            if r.random() < 0.3:
                 pw = pw.capitalize()
         return pw, pw  # plaintext: password visible as-is
 
     # For hash types, generate a password then hash it
-    raw_pw = random.choice(WORD_PARTS) + random.choice(NUMBERS)
-    if random.random() < 0.3:
-        raw_pw = random.choice(COMMON_PASSWORDS)
+    raw_pw = r.choice(WORD_PARTS) + r.choice(NUMBERS)
+    if r.random() < 0.3:
+        raw_pw = r.choice(COMMON_PASSWORDS)
 
     if pw_type == "md5":
         h = hashlib.md5(raw_pw.encode()).hexdigest()
@@ -235,20 +241,31 @@ def _get_names_for_country(country: str):
 
 
 def generate_breach_credentials(breach: Dict[str, Any], count: int = 100) -> List[Dict[str, Any]]:
-    """Generate realistic breach credential records."""
+    """
+    Generate realistic breach credential records.
+
+    IMPORTANT: Uses a deterministic seed per breach so re-runs produce
+    the same emails/passwords.  This prevents duplicate growth because
+    the ES dedup key is ``email:source:source_name``.
+    """
     creds = []
     domain = breach["domain"]
     country = breach.get("country", "")
     now = datetime.now(timezone.utc).isoformat()
     firsts, lasts = _get_names_for_country(country)
 
+    # Deterministic RNG seeded from the breach identity so re-runs
+    # produce the exact same credentials → ES upserts instead of inserts.
+    seed_str = f"{domain}:{breach.get('breach_name', '')}:{country}"
+    rng = random.Random(seed_str)
+
     for i in range(min(count, breach.get("records", 100))):
-        first = random.choice(firsts)
-        last = random.choice(lasts)
-        dept = random.choice(DEPARTMENTS)
+        first = rng.choice(firsts)
+        last = rng.choice(lasts)
+        dept = rng.choice(DEPARTMENTS)
 
         # 70% corporate email, 30% personal (for consumer breaches)
-        if random.random() < 0.7:
+        if rng.random() < 0.7:
             patterns = [
                 f"{first}.{last}@{domain}",
                 f"{first[0]}{last}@{domain}",
@@ -258,20 +275,20 @@ def generate_breach_credentials(breach: Dict[str, Any], count: int = 100) -> Lis
                 f"{first}{i % 100}@{domain}",
             ]
         else:
-            personal_domain = random.choice(PERSONAL_DOMAINS)
+            personal_domain = rng.choice(PERSONAL_DOMAINS)
             patterns = [
-                f"{first}.{last}{random.randint(1,999)}@{personal_domain}",
+                f"{first}.{last}{rng.randint(1,999)}@{personal_domain}",
                 f"{first}{last}@{personal_domain}",
-                f"{first[0]}{last}{random.randint(10,99)}@{personal_domain}",
+                f"{first[0]}{last}{rng.randint(10,99)}@{personal_domain}",
             ]
-        email = random.choice(patterns)
+        email = rng.choice(patterns)
 
-        pw_type = random.choices(
+        pw_type = rng.choices(
             ["plaintext", "md5", "sha256", "bcrypt", "ntlm", "sha1"],
             weights=[30, 25, 15, 10, 10, 10],
         )[0]
 
-        pw_hash, pw_plain = _generate_password(pw_type)
+        pw_hash, pw_plain = _generate_password(pw_type, rng=rng)
 
         cred = {
             "email": email.lower(),

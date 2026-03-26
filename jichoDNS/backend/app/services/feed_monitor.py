@@ -14,16 +14,30 @@ logger = logging.getLogger(__name__)
 
 # SLA thresholds per feed (minutes before considered stale)
 FEED_SLAS: Dict[str, int] = {
-    "urlhaus":        30,
-    "sslbl":          30,
-    "sslbl_ja3":      30,
-    "threatfox":      30,
-    "feodotracker":   60,
-    "phishtank":      240,
-    "openphish":      240,
-    "alienvault":     120,
-    "malwarebazaar":  30,
-    "dnstwist":       720,   # 12h — runs on-demand mostly
+    # High-frequency feeds
+    "urlhaus":          30,
+    "sslbl":            30,
+    "sslbl_ja3":        60,
+    "threatfox":        30,
+    "feodotracker":     60,
+    # Medium-frequency feeds
+    "malwarebazaar":    30,
+    "openphish":        60,
+    "crtsh":            60,
+    # Lower-frequency feeds
+    "phishtank":        240,
+    "alienvault":       120,
+    "alienvault_otx":   120,
+    "abuseipdb":        120,
+    # Slow feeds
+    "dnstwist":         720,   # 12h
+    # MISP
+    "misp":             60,
+    # Dark web & intel
+    "darkweb_crawl":    300,   # 5h (runs every 2h)
+    "torbot":           600,   # 10h (runs every 4h)
+    "credentials":      600,   # 10h (runs every 4h)
+    "osint":            720,   # 12h (runs every 6h)
 }
 
 FEED_HEALTH_INDEX = "feed_health"

@@ -76,7 +76,7 @@ const BellIcon = () => (
 // tier: undefined = available to all, "professional" = pro+enterprise+admin, "enterprise" = enterprise+admin
 const navItems = [
   { name: "Dashboard", href: "/portal", icon: DashboardIcon },
-  { name: "Threat Reports", href: "/portal/reports", icon: ReportsIcon, tier: "professional" as const },
+  { name: "Threat Reports", href: "/portal/reports", icon: ReportsIcon },
   { name: "Dark Web Monitoring", href: "/portal/darkweb", icon: DarkWebIcon, tier: "professional" as const },
   { name: "Attack Surface", href: "/portal/asm", icon: ASMIcon, tier: "enterprise" as const },
   { name: "Brand Protection", href: "/portal/brand", icon: BrandIcon, tier: "professional" as const },

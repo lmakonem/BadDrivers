@@ -152,6 +152,18 @@ celery_app.conf.beat_schedule = {
         "schedule": timedelta(hours=4),
     },
 
+    # === TORBOT / DARK WEB FILE PROCESSING (every 4 hours) ===
+    "process-torbot-output": {
+        "task": "app.worker.process_torbot_output",
+        "schedule": timedelta(hours=4),
+    },
+
+    # === OSINT SCAN INGESTION (every 6 hours) ===
+    "ingest-osint-results": {
+        "task": "app.worker.ingest_osint_results",
+        "schedule": timedelta(hours=6),
+    },
+
     # === MAINTENANCE ===
     "aggregate-regions": {
         "task": "app.worker.aggregate_region_scores",
@@ -457,6 +469,7 @@ def ingest_credentials():
 async def _ingest_credentials():
     import time
     from app.services.elasticsearch import es_service
+    from app.services.feed_monitor import feed_monitor
     from app.intel.cred_ingestor import run_credential_ingestion
 
     start = time.monotonic()
@@ -464,13 +477,35 @@ async def _ingest_credentials():
     try:
         await es_service.connect()
         result = await run_credential_ingestion(es_service.client)
-        await es_service.close()
         duration = time.monotonic() - start
+
+        # Record feed health
+        feed_monitor.client = es_service.client
+        await feed_monitor.ensure_index()
+        await feed_monitor.record_run(
+            feed_name="credentials",
+            success=True,
+            ioc_count=result.get("stored", 0),
+            duration_seconds=duration,
+        )
+
+        await es_service.close()
         logger.info(f"Credential ingestion complete: {result} in {duration:.1f}s")
         return {**result, "duration_seconds": duration}
     except Exception as e:
         logger.error(f"Credential ingestion error: {e}", exc_info=True)
-        return {"error": str(e)}
+        duration = time.monotonic() - start
+        try:
+            from app.services.elasticsearch import es_service as _es
+            from app.services.feed_monitor import feed_monitor as _fm
+            await _es.connect()
+            _fm.client = _es.client
+            await _fm.ensure_index()
+            await _fm.record_run("credentials", False, 0, duration, str(e))
+            await _es.close()
+        except Exception:
+            pass
+        return {"error": str(e), "duration_seconds": duration}
 
 
 # === DARK WEB CRAWL ===
@@ -485,6 +520,7 @@ async def _crawl_darkweb(queries=None):
     """Async dark web crawl."""
     import time
     from app.services.elasticsearch import es_service
+    from app.services.feed_monitor import feed_monitor
     from app.intel.tor_crawler import run_dark_web_crawl
 
     start = time.monotonic()
@@ -496,14 +532,140 @@ async def _crawl_darkweb(queries=None):
             es_client=es_service.client,
             queries=queries,
         )
-        await es_service.close()
-
         duration = time.monotonic() - start
+
+        # Record feed health
+        feed_monitor.client = es_service.client
+        await feed_monitor.ensure_index()
+        await feed_monitor.record_run(
+            feed_name="darkweb_crawl",
+            success=True,
+            ioc_count=result.get("stored", 0),
+            duration_seconds=duration,
+        )
+
+        await es_service.close()
         logger.info(f"Dark web crawl complete: {result} in {duration:.1f}s")
         return {**result, "duration_seconds": duration}
 
     except Exception as e:
         logger.error(f"Dark web crawl error: {e}", exc_info=True)
+        duration = time.monotonic() - start
+        # Try to record failure
+        try:
+            from app.services.elasticsearch import es_service as _es
+            from app.services.feed_monitor import feed_monitor as _fm
+            await _es.connect()
+            _fm.client = _es.client
+            await _fm.ensure_index()
+            await _fm.record_run("darkweb_crawl", False, 0, duration, str(e))
+            await _es.close()
+        except Exception:
+            pass
+        return {"error": str(e), "duration_seconds": duration}
+
+
+# === TORBOT FILE PROCESSING ===
+
+@celery_app.task(name="app.worker.process_torbot_output", soft_time_limit=120, time_limit=180)
+def process_torbot_output():
+    """Process TorBot JSON output files into Elasticsearch."""
+    return run_async(_process_torbot())
+
+
+async def _process_torbot():
+    """Async TorBot output processing."""
+    import time
+    from app.services.elasticsearch import es_service
+    from app.intel.dark_collector import process_torbot_output as _process
+
+    start = time.monotonic()
+    logger.info("Starting TorBot output processing...")
+
+    try:
+        await es_service.connect()
+
+        # Load watchlist terms from ES if available
+        brand_terms = [
+            "safaricom", "m-pesa", "mpesa", "equity", "kcb", "co-op bank",
+            "mtn", "airtel", "vodacom", "fnb", "standard bank", "absa",
+            "gtbank", "first bank", "jumia",
+        ]
+
+        result = await _process(
+            es_client=es_service.client,
+            brand_terms=brand_terms,
+        )
+        await es_service.close()
+
+        duration = time.monotonic() - start
+        logger.info(f"TorBot processing complete: {result} in {duration:.1f}s")
+        return {**result, "duration_seconds": duration}
+
+    except Exception as e:
+        logger.error(f"TorBot processing error: {e}", exc_info=True)
+        return {"error": str(e), "duration_seconds": time.monotonic() - start}
+
+
+# === OSINT SCAN INGESTION ===
+
+@celery_app.task(name="app.worker.ingest_osint_results", soft_time_limit=120, time_limit=180)
+def ingest_osint_results():
+    """Ingest results from completed SpiderFoot OSINT scans."""
+    return run_async(_ingest_osint())
+
+
+async def _ingest_osint():
+    """Async OSINT result ingestion."""
+    import time
+    from app.services.elasticsearch import es_service
+
+    start = time.monotonic()
+    logger.info("Starting OSINT result ingestion...")
+
+    try:
+        from app.intel.osint_collector import SpiderFootClient, ingest_scan_results
+
+        sf = SpiderFootClient()
+        await es_service.connect()
+
+        # List all scans, find completed ones
+        scans = await sf.list_scans()
+        total_ingested = 0
+
+        for scan in scans:
+            scan_id = scan.get("id") or scan.get("scanId")
+            status = scan.get("status", "").lower()
+            if not scan_id or status not in ("finished", "completed"):
+                continue
+
+            scan_target = scan.get("target", scan.get("scantarget", "unknown"))
+            try:
+                result = await ingest_scan_results(
+                    sf_client=sf,
+                    es_client=es_service.client,
+                    scan_id=scan_id,
+                    scan_target=scan_target,
+                )
+                total_ingested += result.get("stored", 0)
+            except Exception as e:
+                logger.warning(f"OSINT scan {scan_id} ingestion error: {e}")
+
+        await sf.close()
+        await es_service.close()
+
+        duration = time.monotonic() - start
+        logger.info(f"OSINT ingestion complete: {total_ingested} results in {duration:.1f}s")
+        return {
+            "scans_checked": len(scans),
+            "total_ingested": total_ingested,
+            "duration_seconds": duration,
+        }
+
+    except ImportError:
+        return {"error": "osint_collector not available", "duration_seconds": 0}
+    except Exception as e:
+        logger.error(f"OSINT ingestion error: {e}", exc_info=True)
         return {"error": str(e), "duration_seconds": time.monotonic() - start}
 
 
@@ -563,11 +725,81 @@ def aggregate_region_scores():
 
 @celery_app.task(name="app.worker.cleanup_old_data")
 def cleanup_old_data():
-    """Clean up old/stale indicators."""
-    # TODO: Implement cleanup logic
-    # - Mark indicators not seen in 30+ days as inactive
-    # - Delete indicators not seen in 90+ days
-    return {"status": "completed", "cleaned": 0}
+    """
+    Clean up old/stale data across all indices.
+
+    - Delete IOCs marked inactive for 90+ days
+    - Delete old dark web posts (>180 days)
+    - Delete old credential exposures (>365 days)
+    """
+    return run_async(_cleanup_old_data())
+
+
+async def _cleanup_old_data():
+    """Async cleanup implementation."""
+    from app.services.elasticsearch import es_service
+    await es_service.connect()
+    if not es_service.client:
+        return {"status": "error", "error": "ES not connected"}
+
+    cleaned = {}
+
+    # 1. Delete inactive IOCs older than 90 days
+    try:
+        resp = await es_service.client.delete_by_query(
+            index=es_service.ioc_index,
+            body={
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"term": {"active": False}},
+                            {"range": {"updated_at": {"lt": "now-90d"}}},
+                        ]
+                    }
+                }
+            },
+            conflicts="proceed",
+            refresh=True,
+        )
+        cleaned["inactive_iocs_deleted"] = resp.get("deleted", 0)
+    except Exception as e:
+        cleaned["inactive_iocs_error"] = str(e)
+
+    # 2. Delete old dark web posts (>180 days)
+    try:
+        exists = await es_service.client.indices.exists(index="darkweb_posts")
+        if exists:
+            resp = await es_service.client.delete_by_query(
+                index="darkweb_posts",
+                body={
+                    "query": {"range": {"discovered_at": {"lt": "now-180d"}}}
+                },
+                conflicts="proceed",
+                refresh=True,
+            )
+            cleaned["old_darkweb_posts_deleted"] = resp.get("deleted", 0)
+    except Exception as e:
+        cleaned["darkweb_cleanup_error"] = str(e)
+
+    # 3. Delete very old credential exposures (>365 days)
+    try:
+        exists = await es_service.client.indices.exists(index="credential_exposures")
+        if exists:
+            resp = await es_service.client.delete_by_query(
+                index="credential_exposures",
+                body={
+                    "query": {"range": {"discovered_at": {"lt": "now-365d"}}}
+                },
+                conflicts="proceed",
+                refresh=True,
+            )
+            cleaned["old_credentials_deleted"] = resp.get("deleted", 0)
+    except Exception as e:
+        cleaned["credential_cleanup_error"] = str(e)
+
+    await es_service.close()
+    logger.info(f"Cleanup results: {cleaned}")
+    return {"status": "completed", **cleaned}
 
 
 @celery_app.task(name="app.worker.analyze_domain_task")

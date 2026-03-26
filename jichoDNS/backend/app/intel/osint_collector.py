@@ -238,7 +238,9 @@ async def ingest_scan_results(
             "tags": [event_type.lower().replace("_", "-")],
         }
 
-        doc_id = f"sf:{scan_id}:{hash(event.get('data',''))}"
+        import hashlib
+        _data_hash = hashlib.md5(event.get("data", "").encode()).hexdigest()
+        doc_id = f"sf:{scan_id}:{_data_hash}"
         try:
             await es_client.index(index=OSINT_INDEX, id=doc_id, document=doc)
             stored += 1

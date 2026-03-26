@@ -171,8 +171,9 @@ async def process_torbot_output(
                 else "medium"
             )
 
-            # Store in Elasticsearch
-            doc_id = f"torbot:{hash(doc['url'])}"
+            # Store in Elasticsearch — use deterministic hash for dedup
+            import hashlib as _hl
+            doc_id = f"torbot:{_hl.md5(doc['url'].encode()).hexdigest()}"
             try:
                 await es_client.index(
                     index=DARKWEB_INDEX, id=doc_id, document=doc

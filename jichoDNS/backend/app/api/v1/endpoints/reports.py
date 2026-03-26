@@ -1,429 +1,439 @@
 """
-Reports API endpoints - AI-powered threat report generation.
+Reports API endpoints — real HTML report generation from ES data.
 
-Provides endpoints for generating, retrieving, and managing
-AI-generated threat intelligence reports using Vertex AI.
+Provides endpoints for generating, listing, viewing (HTML), downloading,
+and deleting threat intelligence reports.  Also serves sample/demo reports
+that work without Elasticsearch for showcasing the platform.
+
+IMPORTANT: Fixed-path routes (/samples, /types/available, /generate) are
+registered BEFORE dynamic /{report_id} routes to prevent FastAPI from
+matching literal segments as path parameters.
 """
 
+import logging
+import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
-from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app.services.vertex_ai import (
-    vertex_ai_service,
-    ReportRequest,
-    ReportType,
-    SeverityLevel,
-    ThreatReport,
-    ChatRequest,
-    ChatResponse,
-    IOCItem,
-    Recommendation,
+from app.services.elasticsearch import es_service
+from app.services.report_generator import (
+    generate_report as build_report,
+    generate_sample_report as build_sample,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+REPORTS_INDEX = "threat_reports"
+
+VALID_TYPES = {
+    "threat_intelligence", "incident_summary", "executive_briefing",
+    "ioc_analysis", "dark_web_exposure",
+}
+
+TYPE_MAP = {
+    "weekly": "threat_intelligence", "monthly": "threat_intelligence",
+    "custom": "threat_intelligence", "incident": "incident_summary",
+    "executive": "executive_briefing",
+}
+
 
 # =============================================================================
-# Response Models
+# Pydantic models
 # =============================================================================
+
+class GenerateReportRequest(BaseModel):
+    report_type: str = Field(default="threat_intelligence")
+    title: Optional[str] = Field(default=None)
+    time_range: str = Field(default="7d")
+    include_iocs: bool = Field(default=True)
+    include_darkweb: bool = Field(default=True)
+    include_credentials: bool = Field(default=True)
+    custom_prompt: Optional[str] = Field(default=None)
+    output_format: str = Field(default="html")
+
 
 class ReportSummary(BaseModel):
-    """Summary view of a report for listing."""
     id: str
     title: str
     type: str
-    generated_at: str
+    status: str
     severity: str
-    executive_summary: str
+    generated_at: str
+    date_range: str = "7d"
+    description: str = ""
+    stats: dict = {}
+    pages: int = 1
+    is_sample: bool = False
 
 
 class ReportListResponse(BaseModel):
-    """Response for listing reports."""
     reports: List[ReportSummary]
     total: int
     page: int
     page_size: int
 
 
-class ReportResponse(BaseModel):
-    """Full report response."""
+class ReportDetail(BaseModel):
     id: str
     title: str
     type: str
-    content: str
-    generated_at: datetime
+    status: str
     severity: str
-    iocs: List[IOCItem] = []
-    recommendations: List[Recommendation] = []
-    executive_summary: Optional[str] = None
-    time_range_start: Optional[datetime] = None
-    time_range_end: Optional[datetime] = None
-    filters_applied: dict = {}
-    model_used: str = "gemini-1.5-pro"
-
-
-class GenerateReportRequest(BaseModel):
-    """Request body for generating a report."""
-    report_type: ReportType = Field(
-        description="Type of report to generate"
-    )
-    time_range: str = Field(
-        default="24h",
-        description="Time range for data: 1h, 6h, 24h, 7d, 30d"
-    )
-    filters: dict = Field(
-        default_factory=dict,
-        description="Filters: threat_type, country, source, etc."
-    )
-    custom_prompt: Optional[str] = Field(
-        default=None,
-        description="Custom instructions for the AI"
-    )
-    include_iocs: bool = Field(
-        default=True,
-        description="Whether to include IOC list in report"
-    )
-    max_iocs: int = Field(
-        default=100,
-        ge=1,
-        le=500,
-        description="Maximum IOCs to include"
-    )
-
-
-class ChatWithDataRequest(BaseModel):
-    """Request body for chatting with threat data."""
-    question: str = Field(
-        description="Question about threat data or logs"
-    )
-    log_context: Optional[str] = Field(
-        default=None,
-        description="Additional log context to analyze"
-    )
-    include_recent_iocs: bool = Field(
-        default=True,
-        description="Include recent IOCs in context"
-    )
-    time_range: str = Field(
-        default="24h",
-        description="Time range for IOC context"
-    )
-
-
-class ChatWithDataResponse(BaseModel):
-    """Response from chat endpoint."""
-    answer: str
-    sources_used: List[str] = []
-    confidence: float
-    follow_up_questions: List[str] = []
+    generated_at: str
+    date_range: str = "7d"
+    description: str = ""
+    stats: dict = {}
+    pages: int = 1
+    html: Optional[str] = None
+    is_sample: bool = False
 
 
 class DeleteResponse(BaseModel):
-    """Response for delete operations."""
     success: bool
     message: str
 
 
 # =============================================================================
-# Endpoints
+# Helpers
 # =============================================================================
 
-@router.post("/generate", response_model=ReportResponse)
-async def generate_report(request: GenerateReportRequest):
-    """
-    Generate a new AI-powered threat report.
-    
-    Report types:
-    - **threat_intelligence**: Comprehensive threat landscape analysis
-    - **incident_summary**: Security incident summary and timeline
-    - **executive_briefing**: High-level executive summary
-    - **ioc_analysis**: Detailed IOC breakdown and analysis
-    - **dark_web_exposure**: Dark web monitoring and exposure report
-    
-    The report is generated using Google Vertex AI (Gemini) and stored
-    in Elasticsearch for future retrieval.
-    """
+async def _ensure_index():
+    if not es_service.client:
+        await es_service.connect()
+    if not es_service.client:
+        return
     try:
-        # Convert to internal request model
-        report_request = ReportRequest(
-            report_type=request.report_type,
-            time_range=request.time_range,
-            filters=request.filters,
-            custom_prompt=request.custom_prompt,
-            include_iocs=request.include_iocs,
-            max_iocs=request.max_iocs,
-        )
-        
-        # Generate the report
-        report = await vertex_ai_service.generate_full_report(report_request)
-        
-        return ReportResponse(
-            id=report.id,
-            title=report.title,
-            type=report.type.value,
-            content=report.content,
-            generated_at=report.generated_at,
-            severity=report.severity.value,
-            iocs=report.iocs,
-            recommendations=report.recommendations,
-            executive_summary=report.executive_summary,
-            time_range_start=report.time_range_start,
-            time_range_end=report.time_range_end,
-            filters_applied=report.filters_applied,
-            model_used=report.model_used,
-        )
-        
+        exists = await es_service.client.indices.exists(index=REPORTS_INDEX)
+        if not exists:
+            await es_service.client.indices.create(
+                index=REPORTS_INDEX,
+                body={
+                    "mappings": {
+                        "properties": {
+                            "id": {"type": "keyword"},
+                            "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                            "type": {"type": "keyword"},
+                            "status": {"type": "keyword"},
+                            "severity": {"type": "keyword"},
+                            "generated_at": {"type": "date"},
+                            "date_range": {"type": "keyword"},
+                            "description": {"type": "text"},
+                            "stats": {"type": "object", "enabled": False},
+                            "pages": {"type": "integer"},
+                            "html": {"type": "text", "index": False},
+                            "is_sample": {"type": "boolean"},
+                        }
+                    }
+                },
+            )
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate report: {str(e)}"
+        logger.warning(f"Index setup: {e}")
+
+
+async def _store_report(doc: dict) -> bool:
+    await _ensure_index()
+    if not es_service.client:
+        return False
+    try:
+        await es_service.client.index(
+            index=REPORTS_INDEX, id=doc["id"], document=doc, refresh="wait_for",
         )
+        return True
+    except Exception as e:
+        logger.error(f"Store report error: {e}")
+        return False
+
+
+def _resolve_type(raw: str) -> str:
+    return TYPE_MAP.get(raw, raw)
+
+
+# =============================================================================
+# Sample / demo reports (no ES required)
+# =============================================================================
+
+_SAMPLE_IDS = {
+    "threat_intelligence": "sample-threat-intel-001",
+    "executive_briefing":  "sample-exec-brief-001",
+    "ioc_analysis":        "sample-ioc-analysis-001",
+    "incident_summary":    "sample-incident-001",
+    "dark_web_exposure":   "sample-darkweb-001",
+}
+
+
+def _build_sample(rtype: str) -> dict:
+    result = build_sample(rtype)
+    sid = _SAMPLE_IDS.get(rtype, f"sample-{rtype}-001")
+    return {
+        "id": sid,
+        "title": result["title"],
+        "type": result["type"],
+        "status": "ready",
+        "severity": result["severity"],
+        "generated_at": result["generated_at"],
+        "date_range": result.get("date_range", "7d"),
+        "description": result.get("description", ""),
+        "stats": result.get("stats", {}),
+        "pages": result.get("pages", 1),
+        "html": result["html"],
+        "is_sample": True,
+    }
+
+
+def _get_sample_if_exists(report_id: str) -> Optional[dict]:
+    for rtype, sid in _SAMPLE_IDS.items():
+        if report_id == sid:
+            return _build_sample(rtype)
+    return None
+
+
+# =============================================================================
+# FIXED-PATH ROUTES  (must come BEFORE /{report_id} dynamic routes)
+# =============================================================================
+
+@router.get("/types/available")
+async def get_report_types():
+    """List available report types, severity levels, and time ranges."""
+    return {
+        "report_types": [
+            {"value": "threat_intelligence", "name": "Threat Intelligence Report",
+             "description": "Comprehensive threat landscape analysis with IOCs, sources, and geo distribution"},
+            {"value": "incident_summary", "name": "Incident Summary",
+             "description": "Security incident timeline, attack vectors, and containment actions"},
+            {"value": "executive_briefing", "name": "Executive Briefing",
+             "description": "High-level summary for leadership with key metrics and business impact"},
+            {"value": "ioc_analysis", "name": "IOC Analysis Report",
+             "description": "Detailed IOC breakdown by type, threat category, and geographic origin"},
+            {"value": "dark_web_exposure", "name": "Dark Web Exposure Report",
+             "description": "Credential leaks, brand mentions, dark web posts, and typosquatting"},
+        ],
+        "severity_levels": [
+            {"value": "critical", "name": "Critical"}, {"value": "high", "name": "High"},
+            {"value": "medium", "name": "Medium"}, {"value": "low", "name": "Low"},
+        ],
+        "time_ranges": [
+            {"value": "1h", "name": "Last Hour"}, {"value": "6h", "name": "Last 6 Hours"},
+            {"value": "24h", "name": "Last 24 Hours"}, {"value": "7d", "name": "Last 7 Days"},
+            {"value": "30d", "name": "Last 30 Days"}, {"value": "90d", "name": "Last 90 Days"},
+        ],
+    }
+
+
+@router.get("/samples")
+async def list_sample_reports():
+    """
+    Return all 5 sample/demo reports (no ES required).
+    These showcase the platform's report capabilities with realistic static data.
+    """
+    samples = []
+    for rtype in ["threat_intelligence", "executive_briefing", "ioc_analysis",
+                   "incident_summary", "dark_web_exposure"]:
+        s = _build_sample(rtype)
+        samples.append(ReportSummary(
+            id=s["id"], title=s["title"], type=s["type"], status=s["status"],
+            severity=s["severity"], generated_at=s["generated_at"],
+            date_range=s["date_range"], description=s.get("description", ""),
+            stats=s["stats"], pages=s["pages"], is_sample=True,
+        ))
+    return {"reports": samples, "total": len(samples)}
+
+
+@router.get("/samples/{report_type}/html")
+async def view_sample_html(report_type: str):
+    """View a sample report as rendered HTML."""
+    rtype = _resolve_type(report_type)
+    if rtype not in VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Use: {', '.join(VALID_TYPES)}")
+    s = _build_sample(rtype)
+    return Response(content=s["html"], media_type="text/html")
+
+
+@router.get("/samples/{report_type}/download")
+async def download_sample(report_type: str):
+    """Download a sample report as an HTML file."""
+    rtype = _resolve_type(report_type)
+    if rtype not in VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Use: {', '.join(VALID_TYPES)}")
+    s = _build_sample(rtype)
+    filename = f"JichoSec_Sample_{rtype.replace('_', '-')}.html"
+    return Response(
+        content=s["html"], media_type="text/html",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/generate", response_model=ReportDetail)
+async def generate_report(req: GenerateReportRequest):
+    """
+    Generate a new threat report from real Elasticsearch data.
+    Stored in ES for later retrieval and download.
+    """
+    report_type = _resolve_type(req.report_type)
+
+    try:
+        result = await build_report(
+            report_type=report_type,
+            title=req.title,
+            include_iocs=req.include_iocs,
+            include_darkweb=req.include_darkweb,
+            include_credentials=req.include_credentials,
+            date_range=req.time_range,
+            custom_prompt=req.custom_prompt,
+            focus_area=req.custom_prompt,
+        )
+    except Exception as e:
+        logger.error(f"Report generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
+
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+
+    report_id = str(uuid.uuid4())
+    doc = {
+        "id": report_id,
+        "title": result["title"],
+        "type": result["type"],
+        "status": result["status"],
+        "severity": result["severity"],
+        "generated_at": result["generated_at"],
+        "date_range": result.get("date_range", req.time_range),
+        "description": result.get("description", ""),
+        "stats": result.get("stats", {}),
+        "pages": result.get("pages", 1),
+        "html": result["html"],
+        "is_sample": False,
+    }
+
+    stored = await _store_report(doc)
+    if not stored:
+        logger.warning("Report generated but could not be persisted to ES")
+
+    return ReportDetail(**doc)
 
 
 @router.get("", response_model=ReportListResponse)
 async def list_reports(
-    page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
-    report_type: Optional[str] = Query(
-        default=None,
-        description="Filter by report type"
-    ),
-    severity: Optional[str] = Query(
-        default=None,
-        description="Filter by severity: critical, high, medium, low, informational"
-    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    report_type: Optional[str] = Query(default=None),
+    severity: Optional[str] = Query(default=None),
 ):
-    """
-    List all generated reports with pagination and filtering.
-    
-    Returns a summary view of reports sorted by generation date (newest first).
-    """
+    """List generated reports with pagination and optional filtering."""
+    await _ensure_index()
+    if not es_service.client:
+        return ReportListResponse(reports=[], total=0, page=page, page_size=page_size)
+
+    filters = []
+    if report_type:
+        mapped = _resolve_type(report_type)
+        filters.append({"term": {"type": mapped}})
+    if severity:
+        filters.append({"term": {"severity": severity}})
+
+    body = {
+        "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
+        "sort": [{"generated_at": {"order": "desc"}}],
+        "from": (page - 1) * page_size,
+        "size": page_size,
+        "_source": ["id", "title", "type", "status", "severity", "generated_at",
+                     "date_range", "description", "stats", "pages", "is_sample"],
+    }
+
     try:
-        # Parse filters
-        type_filter = None
-        if report_type:
-            try:
-                type_filter = ReportType(report_type)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid report_type. Must be one of: {[t.value for t in ReportType]}"
-                )
-        
-        severity_filter = None
-        if severity:
-            try:
-                severity_filter = SeverityLevel(severity)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid severity. Must be one of: {[s.value for s in SeverityLevel]}"
-                )
-        
-        offset = (page - 1) * page_size
-        
-        result = await vertex_ai_service.list_reports(
-            limit=page_size,
-            offset=offset,
-            report_type=type_filter,
-            severity=severity_filter,
-        )
-        
-        reports = [
-            ReportSummary(
-                id=r["id"],
-                title=r["title"],
-                type=r["type"],
-                generated_at=r["generated_at"],
-                severity=r["severity"],
-                executive_summary=r.get("executive_summary", ""),
-            )
-            for r in result["reports"]
-        ]
-        
-        return ReportListResponse(
-            reports=reports,
-            total=result["total"],
-            page=page,
-            page_size=page_size,
-        )
-        
-    except HTTPException:
-        raise
+        resp = await es_service.client.search(index=REPORTS_INDEX, body=body)
+        reports = [ReportSummary(**hit["_source"]) for hit in resp["hits"]["hits"]]
+        total = resp["hits"]["total"]["value"]
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list reports: {str(e)}"
-        )
+        logger.warning(f"List reports error: {e}")
+        reports = []
+        total = 0
+
+    return ReportListResponse(reports=reports, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{report_id}", response_model=ReportResponse)
+# =============================================================================
+# DYNAMIC /{report_id} ROUTES  (must come AFTER all fixed-path routes)
+# =============================================================================
+
+@router.get("/{report_id}", response_model=ReportDetail)
 async def get_report(report_id: str):
-    """
-    Get a specific report by ID.
-    
-    Returns the full report content including IOCs, recommendations,
-    and all analysis details.
-    """
-    report = await vertex_ai_service.get_report(report_id)
-    
-    if not report:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Report {report_id} not found"
-        )
-    
-    return ReportResponse(
-        id=report.id,
-        title=report.title,
-        type=report.type.value,
-        content=report.content,
-        generated_at=report.generated_at,
-        severity=report.severity.value,
-        iocs=report.iocs,
-        recommendations=report.recommendations,
-        executive_summary=report.executive_summary,
-        time_range_start=report.time_range_start,
-        time_range_end=report.time_range_end,
-        filters_applied=report.filters_applied,
-        model_used=report.model_used,
-    )
+    """Get a specific report by ID (includes HTML content)."""
+    sample = _get_sample_if_exists(report_id)
+    if sample:
+        return ReportDetail(**sample)
 
-
-@router.post("/chat", response_model=ChatWithDataResponse)
-async def chat_with_data(request: ChatWithDataRequest):
-    """
-    Interactive Q&A with threat data and logs.
-    
-    Ask questions about IOCs, threat patterns, or provide log data
-    for AI-powered analysis.
-    
-    Examples:
-    - "What are the most critical threats from the last 24 hours?"
-    - "Are there any patterns in the C2 domains?"
-    - "Summarize the phishing activity targeting Kenya"
-    """
+    await _ensure_index()
+    if not es_service.client:
+        raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
     try:
-        # Build log context
-        log_context = request.log_context or ""
-        
-        # Add recent IOCs to context if requested
-        if request.include_recent_iocs:
-            from app.services.elasticsearch import es_service
-            from datetime import timedelta
-            
-            # Parse time range
-            time_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
-            hours = time_map.get(request.time_range, 24)
-            since = datetime.utcnow() - timedelta(hours=hours)
-            
-            indicators = await es_service.get_recent_indicators(
-                limit=50,
-                since=since,
-            )
-            
-            if indicators:
-                ioc_summary = "\n".join([
-                    f"- {i.get('indicator')} ({i.get('threat_type')}, confidence: {i.get('confidence', 0.5):.2f})"
-                    for i in indicators[:20]
-                ])
-                log_context = f"**Recent IOCs:**\n{ioc_summary}\n\n{log_context}"
-        
-        # Get chat response
-        response = await vertex_ai_service.chat_with_logs(
-            question=request.question,
-            log_context=log_context,
+        resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
+        return ReportDetail(**resp["_source"])
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+
+
+@router.get("/{report_id}/html")
+async def view_report_html(report_id: str):
+    """Return the report as a rendered HTML page."""
+    sample = _get_sample_if_exists(report_id)
+    if sample:
+        return Response(content=sample["html"], media_type="text/html")
+
+    await _ensure_index()
+    if not es_service.client:
+        raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+    try:
+        resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
+        html = resp["_source"].get("html", "")
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+    return Response(content=html, media_type="text/html")
+
+
+@router.get("/{report_id}/download")
+async def download_report(report_id: str, format: str = Query(default="html")):
+    """Download a report file."""
+    sample = _get_sample_if_exists(report_id)
+    if sample:
+        fname = f"{sample['title'].replace(' ', '_')}_{report_id[:12]}.html"
+        return Response(
+            content=sample["html"], media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
         )
-        
-        return ChatWithDataResponse(
-            answer=response.answer,
-            sources_used=response.sources_used,
-            confidence=response.confidence,
-            follow_up_questions=response.follow_up_questions,
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Chat failed: {str(e)}"
-        )
+
+    await _ensure_index()
+    if not es_service.client:
+        raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+    try:
+        resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
+        doc = resp["_source"]
+        html = doc.get("html", "")
+        title = doc.get("title", "report").replace(" ", "_")
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+    filename = f"{title}_{report_id[:8]}.html"
+    return Response(
+        content=html, media_type="text/html",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/{report_id}", response_model=DeleteResponse)
 async def delete_report(report_id: str):
-    """
-    Delete a report by ID.
-    
-    Permanently removes the report from the database.
-    """
-    # First check if report exists
-    report = await vertex_ai_service.get_report(report_id)
-    
-    if not report:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Report {report_id} not found"
-        )
-    
-    success = await vertex_ai_service.delete_report(report_id)
-    
-    if success:
-        return DeleteResponse(
-            success=True,
-            message=f"Report {report_id} deleted successfully"
-        )
-    else:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete report"
-        )
+    """Delete a report by ID."""
+    if _get_sample_if_exists(report_id):
+        raise HTTPException(status_code=400, detail="Cannot delete sample reports")
 
-
-@router.get("/types/available")
-async def get_report_types():
-    """
-    Get available report types and their descriptions.
-    """
-    return {
-        "report_types": [
-            {
-                "value": ReportType.THREAT_INTELLIGENCE.value,
-                "name": "Threat Intelligence Report",
-                "description": "Comprehensive threat landscape analysis with IOCs, threat actors, and recommendations",
-            },
-            {
-                "value": ReportType.INCIDENT_SUMMARY.value,
-                "name": "Incident Summary Report",
-                "description": "Security incident timeline, affected systems, containment actions, and lessons learned",
-            },
-            {
-                "value": ReportType.EXECUTIVE_BRIEFING.value,
-                "name": "Executive Briefing",
-                "description": "High-level summary for leadership with key metrics, risk assessment, and business impact",
-            },
-            {
-                "value": ReportType.IOC_ANALYSIS.value,
-                "name": "IOC Analysis Report",
-                "description": "Detailed breakdown of indicators by type, threat category, and geographic origin",
-            },
-            {
-                "value": ReportType.DARK_WEB_EXPOSURE.value,
-                "name": "Dark Web Exposure Report",
-                "description": "Assessment of credential leaks, brand mentions, and typosquatting activity",
-            },
-        ],
-        "severity_levels": [
-            {"value": s.value, "name": s.value.title()}
-            for s in SeverityLevel
-        ],
-        "time_ranges": [
-            {"value": "1h", "name": "Last Hour"},
-            {"value": "6h", "name": "Last 6 Hours"},
-            {"value": "24h", "name": "Last 24 Hours"},
-            {"value": "7d", "name": "Last 7 Days"},
-            {"value": "30d", "name": "Last 30 Days"},
-        ],
-    }
+    await _ensure_index()
+    if not es_service.client:
+        raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+    try:
+        await es_service.client.delete(index=REPORTS_INDEX, id=report_id, refresh="wait_for")
+        return DeleteResponse(success=True, message=f"Report {report_id} deleted")
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found")

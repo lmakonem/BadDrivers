@@ -3,11 +3,21 @@
  *
  * Automatically attaches the JWT Bearer token from localStorage.
  * All portal pages should use this instead of raw fetch().
+ *
+ * Timeouts:
+ *   - GET/DELETE: 15 seconds
+ *   - POST/PUT/PATCH: 60 seconds (report generation can take a while)
  */
 
 import { getAccessToken, refreshAccessToken, clearTokens } from "./auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+/** Determine timeout based on HTTP method. */
+function _timeout(method?: string): number {
+  const m = (method || "GET").toUpperCase();
+  return m === "GET" || m === "DELETE" || m === "HEAD" ? 15_000 : 60_000;
+}
 
 export async function apiFetch(
   path: string,
@@ -19,9 +29,9 @@ export async function apiFetch(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // AbortController with 10s timeout prevents browser hangs
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const ms = _timeout(options?.method);
+  const timeout = setTimeout(() => controller.abort(), ms);
 
   let res: Response;
   try {
@@ -47,7 +57,21 @@ export async function apiFetch(
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers.set("Authorization", `Bearer ${newToken}`);
-      return fetch(`${API_BASE}${path}`, { ...options, headers });
+      // Retry with a fresh timeout
+      const retryController = new AbortController();
+      const retryTimeout = setTimeout(() => retryController.abort(), ms);
+      try {
+        const retryRes = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers,
+          signal: retryController.signal,
+        });
+        clearTimeout(retryTimeout);
+        return retryRes;
+      } catch {
+        clearTimeout(retryTimeout);
+        // fall through to return original 401
+      }
     }
     clearTokens();
     if (typeof window !== "undefined") {

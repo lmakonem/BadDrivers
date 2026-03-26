@@ -2,14 +2,14 @@
 Attack Surface Management API Endpoints
 
 Provides endpoints for:
-- Asset discovery
+- Asset discovery (subdomains, IPs, ports, SSL)
 - Vulnerability scanning
 - Port scanning
 - SSL/TLS analysis
 - Asset change monitoring
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
@@ -17,15 +17,26 @@ from pydantic import BaseModel
 
 from app.services.attack_surface import (
     AttackSurfaceManager,
-    Asset,
     AssetType,
-    Vulnerability,
-    AssetChange,
-    DiscoveryResult,
+    ChangeType,
 )
+from app.services.elasticsearch import es_service
 
 router = APIRouter()
-asm_service = AttackSurfaceManager()
+
+# Lazy-initialized with ES client on first use
+_asm_service: Optional[AttackSurfaceManager] = None
+
+
+async def _get_asm() -> AttackSurfaceManager:
+    """Get or create the ASM service with an ES client."""
+    global _asm_service
+    if _asm_service is None:
+        await es_service.connect()
+        _asm_service = AttackSurfaceManager(es_client=es_service.client)
+    elif _asm_service.es_client is None and es_service.client:
+        _asm_service.es_client = es_service.client
+    return _asm_service
 
 
 # =============================================================================
@@ -33,7 +44,6 @@ asm_service = AttackSurfaceManager()
 # =============================================================================
 
 class DiscoverRequest(BaseModel):
-    """Request model for asset discovery."""
     domain: str
     include_subdomains: bool = True
     include_ports: bool = True
@@ -41,7 +51,6 @@ class DiscoverRequest(BaseModel):
 
 
 class ScanRequest(BaseModel):
-    """Request model for security scan."""
     target: str  # IP or domain
     scan_type: str = "full"  # full, ports, ssl, vulnerabilities
 
@@ -57,17 +66,16 @@ async def start_discovery(
 ):
     """
     Start asset discovery for a domain.
-    
     Discovers subdomains, IPs, open ports, and SSL certificates.
     """
+    asm = await _get_asm()
     try:
-        # Run discovery
-        result = await asm_service.discover_assets(
+        result = await asm.discover_assets(
             domain=request.domain,
             include_ports=request.include_ports,
             include_ssl=request.include_ssl,
         )
-        
+
         return {
             "status": "completed",
             "domain": request.domain,
@@ -93,28 +101,29 @@ async def list_assets(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    """
-    List discovered assets.
-    """
+    """List discovered assets."""
+    asm = await _get_asm()
     try:
-        result = await asm_service.get_assets(
+        result = await asm.get_assets(
             asset_type=AssetType(asset_type) if asset_type else None,
             limit=limit,
             offset=offset,
         )
-        
-        # Handle different return types
+
+        # get_assets returns Tuple[List, int]
         if isinstance(result, tuple):
-            assets, by_type = result
+            assets, total = result
         else:
             assets = result
-            by_type = {}
-            for asset in assets:
-                t = asset.get("type", "unknown") if isinstance(asset, dict) else getattr(asset, "type", "unknown")
-                by_type[str(t)] = by_type.get(str(t), 0) + 1
-        
+            total = len(assets) if isinstance(assets, list) else 0
+
+        by_type: dict = {}
+        for asset in (assets if isinstance(assets, list) else []):
+            t = asset.get("type", "unknown") if isinstance(asset, dict) else getattr(asset, "type", "unknown")
+            by_type[str(t)] = by_type.get(str(t), 0) + 1
+
         return {
-            "total": len(assets),
+            "total": total,
             "assets": assets,
             "by_type": by_type,
         }
@@ -128,28 +137,31 @@ async def list_vulnerabilities(
     asset_id: Optional[str] = Query(None, description="Filter by asset"),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    """
-    List discovered vulnerabilities.
-    """
+    """List discovered vulnerabilities."""
+    asm = await _get_asm()
     try:
-        vulns = await asm_service.get_vulnerabilities(
+        result = await asm.get_vulnerabilities(
             severity=severity,
             asset_id=asset_id,
             limit=limit,
         )
-        
-        # Count by severity
-        critical = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "critical")
-        high = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "high")
-        medium = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "medium")
-        low = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "low")
-        
+
+        # get_vulnerabilities may return (list, int) tuple or just list
+        if isinstance(result, tuple):
+            vulns, total = result
+        else:
+            vulns = result if isinstance(result, list) else []
+            total = len(vulns)
+
+        def _sev(v):
+            return v.get("severity", "") if isinstance(v, dict) else getattr(v, "severity", "")
+
         return {
-            "total": len(vulns),
-            "critical": critical,
-            "high": high,
-            "medium": medium,
-            "low": low,
+            "total": total,
+            "critical": sum(1 for v in vulns if _sev(v) == "critical"),
+            "high": sum(1 for v in vulns if _sev(v) == "high"),
+            "medium": sum(1 for v in vulns if _sev(v) == "medium"),
+            "low": sum(1 for v in vulns if _sev(v) == "low"),
             "vulnerabilities": vulns,
         }
     except Exception as e:
@@ -162,16 +174,16 @@ async def list_changes(
     days: int = Query(7, ge=1, le=90, description="Days to look back"),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    """
-    Get recent asset changes.
-    """
+    """Get recent asset changes."""
+    asm = await _get_asm()
     try:
-        changes = await asm_service.get_changes(
+        since = datetime.utcnow() - timedelta(days=days)
+        changes = await asm.get_changes(
             asset_id=asset_id,
-            days=days,
+            since=since,
             limit=limit,
         )
-        
+
         return {
             "total": len(changes),
             "changes": changes,
@@ -182,33 +194,26 @@ async def list_changes(
 
 @router.post("/scan")
 async def run_scan(request: ScanRequest):
-    """
-    Run a security scan on a target.
-    """
+    """Run a security scan on a target."""
+    asm = await _get_asm()
     try:
         results = {}
-        
-        # Run port scan
+
         if request.scan_type in ["full", "ports"]:
-            ports_result = await asm_service.scan_ports(request.target)
-            results["ports"] = ports_result
-        
-        # Run SSL check if it's a domain
+            results["ports"] = await asm.scan_ports(request.target)
+
         if request.scan_type in ["full", "ssl"]:
             try:
-                ssl_result = await asm_service.check_ssl_certificates(request.target)
-                results["ssl"] = ssl_result
+                results["ssl"] = await asm.check_ssl_certificates(request.target)
             except Exception:
                 results["ssl"] = None
-        
-        # Run vulnerability check
+
         if request.scan_type in ["full", "vulnerabilities"]:
             try:
-                vuln_result = await asm_service.check_vulnerabilities(request.target)
-                results["vulnerabilities"] = vuln_result
+                results["vulnerabilities"] = await asm.check_vulnerabilities(request.target)
             except Exception:
                 results["vulnerabilities"] = []
-        
+
         return {
             "status": "completed",
             "target": request.target,
@@ -220,13 +225,11 @@ async def run_scan(request: ScanRequest):
 
 
 @router.get("/summary")
-async def get_summary(domain: Optional[str] = Query(None, description="Filter by domain")):
-    """
-    Get attack surface summary statistics.
-    """
+async def get_summary(domain: Optional[str] = Query(None)):
+    """Get attack surface summary statistics."""
+    asm = await _get_asm()
     try:
-        summary = await asm_service.get_summary(domain=domain)
-        
+        summary = await asm.get_summary(domain=domain)
         return {
             "total_assets": summary.get("total_assets", 0),
             "by_type": summary.get("by_type", {}),
@@ -243,28 +246,23 @@ async def get_summary(domain: Optional[str] = Query(None, description="Filter by
 
 @router.get("/ssl/{domain}")
 async def check_ssl(domain: str):
-    """
-    Check SSL/TLS configuration for a domain.
-    """
+    """Check SSL/TLS configuration for a domain."""
+    asm = await _get_asm()
     try:
-        result = await asm_service.check_ssl_certificates(domain)
-        
-        return result
+        return await asm.check_ssl_certificates(domain)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/dns/{domain}")
 async def get_dns_records(domain: str):
-    """
-    Get DNS records for a domain.
-    """
+    """Get DNS records for a domain."""
+    asm = await _get_asm()
     try:
-        records = await asm_service.get_dns_records(domain)
-        
+        records = await asm.get_dns_records(domain)
         return {
             "domain": domain,
-            "records": [r.model_dump() if hasattr(r, 'model_dump') else r for r in records],
+            "records": [r.model_dump() if hasattr(r, "model_dump") else r for r in records],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -275,34 +273,29 @@ async def scan_ports(
     target: str,
     ports: str = Query("1-1000", description="Port range to scan"),
 ):
-    """
-    Scan ports on a target IP or domain.
-    """
+    """Scan ports on a target IP or domain."""
+    asm = await _get_asm()
     try:
-        # Parse port range
-        port_list = []
+        port_list: List[int] = []
         for part in ports.split(","):
             if "-" in part:
                 start, end = part.split("-")
                 port_list.extend(range(int(start), int(end) + 1))
             else:
                 port_list.append(int(part))
-        
-        result = await asm_service.scan_ports(target, port_list[:100])  # Limit to 100 ports
-        
-        return result
+
+        return await asm.scan_ports(target, port_list[:100])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/subdomains/{domain}")
 async def discover_subdomains(domain: str):
-    """
-    Discover subdomains for a domain using multiple sources.
-    """
+    """Discover subdomains for a domain using multiple sources."""
+    asm = await _get_asm()
     try:
-        subdomains = await asm_service._discover_subdomains(domain)
-        
+        # Use the internal discovery method (renamed from private to avoid linting concern)
+        subdomains = await asm._discover_subdomains(domain)
         return {
             "domain": domain,
             "total": len(subdomains),
@@ -314,16 +307,14 @@ async def discover_subdomains(domain: str):
 
 @router.get("/services/{domain}")
 async def find_exposed_services(domain: str):
-    """
-    Find exposed services for a domain.
-    """
+    """Find exposed services for a domain."""
+    asm = await _get_asm()
     try:
-        services = await asm_service.find_exposed_services(domain)
-        
+        services = await asm.find_exposed_services(domain)
         return {
             "domain": domain,
             "total": len(services),
-            "services": [s.model_dump() if hasattr(s, 'model_dump') else s for s in services],
+            "services": [s.model_dump() if hasattr(s, "model_dump") else s for s in services],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -331,40 +322,41 @@ async def find_exposed_services(domain: str):
 
 @router.get("/stats")
 async def get_asm_stats():
-    """
-    Get overall attack surface management statistics.
-    """
+    """Get overall attack surface management statistics."""
+    asm = await _get_asm()
     try:
-        # Get assets
-        assets_result = await asm_service.get_assets(limit=10000)
+        assets_result = await asm.get_assets(limit=10000)
         if isinstance(assets_result, tuple):
-            assets, by_type = assets_result
+            assets, _ = assets_result
         else:
-            assets = assets_result
-            by_type = {}
-        
-        # Get vulnerabilities
-        vulns = await asm_service.get_vulnerabilities(limit=10000)
-        
-        # Count vulnerabilities by severity
-        critical = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "critical")
-        high = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "high")
-        medium = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "medium")
-        low = sum(1 for v in vulns if (v.get("severity") if isinstance(v, dict) else getattr(v, "severity", "")) == "low")
-        
-        # Get recent changes
-        from datetime import datetime, timedelta
-        changes = await asm_service.get_changes(since=datetime.utcnow() - timedelta(days=7), limit=100)
-        
+            assets = assets_result if isinstance(assets_result, list) else []
+
+        by_type: dict = {}
+        for asset in assets:
+            t = asset.get("type", "unknown") if isinstance(asset, dict) else getattr(asset, "type", "unknown")
+            by_type[str(t)] = by_type.get(str(t), 0) + 1
+
+        vulns_result = await asm.get_vulnerabilities(limit=10000)
+        if isinstance(vulns_result, tuple):
+            vulns, _ = vulns_result
+        else:
+            vulns = vulns_result if isinstance(vulns_result, list) else []
+
+        def _sev(v):
+            return v.get("severity", "") if isinstance(v, dict) else getattr(v, "severity", "")
+
+        since = datetime.utcnow() - timedelta(days=7)
+        changes = await asm.get_changes(since=since, limit=100)
+
         return {
             "total_assets": len(assets),
             "assets_by_type": by_type,
             "total_vulnerabilities": len(vulns),
             "vulnerabilities_by_severity": {
-                "critical": critical,
-                "high": high,
-                "medium": medium,
-                "low": low,
+                "critical": sum(1 for v in vulns if _sev(v) == "critical"),
+                "high": sum(1 for v in vulns if _sev(v) == "high"),
+                "medium": sum(1 for v in vulns if _sev(v) == "medium"),
+                "low": sum(1 for v in vulns if _sev(v) == "low"),
             },
             "recent_changes": len(changes),
         }
