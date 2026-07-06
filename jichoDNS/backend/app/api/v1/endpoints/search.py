@@ -9,7 +9,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.core.es_safe import escape_wildcard
+from app.core.ownership import get_owned_domains, redact_credential
 from app.models.user import User
 from app.services.elasticsearch import es_service
 
@@ -24,6 +28,7 @@ async def universal_search(
     source: Optional[str] = Query(None, description="Filter by source: iocs, darkweb, credentials, osint, all"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Search across all intelligence sources.
@@ -50,7 +55,7 @@ async def universal_search(
         "credentials": {
             "index": "credential_exposures",
             "fields": ["email^3", "domain^2", "username", "source_name"],
-            "exclude_fields": ["password_hash"],
+            "exclude_fields": ["password", "password_hash"],
         },
         "osint": {
             "index": "osint_results",
@@ -61,24 +66,35 @@ async def universal_search(
     if source and source != "all":
         search_sources = {k: v for k, v in search_sources.items() if k == source}
 
+    # Owned-domain scoping for the (global) credential_exposures index
+    owned_domains = None
+    if not current_user.is_admin:
+        owned_domains = await get_owned_domains(current_user, db)
+        if "credentials" in search_sources and not owned_domains:
+            search_sources = {k: v for k, v in search_sources.items() if k != "credentials"}
+
     per_source_limit = max(5, limit // len(search_sources)) if search_sources else limit
 
     for src_name, src_config in search_sources.items():
         try:
-            # Credential searches need wildcard on keyword fields
+            # Credential searches need wildcard on keyword fields.
+            # Escape the user term so a typed '*' / '?' (esp. a leading wildcard —
+            # an unindexed full-scan / DoS vector) is matched literally, not honored.
             if src_name == "credentials":
-                q_lower = q.lower()
+                q_esc = escape_wildcard(q.lower())
                 query = {
                     "bool": {
                         "should": [
-                            {"wildcard": {"email": {"value": f"*{q_lower}*"}}},
-                            {"wildcard": {"domain": {"value": f"*{q_lower}*"}}},
-                            {"wildcard": {"username": {"value": f"*{q_lower}*"}}},
-                            {"wildcard": {"source_name": {"value": f"*{q_lower}*"}}},
+                            {"wildcard": {"email": {"value": f"*{q_esc}*"}}},
+                            {"wildcard": {"domain": {"value": f"*{q_esc}*"}}},
+                            {"wildcard": {"username": {"value": f"*{q_esc}*"}}},
+                            {"wildcard": {"source_name": {"value": f"*{q_esc}*"}}},
                         ],
                         "minimum_should_match": 1,
                     }
                 }
+                if owned_domains is not None:
+                    query["bool"]["filter"] = [{"terms": {"domain": sorted(owned_domains)}}]
             else:
                 query = {
                     "multi_match": {
@@ -108,6 +124,8 @@ async def universal_search(
             for h in result["hits"]["hits"]:
                 hit = {**h["_source"], "_id": h["_id"], "_score": h["_score"]}
                 hit["_source_type"] = src_name
+                if src_name == "credentials":
+                    redact_credential(hit)
                 hits.append(hit)
 
             if hits:
@@ -133,6 +151,7 @@ async def universal_search(
 async def lookup_ioc(
     value: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Deep lookup of a single IOC across all sources.
@@ -171,26 +190,40 @@ async def lookup_ioc(
     except Exception:
         pass
 
-    # Search in credential exposures
+    # Search in credential exposures — non-admins only for domains they own
     try:
-        cred_result = await es_service.client.search(
-            index="credential_exposures",
-            body={
-                "query": {
-                    "bool": {
-                        "should": [
-                            {"term": {"email": value}},
-                            {"term": {"domain": value}},
-                        ]
-                    }
+        from app.core.ownership import bare_domain
+        allowed = True
+        cred_filter = []
+        if not current_user.is_admin:
+            owned = await get_owned_domains(current_user, db)
+            if bare_domain(value) not in owned:
+                allowed = False
+            else:
+                cred_filter = [{"terms": {"domain": sorted(owned)}}]
+        if allowed:
+            cred_result = await es_service.client.search(
+                index="credential_exposures",
+                body={
+                    "query": {
+                        "bool": {
+                            "should": [
+                                {"term": {"email": value}},
+                                {"term": {"domain": value}},
+                            ],
+                            "minimum_should_match": 1,
+                            "filter": cred_filter,
+                        }
+                    },
+                    "size": 20,
+                    "_source": {"excludes": ["password", "password_hash"]},
                 },
-                "size": 20,
-                "_source": {"excludes": ["password_hash"]},
-            },
-        )
-        result["credential_exposures"] = [h["_source"] for h in cred_result["hits"]["hits"]]
-        if result["credential_exposures"]:
-            result["found"] = True
+            )
+            result["credential_exposures"] = [
+                redact_credential(h["_source"]) for h in cred_result["hits"]["hits"]
+            ]
+            if result["credential_exposures"]:
+                result["found"] = True
     except Exception:
         pass
 

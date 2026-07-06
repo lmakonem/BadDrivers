@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services.elasticsearch import es_service
@@ -17,6 +17,9 @@ from app.services.elasticsearch import es_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+ALERT_STATUS_INDEX = "alert_status"
+VALID_ALERT_STATUSES = {"new", "acknowledged", "investigating", "resolved"}
 
 
 @router.get("/feed")
@@ -153,6 +156,25 @@ async def get_alerts_feed(
     if alert_type:
         alerts = [a for a in alerts if a["type"] == alert_type]
 
+    # Merge persisted per-user status (default "new" if never touched).
+    alert_ids = [a["id"] for a in alerts]
+    if alert_ids:
+        status_map: dict = {}
+        try:
+            mget = await es_service.client.mget(
+                index=ALERT_STATUS_INDEX,
+                body={"ids": [f"{current_user.id}:{aid}" for aid in alert_ids]},
+            )
+            for doc in mget.get("docs", []):
+                if doc.get("found"):
+                    src = doc["_source"]
+                    status_map[src["alert_id"]] = src.get("status", "new")
+        except Exception:
+            # index may not exist yet — treat all as "new"
+            pass
+        for a in alerts:
+            a["status"] = status_map.get(a["id"], "new")
+
     # Sort: critical > high > medium > low, then by timestamp
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     alerts.sort(key=lambda a: (severity_order.get(a["severity"], 4), a.get("timestamp", "")))
@@ -162,3 +184,32 @@ async def get_alerts_feed(
         "total": len(alerts),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.patch("/{alert_id}/status")
+async def update_alert_status(
+    alert_id: str,
+    status: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+):
+    """Persist the current user's status for an aggregated alert."""
+    if status not in VALID_ALERT_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid status")
+
+    await es_service.connect()
+    if not es_service.client:
+        raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+
+    doc_id = f"{current_user.id}:{alert_id}"
+    await es_service.client.index(
+        index=ALERT_STATUS_INDEX,
+        id=doc_id,
+        document={
+            "user_id": current_user.id,
+            "alert_id": alert_id,
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        refresh="wait_for",
+    )
+    return {"alert_id": alert_id, "status": status, "updated_at": datetime.now(timezone.utc).isoformat()}

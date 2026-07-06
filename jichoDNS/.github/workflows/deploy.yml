@@ -41,22 +41,28 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd backend
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
 
-      - name: Run backend linting
+      # BLOCKING: byte-compile every module — catches syntax errors repo-wide,
+      # not just the 3 files that used to be spot-checked.
+      - name: Compile all backend modules
         run: |
           cd backend
-          python -m py_compile app/main.py
-          python -m py_compile app/core/config.py
-          python -m py_compile app/services/dns_analysis.py
-        continue-on-error: true
+          python -m compileall -q app
 
+      # BLOCKING: ruff runs the real-bug rule set (E9/F63/F7/F82) configured in
+      # backend/pyproject.toml — undefined names, broken f-strings, syntax.
+      - name: Lint (ruff)
+        run: |
+          cd backend
+          ruff check app
+
+      # BLOCKING: the security regression suite must pass before we can deploy.
       - name: Run backend tests
         run: |
           cd backend
-          pytest tests/ -v --tb=short || echo "No tests found or tests failed (non-blocking for now)"
-        continue-on-error: true
+          pytest
 
   # ---------------------------------------------------------------------------
   # Job 2: Deploy via Ansible
@@ -64,9 +70,17 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
+    # Gate: deploy only runs if the `test` job (compile + ruff + pytest) fully
+    # succeeded. `needs` already blocks on success; the explicit `success()`
+    # documents intent and survives future `if:` edits.
     needs: test
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    if: success() && github.ref == 'refs/heads/main'
+    # Binds this job to the repo's Production environment. Add a MANUAL APPROVAL
+    # gate in Settings > Environments > production > Required reviewers
+    # (GitHub does not allow declaring reviewers in YAML). See ops action.
+    environment:
+      name: production
+      url: http://${{ secrets.DEPLOY_HOST }}:3000
     concurrency:
       group: production-deploy
       cancel-in-progress: false

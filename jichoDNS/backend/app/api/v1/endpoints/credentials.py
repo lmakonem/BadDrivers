@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.core.ownership import get_owned_domains, redact_credential
 from app.models.user import User
 from app.services.elasticsearch import es_service
 
@@ -62,6 +65,7 @@ async def search_credentials(
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=5, le=100),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Search credential leaks and exposures.
@@ -93,6 +97,16 @@ async def search_credentials(
             if severity:
                 must.append({"term": {"severity": severity}})
 
+            # Owned-domain scoping — non-admins only see creds for domains they monitor
+            if not current_user.is_admin:
+                owned = await get_owned_domains(current_user, db)
+                empty = {"items": [], "total": 0, "page": page,
+                         "page_size": page_size, "pages": 0,
+                         "source": "credential_exposures"}
+                if not owned or (domain and domain.lower() not in owned):
+                    return empty
+                must.append({"terms": {"domain": sorted(owned)}})
+
             query = {"bool": {"must": must}} if must else {"match_all": {}}
 
             result = await es_service.client.search(
@@ -104,13 +118,13 @@ async def search_credentials(
                     "size": page_size,
                     "_source": [
                         "email", "username", "domain",
-                        "password", "password_hash", "password_type", "password_length",
+                        "password_type", "password_length",
                         "source", "source_name", "discovered_at", "breach_date",
                         "severity", "country", "tags", "vip_match",
                     ],
                 },
             )
-            items = [h["_source"] for h in result["hits"]["hits"]]
+            items = [redact_credential(h["_source"]) for h in result["hits"]["hits"]]
             total = result["hits"]["total"]["value"]
 
             return {
@@ -195,17 +209,26 @@ async def search_credentials(
 @router.get("/stats")
 async def credential_stats(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Credential exposure statistics."""
     await es_service.connect()
     if not es_service.client:
         return {"total": 0}
 
+    scope_query = {"match_all": {}}
+    if not current_user.is_admin:
+        owned = await get_owned_domains(current_user, db)
+        if not owned:
+            return {"total": 0, "source": "credential_exposures"}
+        scope_query = {"bool": {"filter": [{"terms": {"domain": sorted(owned)}}]}}
+
     try:
         agg = await es_service.client.search(
             index="credential_exposures",
             body={
                 "size": 0,
+                "query": scope_query,
                 "aggs": {
                     "by_severity": {"terms": {"field": "severity", "size": 5}},
                     "by_source": {"terms": {"field": "source", "size": 10}},

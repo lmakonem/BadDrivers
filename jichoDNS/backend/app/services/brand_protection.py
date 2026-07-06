@@ -82,6 +82,7 @@ class BrandMonitor(BaseModel):
     scan_frequency_hours: int = Field(default=24, description="How often to scan")
     last_scan_at: Optional[datetime] = None
     typosquat_count: int = Field(default=0, description="Number of detected typosquats")
+    owner_user_id: Optional[int] = Field(default=None, description="Owning JichoDNS user id")
 
 
 class TyposquatDomain(BaseModel):
@@ -442,10 +443,11 @@ class BrandProtectionService:
                     "scan_frequency_hours": {"type": "integer"},
                     "last_scan_at": {"type": "date"},
                     "typosquat_count": {"type": "integer"},
+                    "owner_user_id": {"type": "integer"},
                 }
             }
         }
-        
+
         # Typosquat domains index
         typosquat_mapping = {
             "mappings": {
@@ -709,11 +711,12 @@ class BrandProtectionService:
     # -------------------------------------------------------------------------
     
     async def monitor_brand(
-        self, 
-        brand_name: str, 
+        self,
+        brand_name: str,
         keywords: List[str],
         domains: Optional[List[str]] = None,
         alert_email: Optional[str] = None,
+        owner_user_id: Optional[int] = None,
     ) -> BrandMonitor:
         """
         Set up monitoring for a brand.
@@ -729,9 +732,10 @@ class BrandProtectionService:
         """
         await self.connect()
         
-        # Generate unique ID
+        # Generate unique ID — scoped per owner so two tenants monitoring the
+        # same brand/domains get distinct monitor documents.
         brand_id = hashlib.sha256(
-            f"{brand_name}:{','.join(sorted(domains or []))}".encode()
+            f"{owner_user_id}:{brand_name}:{','.join(sorted(domains or []))}".encode()
         ).hexdigest()[:16]
         
         # Check if pre-configured African brand
@@ -748,6 +752,7 @@ class BrandProtectionService:
             domains=domains or [],
             keywords=keywords,
             alert_email=alert_email,
+            owner_user_id=owner_user_id,
         )
         
         # Store in Elasticsearch

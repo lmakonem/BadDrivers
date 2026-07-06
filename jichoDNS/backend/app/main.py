@@ -84,8 +84,8 @@ def _has_auth(request: Request) -> bool:
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer ") and len(auth_header) > 20:
         from app.core.security import decode_token
-        payload = decode_token(auth_header[7:])
-        if payload and payload.get("type") == "access":
+        payload = decode_token(auth_header[7:], require_type="access")
+        if payload:
             return True
     # Check admin session cookie
     try:

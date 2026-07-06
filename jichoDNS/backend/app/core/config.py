@@ -5,8 +5,11 @@ Application configuration using Pydantic Settings.
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, PostgresDsn, RedisDsn
+from pydantic import Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Well-known dev placeholder — allowed ONLY when ENVIRONMENT != "production".
+_DEV_SECRET_PLACEHOLDER = "dev-secret-key-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -21,7 +24,19 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = Field(default="development")
     LOG_LEVEL: str = Field(default="INFO")
-    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
+    # SECRET_KEY has NO production default. In dev/test the model_validator below
+    # backfills the placeholder so the app still boots without a .env.
+    SECRET_KEY: str = Field(default="")
+    # Signing key for the sqladmin / Starlette session cookie. Kept separate from
+    # SECRET_KEY (JWT signing) for defense in depth; falls back to SECRET_KEY if unset.
+    SESSION_SECRET_KEY: str = Field(default="")
+
+    # Demo mode. MUST stay False in production. When False, any ASM/AI data
+    # source that has no real API key is SKIPPED and returns EMPTY results
+    # instead of fabricating synthetic assets, findings, or report text
+    # (this output feeds real client-facing PDFs). Set True ONLY for local
+    # demos / screenshots.
+    ALLOW_MOCK_DATA: bool = Field(default=False)
 
     # Database
     DATABASE_URL: PostgresDsn = Field(
@@ -30,6 +45,11 @@ class Settings(BaseSettings):
     CLICKHOUSE_URL: str = Field(
         default="clickhouse://jichodns:jichodns_dev@localhost:9000/jichodns"
     )
+
+    # Database connection pool (API process only; Celery workers use NullPool)
+    DB_POOL_SIZE: int = Field(default=10)
+    DB_MAX_OVERFLOW: int = Field(default=20)
+    DB_POOL_RECYCLE: int = Field(default=1800)  # seconds; recycle conns older than this
 
     # Redis
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
@@ -53,9 +73,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Optional JWT audience. Empty string = disabled (no aud claim set or verified).
+    JWT_AUDIENCE: str = Field(default="")
 
     # External APIs
     SHODAN_API_KEY: str = Field(default="")
+    SECURITYTRAILS_API_KEY: str = Field(default="")  # SecurityTrails subdomain/DNS history
     RIPE_ATLAS_API_KEY: str = Field(default="")
     VIRUSTOTAL_API_KEY: str = Field(default="")
     OTX_API_KEY: str = Field(default="")
@@ -97,6 +120,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PROFESSIONAL: int = 10000  # per day
     RATE_LIMIT_ENTERPRISE: int = 1000000  # effectively unlimited
 
+    # On-demand ASM scan/check rate cap (per user, rolling window).
+    # enterprise/admin get 5x the base cap. Backstop against using the
+    # platform as an SSRF/port-scan proxy.
+    ASM_SCAN_RATE_MAX: int = 20
+    ASM_SCAN_RATE_WINDOW_SECONDS: int = 60
+
     # Feed Update Intervals (seconds)
     FEED_UPDATE_INTERVAL_URLHAUS: int = 300  # 5 minutes
     FEED_UPDATE_INTERVAL_PHISHTANK: int = 3600  # 1 hour
@@ -108,6 +137,29 @@ class Settings(BaseSettings):
     DGA_SCORE_THRESHOLD: float = 0.7
     SUBDOMAIN_LENGTH_ANOMALY: int = 50
     NEW_DOMAIN_HOURS: int = 24
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "Settings":
+        """Fail-fast on weak/missing secrets in production; keep dev ergonomics otherwise."""
+        if self.ENVIRONMENT == "production":
+            if not self.SECRET_KEY or self.SECRET_KEY == _DEV_SECRET_PLACEHOLDER:
+                raise ValueError(
+                    "SECRET_KEY must be set to a strong, unique value in production "
+                    "(the development placeholder is not allowed). Generate one with: "
+                    'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+                )
+            # Billing is only active when a Stripe secret key is present; when it is,
+            # the webhook MUST be signature-verified (fail-closed).
+            if self.STRIPE_SECRET_KEY and not self.STRIPE_WEBHOOK_SECRET:
+                raise ValueError(
+                    "STRIPE_WEBHOOK_SECRET is required in production when STRIPE_SECRET_KEY "
+                    "is configured; without it webhook signatures cannot be verified."
+                )
+        else:
+            # Dev/test only: backfill the placeholder so the app boots with no .env.
+            if not self.SECRET_KEY:
+                self.SECRET_KEY = _DEV_SECRET_PLACEHOLDER
+        return self
 
     @property
     def is_production(self) -> bool:

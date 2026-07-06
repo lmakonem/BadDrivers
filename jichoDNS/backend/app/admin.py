@@ -9,9 +9,10 @@ from sqladmin import Admin, ModelView, action
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
+from wtforms import SelectField, PasswordField
 
 from app.core.database import engine, async_session_maker
-from app.core.security import verify_password
+from app.core.security import verify_password, hash_password
 from app.models.user import User, APIKey
 from app.models.form_submission import FormSubmission
 
@@ -64,33 +65,179 @@ class UserAdmin(ModelView, model=User):
     column_list = [
         User.id, User.email, User.name, User.organization,
         User.tier, User.is_active, User.is_verified, User.is_admin,
+        User.daily_api_limit, User.monthly_api_limit,
         User.api_calls_today, User.api_calls_month, User.created_at,
     ]
     column_searchable_list = [User.email, User.name, User.organization]
     column_sortable_list = [
         User.id, User.email, User.tier, User.is_admin, User.created_at,
     ]
-    column_default_sort = (User.created_at, True)  # newest first
+    column_default_sort = (User.created_at, True)
 
-    # Editable fields
     form_include_pk = False
     form_excluded_columns = [
-        User.hashed_password, User.api_keys,
+        User.api_keys,
         User.api_calls_today, User.api_calls_month, User.last_api_call,
     ]
 
-    # Admins can edit tier, is_active, is_admin, is_verified but not create users
-    can_create = False
-    can_delete = False
+    can_create = True
+    can_delete = True
+    can_edit = True
+
+    # Override form to add a plain password field for creation
+    form_extra_fields = {
+        "set_password": PasswordField("Set Password (leave blank to keep existing)"),
+    }
+
+    async def on_model_change(self, data, model, is_created, request):
+        """Hash password on create/update."""
+        pw = data.pop("set_password", None)
+        if pw:
+            model.hashed_password = hash_password(pw)
+        elif is_created and not model.hashed_password:
+            model.hashed_password = hash_password("changeme123")
+
+    async def on_model_delete(self, model, request):
+        """Handle user deletion — delete related records first."""
+        pass  # cascade="all, delete-orphan" handles api_keys
 
     column_labels = {
         User.tier: "Plan",
         User.is_admin: "Admin",
         User.is_verified: "Verified",
         User.is_active: "Active",
+        User.daily_api_limit: "Daily Limit",
+        User.monthly_api_limit: "Monthly Limit",
         User.api_calls_today: "API Today",
         User.api_calls_month: "API Month",
     }
+
+    # Dropdown choices for tier and API limits
+    form_overrides = {
+        "tier": SelectField,
+        "daily_api_limit": SelectField,
+        "monthly_api_limit": SelectField,
+    }
+    form_args = {
+        "tier": {
+            "choices": [
+                ("free", "Free (100/day, 3k/month)"),
+                ("professional", "Professional (10k/day, 50k/month)"),
+                ("enterprise", "Enterprise (unlimited)"),
+            ],
+            "coerce": str,
+        },
+        "daily_api_limit": {
+            "choices": [
+                ("100", "100 (Free)"),
+                ("1000", "1,000"),
+                ("5000", "5,000"),
+                ("10000", "10,000 (Pro)"),
+                ("50000", "50,000"),
+                ("100000", "100,000"),
+                ("999999", "Unlimited (Enterprise)"),
+            ],
+            "coerce": int,
+        },
+        "monthly_api_limit": {
+            "choices": [
+                ("3000", "3,000 (Free)"),
+                ("10000", "10,000"),
+                ("50000", "50,000 (Pro)"),
+                ("100000", "100,000"),
+                ("500000", "500,000"),
+                ("999999", "Unlimited (Enterprise)"),
+            ],
+            "coerce": int,
+        },
+    }
+
+    # Bulk actions
+    @action(
+        name="upgrade_pro",
+        label="Upgrade to Professional",
+        confirmation_message="Upgrade selected users to Professional plan?",
+        add_in_list=True,
+    )
+    async def action_upgrade_pro(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks and pks[0]:
+            from sqlalchemy import select
+            async with async_session_maker() as session:
+                for pk in pks:
+                    result = await session.execute(
+                        select(User).where(User.id == int(pk))
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        user.tier = "professional"
+                        user.daily_api_limit = 10000
+                        user.monthly_api_limit = 50000
+                await session.commit()
+
+    @action(
+        name="upgrade_enterprise",
+        label="Upgrade to Enterprise",
+        confirmation_message="Upgrade selected users to Enterprise plan?",
+        add_in_list=True,
+    )
+    async def action_upgrade_enterprise(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks and pks[0]:
+            from sqlalchemy import select
+            async with async_session_maker() as session:
+                for pk in pks:
+                    result = await session.execute(
+                        select(User).where(User.id == int(pk))
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        user.tier = "enterprise"
+                        user.daily_api_limit = 999999
+                        user.monthly_api_limit = 999999
+                await session.commit()
+
+    @action(
+        name="downgrade_free",
+        label="Downgrade to Free",
+        confirmation_message="Downgrade selected users to Free plan?",
+        add_in_list=True,
+    )
+    async def action_downgrade_free(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks and pks[0]:
+            from sqlalchemy import select
+            async with async_session_maker() as session:
+                for pk in pks:
+                    result = await session.execute(
+                        select(User).where(User.id == int(pk))
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        user.tier = "free"
+                        user.daily_api_limit = 100
+                        user.monthly_api_limit = 3000
+                await session.commit()
+
+    @action(
+        name="deactivate",
+        label="Deactivate Users",
+        confirmation_message="Deactivate selected users?",
+        add_in_list=True,
+    )
+    async def action_deactivate(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks and pks[0]:
+            from sqlalchemy import select
+            async with async_session_maker() as session:
+                for pk in pks:
+                    result = await session.execute(
+                        select(User).where(User.id == int(pk))
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        user.is_active = False
+                await session.commit()
 
 
 class FormSubmissionAdmin(ModelView, model=FormSubmission):
@@ -214,7 +361,8 @@ def setup_admin(app):
     """Mount the SQLAdmin panel on the FastAPI app at /admin."""
     from app.core.config import settings
 
-    auth_backend = AdminAuth(secret_key=settings.SECRET_KEY)
+    # Separate signing key for the admin session cookie; falls back to SECRET_KEY.
+    auth_backend = AdminAuth(secret_key=settings.SESSION_SECRET_KEY or settings.SECRET_KEY)
 
     admin = Admin(
         app,

@@ -16,6 +16,7 @@ from .intel import (
     CredentialExposure,
     VIPAlert,
 )
+from .asm import ASMClient, ASMDiscoveryGroup
 
 __all__ = [
     "Base",
@@ -30,4 +31,6 @@ __all__ = [
     "BrandExposure",
     "CredentialExposure",
     "VIPAlert",
+    "ASMClient",
+    "ASMDiscoveryGroup",
 ]

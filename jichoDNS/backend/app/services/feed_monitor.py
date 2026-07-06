@@ -62,31 +62,76 @@ class FeedHealthMonitor:
             return
 
         now = datetime.now(timezone.utc)
-        doc = {
-            "feed_name": feed_name,
-            "timestamp": now.isoformat(),
-            "success": success,
-            "ioc_count": ioc_count,
-            "duration_seconds": round(duration_seconds, 2),
-            "error_message": error_message,
-            "status": "healthy" if success else "error",
-        }
+        now_iso = now.isoformat()
+        duration = round(duration_seconds, 2)
 
         try:
-            await self.client.update(
-                index=FEED_HEALTH_INDEX,
-                id=feed_name,
-                body={
-                    "doc": {
-                        **doc,
-                        "last_success": now.isoformat() if success else None,
-                        "last_error": None if success else now.isoformat(),
-                        "consecutive_failures": 0 if success else None,
+            if success:
+                # Partial merge: set last_success=now, reset the failure counter,
+                # clear the error. `last_error` is intentionally NOT set, so the
+                # previous failure timestamp is preserved for history.
+                await self.client.update(
+                    index=FEED_HEALTH_INDEX,
+                    id=feed_name,
+                    doc={
+                        "feed_name": feed_name,
+                        "timestamp": now_iso,
+                        "success": True,
+                        "ioc_count": ioc_count,
+                        "duration_seconds": duration,
+                        "error_message": None,
+                        "status": "healthy",
+                        "last_success": now_iso,
+                        "consecutive_failures": 0,
                     },
-                    "doc_as_upsert": True,
-                },
-                retry_on_conflict=3,
-            )
+                    doc_as_upsert=True,
+                    retry_on_conflict=3,
+                )
+            else:
+                # Scripted update: increment consecutive_failures and set
+                # last_error, but DO NOT touch last_success (preserve the real
+                # last-good timestamp so staleness is computed correctly).
+                await self.client.update(
+                    index=FEED_HEALTH_INDEX,
+                    id=feed_name,
+                    script={
+                        "lang": "painless",
+                        "source": (
+                            "ctx._source.feed_name = params.feed_name;"
+                            "ctx._source.timestamp = params.timestamp;"
+                            "ctx._source.success = false;"
+                            "ctx._source.ioc_count = params.ioc_count;"
+                            "ctx._source.duration_seconds = params.duration_seconds;"
+                            "ctx._source.error_message = params.error_message;"
+                            "ctx._source.status = 'error';"
+                            "ctx._source.last_error = params.timestamp;"
+                            "if (ctx._source.consecutive_failures == null) {"
+                            " ctx._source.consecutive_failures = 1; } else {"
+                            " ctx._source.consecutive_failures ="
+                            " ctx._source.consecutive_failures + 1; }"
+                        ),
+                        "params": {
+                            "feed_name": feed_name,
+                            "timestamp": now_iso,
+                            "ioc_count": ioc_count,
+                            "duration_seconds": duration,
+                            "error_message": error_message,
+                        },
+                    },
+                    upsert={
+                        "feed_name": feed_name,
+                        "timestamp": now_iso,
+                        "success": False,
+                        "ioc_count": ioc_count,
+                        "duration_seconds": duration,
+                        "error_message": error_message,
+                        "status": "error",
+                        "last_success": None,
+                        "last_error": now_iso,
+                        "consecutive_failures": 1,
+                    },
+                    retry_on_conflict=3,
+                )
         except Exception as e:
             logger.warning(f"Could not record feed health for {feed_name}: {e}")
 
@@ -98,7 +143,8 @@ class FeedHealthMonitor:
         try:
             resp = await self.client.search(
                 index=FEED_HEALTH_INDEX,
-                body={"query": {"match_all": {}}, "size": 50},
+                query={"match_all": {}},
+                size=50,
             )
             results = []
             now = datetime.now(timezone.utc)
@@ -133,6 +179,7 @@ class FeedHealthMonitor:
                     "ioc_count": src.get("ioc_count", 0),
                     "duration_seconds": src.get("duration_seconds"),
                     "error_message": src.get("error_message"),
+                    "consecutive_failures": src.get("consecutive_failures", 0),
                 })
 
             return sorted(results, key=lambda x: x["feed"])
@@ -155,19 +202,18 @@ class FeedHealthMonitor:
             if not exists:
                 await self.client.indices.create(
                     index=FEED_HEALTH_INDEX,
-                    body={
-                        "mappings": {
-                            "properties": {
-                                "feed_name":         {"type": "keyword"},
-                                "timestamp":         {"type": "date"},
-                                "last_success":      {"type": "date"},
-                                "last_error":        {"type": "date"},
-                                "success":           {"type": "boolean"},
-                                "ioc_count":         {"type": "long"},
-                                "duration_seconds":  {"type": "float"},
-                                "status":            {"type": "keyword"},
-                                "error_message":     {"type": "text"},
-                            }
+                    mappings={
+                        "properties": {
+                            "feed_name":             {"type": "keyword"},
+                            "timestamp":             {"type": "date"},
+                            "last_success":          {"type": "date"},
+                            "last_error":            {"type": "date"},
+                            "success":               {"type": "boolean"},
+                            "ioc_count":             {"type": "long"},
+                            "duration_seconds":      {"type": "float"},
+                            "status":                {"type": "keyword"},
+                            "error_message":         {"type": "text"},
+                            "consecutive_failures":  {"type": "integer"},
                         }
                     },
                 )

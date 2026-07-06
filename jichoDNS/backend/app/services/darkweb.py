@@ -1310,7 +1310,8 @@ class DarkWebMonitor:
             await es_service.client.update(
                 index=self.ALERTS_INDEX,
                 id=alert_id,
-                body={"doc": {"is_read": True}},
+                doc={"is_read": True},
+                retry_on_conflict=3,
             )
             return True
         except Exception as e:

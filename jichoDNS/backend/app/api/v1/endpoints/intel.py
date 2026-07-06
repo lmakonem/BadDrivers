@@ -317,7 +317,7 @@ async def search_credentials(
                 "sort": [{"discovered_at": "desc"}],
                 "size": limit,
                 "_source": {
-                    "excludes": ["password_hash"],  # Never expose hashes via API
+                    "excludes": ["password", "password_hash"],  # never expose secrets via API
                 },
             },
         )

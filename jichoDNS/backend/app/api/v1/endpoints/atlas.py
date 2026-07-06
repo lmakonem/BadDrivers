@@ -1,7 +1,8 @@
 """RIPE Atlas endpoints - DNS measurements from African probes."""
 
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from starlette.status import HTTP_501_NOT_IMPLEMENTED
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -33,22 +34,20 @@ async def list_african_probes(
     """
     List RIPE Atlas probes in African countries.
     """
-    # TODO: Query RIPE Atlas API
-    return ProbeListResponse(items=[], total=0)
+    raise HTTPException(
+        status_code=HTTP_501_NOT_IMPLEMENTED,
+        detail="RIPE Atlas probe listing is not implemented yet.",
+    )
 
 
 @router.get("/probes/{probe_id}", response_model=ProbeInfo)
 async def get_probe(probe_id: int):
     """Get information about a specific probe."""
-    # TODO: Query RIPE Atlas API
-    return ProbeInfo(
-        id=probe_id,
-        country_code="KE",
-        asn=0,
-        latitude=0.0,
-        longitude=0.0,
-        is_anchor=False,
-        status="Unknown",
+    # RIPE Atlas integration not implemented — fail honestly instead of
+    # returning a fabricated probe record.
+    raise HTTPException(
+        status_code=HTTP_501_NOT_IMPLEMENTED,
+        detail="RIPE Atlas probe lookup is not implemented yet.",
     )
 
 
@@ -66,21 +65,18 @@ async def create_measurement(request: MeasurementRequest):
     
     Requires RIPE Atlas API key with measurement credits.
     """
-    # TODO: Create RIPE Atlas measurement
-    return {
-        "status": "created",
-        "measurement_id": None,
-        "target": request.target,
-        "probe_count": request.probe_count,
-    }
+    # Not implemented — do NOT report success for a measurement that was
+    # never created.
+    raise HTTPException(
+        status_code=HTTP_501_NOT_IMPLEMENTED,
+        detail="RIPE Atlas measurement creation is not implemented yet.",
+    )
 
 
 @router.get("/measurements/{measurement_id}/results")
 async def get_measurement_results(measurement_id: int):
     """Get results from a DNS measurement."""
-    # TODO: Fetch RIPE Atlas results
-    return {
-        "measurement_id": measurement_id,
-        "status": "unknown",
-        "results": [],
-    }
+    raise HTTPException(
+        status_code=HTTP_501_NOT_IMPLEMENTED,
+        detail="RIPE Atlas measurement results are not implemented yet.",
+    )

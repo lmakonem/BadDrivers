@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.ownership import get_owned_domains, redact_credential
 from app.models.user import User
 from app.models.intel import OrgWatchlist
 from app.services.elasticsearch import es_service
@@ -178,6 +179,7 @@ async def darkweb_search(
     q: str = Query(..., min_length=2, max_length=500, description="Search dark web data"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Search within dark web intelligence only.
@@ -259,35 +261,45 @@ async def darkweb_search(
         except Exception:
             pass
 
-    # Search credential_exposures if index exists
+    # Search credential_exposures if index exists — scoped to owned domains
     if "credential_exposures" in indices_to_search:
-        try:
-            q_lower = q.lower()
-            result = await es_service.client.search(
-                index="credential_exposures",
-                body={
-                    "query": {
-                        "bool": {
-                            "should": [
-                                {"wildcard": {"email": {"value": f"*{q_lower}*"}}},
-                                {"wildcard": {"domain": {"value": f"*{q_lower}*"}}},
-                                {"wildcard": {"source_name": {"value": f"*{q_lower}*"}}},
-                                {"wildcard": {"tags": {"value": f"*{q_lower}*"}}},
-                            ],
-                            "minimum_should_match": 1,
-                        }
+        cred_filter = []
+        cred_allowed = True
+        if not current_user.is_admin:
+            owned = await get_owned_domains(current_user, db)
+            if not owned:
+                cred_allowed = False
+            else:
+                cred_filter = [{"terms": {"domain": sorted(owned)}}]
+        if cred_allowed:
+            try:
+                q_lower = q.lower()
+                result = await es_service.client.search(
+                    index="credential_exposures",
+                    body={
+                        "query": {
+                            "bool": {
+                                "should": [
+                                    {"wildcard": {"email": {"value": f"*{q_lower}*"}}},
+                                    {"wildcard": {"domain": {"value": f"*{q_lower}*"}}},
+                                    {"wildcard": {"source_name": {"value": f"*{q_lower}*"}}},
+                                    {"wildcard": {"tags": {"value": f"*{q_lower}*"}}},
+                                ],
+                                "minimum_should_match": 1,
+                                "filter": cred_filter,
+                            }
+                        },
+                        "size": limit // 2,
+                        "_source": {"excludes": ["password", "password_hash"]},
                     },
-                    "size": limit // 2,
-                    "_source": {"excludes": ["password_hash"]},
-                },
-            )
-            for h in result["hits"]["hits"]:
-                item = h["_source"]
-                item["_score"] = h["_score"]
-                item["_result_type"] = "credential"
-                all_items.append(item)
-        except Exception:
-            pass
+                )
+                for h in result["hits"]["hits"]:
+                    item = redact_credential(h["_source"])
+                    item["_score"] = h["_score"]
+                    item["_result_type"] = "credential"
+                    all_items.append(item)
+            except Exception:
+                pass
 
     # Sort all by score
     all_items.sort(key=lambda x: x.get("_score", 0), reverse=True)

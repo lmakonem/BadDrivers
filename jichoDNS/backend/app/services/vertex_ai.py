@@ -324,12 +324,24 @@ class VertexAIService:
             self._use_mock = True
     
     async def _generate_content(self, prompt: str) -> str:
-        """Generate content using Vertex AI or mock."""
+        """Generate content using Vertex AI, or fail closed.
+
+        Fabricated ("mock") narrative text is only returned when
+        ALLOW_MOCK_DATA is explicitly enabled (demo mode). In production the
+        service refuses rather than emitting synthetic intelligence into a
+        client-facing report.
+        """
         await self._initialize_client()
-        
+
         if self._use_mock:
-            return await self._mock_generate(prompt)
-        
+            if settings.ALLOW_MOCK_DATA:
+                return await self._mock_generate(prompt)
+            raise RuntimeError(
+                "AI report generation unavailable: Vertex AI is not configured "
+                "(set GOOGLE_CLOUD_PROJECT + GOOGLE_APPLICATION_CREDENTIALS) and "
+                "ALLOW_MOCK_DATA is false. Refusing to emit synthetic content."
+            )
+
         try:
             response = await self._model.generate_content_async(
                 prompt,
@@ -342,7 +354,9 @@ class VertexAIService:
             return response.text
         except Exception as e:
             logger.error(f"Vertex AI generation error: {e}")
-            return await self._mock_generate(prompt)
+            if settings.ALLOW_MOCK_DATA:
+                return await self._mock_generate(prompt)
+            raise
     
     async def _mock_generate(self, prompt: str) -> str:
         """Mock generation for testing without API key."""

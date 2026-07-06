@@ -47,20 +47,25 @@ class ConnectionManager:
     
     async def broadcast(self, message: dict):
         """Send message to all connected clients."""
-        if not self.active_connections:
-            return
-        
+        # Snapshot the connection set under the lock, then release it before
+        # awaiting any network send. Holding the lock across send_text() lets a
+        # single slow/backpressured client block every other broadcast and stall
+        # connect()/disconnect(), which contend for the same lock.
+        async with self._lock:
+            if not self.active_connections:
+                return
+            connections = list(self.active_connections)
+
         data = json.dumps(message)
         disconnected = set()
-        
-        async with self._lock:
-            for connection in self.active_connections:
-                try:
-                    await connection.send_text(data)
-                except Exception as e:
-                    logger.warning(f"Failed to send to client: {e}")
-                    disconnected.add(connection)
-        
+
+        for connection in connections:
+            try:
+                await connection.send_text(data)
+            except Exception as e:
+                logger.warning(f"Failed to send to client: {e}")
+                disconnected.add(connection)
+
         # Clean up disconnected clients
         if disconnected:
             async with self._lock:

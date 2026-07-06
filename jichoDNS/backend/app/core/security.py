@@ -27,6 +27,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+# Pre-computed bcrypt hash of a random value. Verifying a submitted password
+# against this burns ~one bcrypt of CPU without ever matching, so the login
+# path takes the same time whether or not the account exists — this defeats
+# user-enumeration by response timing.
+_DUMMY_PASSWORD_HASH = pwd_context.hash(secrets.token_urlsafe(32))
+
+
+def dummy_verify() -> None:
+    """Run one bcrypt verification and discard the result (timing equalizer)."""
+    pwd_context.verify("timing-equalizer", _DUMMY_PASSWORD_HASH)
+
+
 # JWT Tokens
 def create_access_token(
     data: dict,
@@ -43,6 +55,8 @@ def create_access_token(
         )
     
     to_encode.update({"exp": expire, "type": "access"})
+    if settings.JWT_AUDIENCE:
+        to_encode["aud"] = settings.JWT_AUDIENCE
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -53,19 +67,56 @@ def create_refresh_token(data: dict) -> str:
         days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
     )
     to_encode.update({"exp": expire, "type": "refresh"})
+    if settings.JWT_AUDIENCE:
+        to_encode["aud"] = settings.JWT_AUDIENCE
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT token."""
+def decode_token(
+    token: str,
+    require_type: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Decode and validate a JWT.
+
+    Args:
+        token: the encoded JWT.
+        require_type: if given (e.g. "access" or "refresh"), the token's "type"
+            claim must match exactly or None is returned.
+
+    Returns the claims dict, or None if the signature/expiry/audience/type is invalid.
+    """
+    audience = settings.JWT_AUDIENCE or None
+    options = {} if audience else {"verify_aud": False}
     try:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
+            audience=audience,
+            options=options,
         )
-        return payload
     except JWTError:
+        return None
+
+    if require_type is not None and payload.get("type") != require_type:
+        return None
+    return payload
+
+
+def get_token_subject(payload: dict) -> Optional[int]:
+    """
+    Safely extract the integer user id from a token's "sub" claim.
+
+    Returns None if "sub" is missing or not an integer (guards int() against
+    TypeError/ValueError so a malformed token yields 401, never a 500).
+    """
+    sub = payload.get("sub")
+    if sub is None:
+        return None
+    try:
+        return int(sub)
+    except (TypeError, ValueError):
         return None
 
 

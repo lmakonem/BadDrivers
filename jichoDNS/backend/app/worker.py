@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 import redis
 
 from app.core.config import settings
@@ -164,6 +165,13 @@ celery_app.conf.beat_schedule = {
         "schedule": timedelta(hours=6),
     },
 
+    # === ASM SCHEDULED RESCANS ===
+    # Runs every 30 minutes; dispatches any client whose next_scan_at <= now
+    "asm-scheduled-rescan": {
+        "task": "app.worker.asm_scheduled_rescan",
+        "schedule": timedelta(minutes=30),
+    },
+
     # === MAINTENANCE ===
     "aggregate-regions": {
         "task": "app.worker.aggregate_region_scores",
@@ -187,6 +195,23 @@ celery_app.conf.beat_schedule = {
 app = celery_app
 
 
+@worker_process_init.connect
+def _init_worker_db_engine(**_kwargs):
+    """
+    Rebuild the SQLAlchemy engine with NullPool in each prefork worker child.
+
+    The default engine (app.core.database.engine) uses a connection pool, which
+    is correct for the API's single long-lived event loop. Celery runs each task
+    in a brand-new event loop (see run_async below); a pooled asyncpg connection
+    is bound to the loop that created it, so reusing it from a later task's loop
+    raises "got Future attached to a different loop". NullPool opens and closes a
+    connection per task, which is loop- and fork-safe.
+    """
+    from app.core import database
+    database.configure_for_worker()
+    logger.info("Celery worker DB engine reconfigured with NullPool")
+
+
 def run_async(coro):
     """Helper to run async functions in sync context."""
     loop = asyncio.new_event_loop()
@@ -206,35 +231,62 @@ async def _generic_import(importer_class, source_name: str):
     start = time.monotonic()
     importer = importer_class()
     result, indicators = await importer.import_feed()
-    duration = time.monotonic() - start
 
     await es_service.connect()
+    try:
+        # --- Store FIRST, then record health from the real storage outcome ---
+        store_result = None
+        stored_docs = []
+        stored_count = 0
+        store_ok = True
+        store_error = None
 
-    # Record feed health
-    feed_monitor.client = es_service.client
-    await feed_monitor.ensure_index()
-    await feed_monitor.record_run(
-        feed_name=source_name,
-        success=result.success,
-        ioc_count=len(indicators),
-        duration_seconds=duration,
-        error_message=result.error_message if not result.success else None,
-    )
+        if result.success and len(indicators) > 0:
+            store_result, stored_docs = await es_service.store_indicators(
+                indicators, return_docs=True
+            )
+            stored_count = store_result.get("success", 0)
+            # Hard failure (not connected / bulk exception) or nothing landed.
+            if store_result.get("message") or (stored_count == 0 and len(indicators) > 0):
+                store_ok = False
+                store_error = store_result.get("message") or (
+                    f"0 of {len(indicators)} indicators stored"
+                )
 
-    if result.success and len(indicators) > 0:
-        store_result, stored_docs = await es_service.store_indicators(indicators, return_docs=True)
+        duration = time.monotonic() - start
+
+        overall_success = bool(result.success and store_ok)
+        if not result.success:
+            error_message = result.error_message
+        elif not store_ok:
+            error_message = store_error
+        else:
+            error_message = None
+
+        # Record feed health AFTER storage, reflecting the stored count and the
+        # real (fetch AND store) success.
+        feed_monitor.client = es_service.client
+        await feed_monitor.ensure_index()
+        await feed_monitor.record_run(
+            feed_name=source_name,
+            success=overall_success,
+            ioc_count=stored_count,
+            duration_seconds=duration,
+            error_message=error_message,
+        )
+
+        if store_result is not None:
+            # Only broadcast IOCs that actually landed.
+            if stored_count > 0:
+                publish_new_iocs(stored_docs, source_name)
+            return {
+                **result.to_dict(),
+                "stored": store_result,
+            }
+
+        return result.to_dict()
+    finally:
         await es_service.close()
-
-        # Publish new IOCs to WebSocket channel
-        publish_new_iocs(stored_docs, source_name)
-
-        return {
-            **result.to_dict(),
-            "stored": store_result,
-        }
-
-    await es_service.close()
-    return result.to_dict()
 
 
 # === ABUSE.CH FEEDS ===
@@ -946,13 +998,13 @@ def get_source_stats():
             "aggs": {
                 "by_source": {
                     "terms": {
-                        "field": "source",
+                        "field": "source.keyword",
                         "size": 50
                     },
                     "aggs": {
                         "by_threat_type": {
                             "terms": {
-                                "field": "threat_type",
+                                "field": "threat_type.keyword",
                                 "size": 10
                             }
                         },
@@ -1074,3 +1126,156 @@ def check_feed_health():
         }
 
     return run_async(_check())
+
+
+# =============================================================================
+# ASM Tasks
+# =============================================================================
+
+@celery_app.task(name="app.worker.run_asm_discovery", bind=True, max_retries=2)
+def run_asm_discovery(self, client_id: int, domains: list):
+    """
+    Run the full enterprise ASM scan pipeline for a client.
+    Orchestrated by ASMEnterpriseService.run_full_scan:
+      1. Base asset discovery (subdomains, IPs, ports, SSL)
+      2. HTTP checks + tech fingerprinting
+      3. TI correlation against live IOC index
+      4. CVE enrichment (EPSS + CISA KEV)
+      5. Risk scoring + grade
+      6. Webhook alerts on critical findings
+    Called by POST /api/v1/asm/clients/{id}/discover.
+    """
+    from app.services.elasticsearch import es_service
+    from app.services.asm_enterprise import ASMEnterpriseService
+    from app.core.database import async_session_maker
+    from app.models.asm import ASMClient
+    from sqlalchemy import select
+
+    async def _run():
+        await es_service.connect()
+
+        # Load the full client model (needed for webhook_url, notify_on, name)
+        client_obj = None
+        async with async_session_maker() as session:
+            r = await session.execute(select(ASMClient).where(ASMClient.id == client_id))
+            client_obj = r.scalar_one_or_none()
+
+        if not client_obj:
+            print(f"[ASM] client_id={client_id} not found, aborting")
+            return {"error": "client not found"}
+
+        ent = ASMEnterpriseService(es_client=es_service.client, client_id=client_id)
+        try:
+            scan_result = await ent.run_full_scan(client=client_obj, domains=domains)
+            print(
+                f"[ASM] client={client_id} ({client_obj.name}) "
+                f"findings={scan_result['total_findings']} "
+                f"risk={scan_result['risk_score']} grade={scan_result['grade']}"
+            )
+        except Exception as exc:
+            print(f"[ASM] run_full_scan failed for client={client_id}: {exc}")
+            scan_result = {"error": str(exc), "total_findings": 0, "risk_score": 0.0, "grade": "?"}
+
+        # Persist summary stats + compute next_scan_at
+        try:
+            async with async_session_maker() as session:
+                r = await session.execute(select(ASMClient).where(ASMClient.id == client_id))
+                client = r.scalar_one_or_none()
+                if client:
+                    findings_summary = await ent.get_findings_summary()
+                    by_sev = findings_summary.get("by_severity", {})
+                    # Sync asset/port/ssl counts from ES
+                    try:
+                        from app.services.attack_surface import AttackSurfaceManager
+                        asm_svc = AttackSurfaceManager(es_client=es_service.client, client_id=client_id)
+                        summary = await asm_svc.get_summary()
+                        client.total_assets = summary.get("total_assets", 0)
+                        client.open_ports   = summary.get("total_open_ports", 0)
+                        client.ssl_issues   = summary.get("ssl_issues", 0)
+                    except Exception:
+                        pass
+                    client.total_findings    = findings_summary.get("total_open", 0)
+                    client.critical_findings = by_sev.get("critical", 0)
+                    client.high_findings     = by_sev.get("high", 0)
+                    client.risk_score        = scan_result.get("risk_score", 0.0)
+                    client.risk_grade        = scan_result.get("grade", "?")
+                    client.ti_hit_count      = scan_result.get("ti_hits", 0)
+                    client.last_scan_at      = datetime.utcnow()
+                    client.set_next_scan_from_now()
+                    await session.commit()
+        except Exception as db_exc:
+            print(f"[ASM] DB stats update failed for client={client_id}: {db_exc}")
+
+        await es_service.close()
+        return {"client_id": client_id, **scan_result}
+
+    return run_async(_run())
+
+
+@celery_app.task(name="app.worker.asm_scheduled_rescan")
+def asm_scheduled_rescan():
+    """
+    Runs every 30 minutes.  Dispatches a scan for every active ASM client whose
+    next_scan_at is in the past (i.e. the scheduled interval has elapsed).
+
+    Supports all configured intervals:
+        30 min, 1 h, 4 h, 6 h, 8 h, 12 h, 24 h — set via scan_interval_minutes.
+    Manual-only clients (scan_interval_minutes == 0) are never auto-dispatched.
+    """
+    async def _rescan():
+        from app.core.database import async_session_maker
+        from app.models.asm import ASMClient, ASMDiscoveryGroup
+        from sqlalchemy import select, and_
+
+        now = datetime.utcnow()
+
+        # Select all active clients that are due for a scan:
+        #   scan_interval_minutes > 0  (not manual)
+        #   AND (next_scan_at is NULL OR next_scan_at <= now)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ASMClient).where(
+                    and_(
+                        ASMClient.is_active == True,  # noqa: E712
+                        ASMClient.scan_interval_minutes > 0,
+                        (ASMClient.next_scan_at == None) | (ASMClient.next_scan_at <= now),  # noqa: E711
+                    )
+                )
+            )
+            due_clients = result.scalars().all()
+
+        dispatched = 0
+        for client in due_clients:
+            async with async_session_maker() as session:
+                groups_res = await session.execute(
+                    select(ASMDiscoveryGroup).where(
+                        ASMDiscoveryGroup.client_id == client.id,
+                        ASMDiscoveryGroup.is_active == True,  # noqa: E712
+                    )
+                )
+                groups = groups_res.scalars().all()
+
+            domains = [
+                seed["value"]
+                for group in groups
+                for seed in (group.seeds or [])
+                if seed.get("type") in ("domain", "ip_range", "asn", "org_name", "email_domain")
+                and seed.get("value")
+            ]
+
+            if domains:
+                run_asm_discovery.delay(client_id=client.id, domains=domains)
+                dispatched += 1
+                interval_label = ASMClient.label_for(client.scan_interval_minutes)
+                print(
+                    f"[ASM] Scheduled rescan dispatched: client={client.id} "
+                    f"({client.name}) interval={interval_label}"
+                )
+            else:
+                print(f"[ASM] Skipping client={client.id} ({client.name}): no seeds")
+
+        skipped = len(due_clients) - dispatched
+        print(f"[ASM] Rescan sweep done: {dispatched} dispatched, {skipped} skipped (no seeds)")
+        return {"clients_dispatched": dispatched, "clients_skipped": skipped}
+
+    return run_async(_rescan())

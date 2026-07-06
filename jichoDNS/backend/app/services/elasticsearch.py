@@ -1,5 +1,6 @@
 """Elasticsearch service for IOC storage and search."""
 
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
@@ -18,11 +19,32 @@ class ElasticsearchService:
     
     def __init__(self):
         self.client: Optional[AsyncElasticsearch] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.ioc_index = "iocs"
         self.dns_index = "dns_queries"
+        self._ioc_index_ready = False
     
     async def connect(self):
-        """Initialize Elasticsearch connection."""
+        """
+        Initialize the Elasticsearch connection, bound to the running loop.
+
+        AsyncElasticsearch (aiohttp transport) latches onto the event loop that
+        is running when its first request is issued and cannot be reused from a
+        different loop — doing so raises "RuntimeError: Task got Future attached
+        to a different loop". The FastAPI process has one long-lived loop, so the
+        client is built once and reused. Celery runs every task in a fresh loop
+        via app.worker.run_async(); when the cached client belongs to a
+        different (now-closed) loop we drop it and rebuild, which also self-heals
+        any task that crashed before calling close().
+        """
+        current_loop = asyncio.get_running_loop()
+
+        if self.client is not None and self._loop is not current_loop:
+            # Cached client belongs to another event loop — abandon it without
+            # awaiting close() (its loop is gone) and rebuild on this loop.
+            self.client = None
+            self._loop = None
+
         if self.client is None:
             es_url = settings.ELASTICSEARCH_URL
             if es_url:
@@ -42,20 +64,78 @@ class ElasticsearchService:
 
                 raw_client.search = _search_with_total
                 self.client = raw_client
+                self._loop = current_loop
 
                 # Test connection
                 try:
                     await self.client.info()
                     logger.info("Connected to Elasticsearch")
+                    await self.ensure_ioc_index()
                 except Exception as e:
                     logger.error(f"Failed to connect to Elasticsearch: {e}")
                     self.client = None
-    
+                    self._loop = None
+
     async def close(self):
-        """Close Elasticsearch connection."""
+        """Close Elasticsearch connection (never raises)."""
         if self.client:
-            await self.client.close()
-            self.client = None
+            try:
+                await self.client.close()
+            except Exception as e:
+                logger.debug(f"Error closing Elasticsearch client: {e}")
+            finally:
+                self.client = None
+                self._loop = None
+
+    # Explicit mapping for the iocs index. Uses the text+keyword multi-field
+    # pattern so aggregations / exact-match term filters can consistently target
+    # <field>.keyword — matching what dynamic mapping already produced on the
+    # existing production index, so this is backward compatible.
+    IOC_MAPPING = {
+        "properties": {
+            "indicator":      {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 1024}}},
+            "indicator_type": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "threat_type":    {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "source":         {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "source_url":     {"type": "keyword", "ignore_above": 2048},
+            "country_code":   {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 8}}},
+            "asn_org":        {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "tags":           {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "confidence":     {"type": "float"},
+            "risk_score":     {"type": "float"},
+            "latitude":       {"type": "float"},
+            "longitude":      {"type": "float"},
+            "first_seen":     {"type": "date"},
+            "last_seen":      {"type": "date"},
+            "created_at":     {"type": "date"},
+            "updated_at":     {"type": "date"},
+            "expires_at":     {"type": "date"},
+            "active":         {"type": "boolean"},
+            "ttl_days":       {"type": "integer"},
+        }
+    }
+
+    async def ensure_ioc_index(self) -> None:
+        """Create the `iocs` index with an explicit mapping if it does not exist.
+
+        No-op if the index already exists (never mutates a live mapping) and only
+        runs the existence check once per process. `dynamic` stays enabled, so any
+        field not pinned here is still auto-mapped as before.
+        """
+        if not self.client or self._ioc_index_ready:
+            return
+        try:
+            exists = await self.client.indices.exists(index=self.ioc_index)
+            if not exists:
+                await self.client.indices.create(
+                    index=self.ioc_index,
+                    mappings=self.IOC_MAPPING,
+                    settings={"index": {"max_result_window": 500000}},
+                )
+                logger.info(f"Created index with explicit mapping: {self.ioc_index}")
+            self._ioc_index_ready = True
+        except Exception as e:
+            logger.warning(f"Could not ensure iocs index mapping: {e}")
     
     async def store_indicators(
         self, 
@@ -241,10 +321,11 @@ class ElasticsearchService:
         try:
             response = await self.client.search(
                 index=self.ioc_index,
-                body={"query": query, "size": 1},
+                query=query,
+                size=1,
             )
             if response["hits"]["hits"]:
-                return response["hits"]["_source"]
+                return response["hits"]["hits"][0]["_source"]
         except Exception as e:
             logger.error(f"Get indicator error: {e}")
         
@@ -304,8 +385,8 @@ class ElasticsearchService:
                 },
             }
         except Exception as e:
-            logger.error(f"Stats error: {e}")
-            return {}
+            logger.error(f"Stats error: {e}", exc_info=True)
+            raise
     
     async def get_recent_indicators(
         self,
@@ -392,10 +473,10 @@ class ElasticsearchService:
                 "size": 0,
                 "aggs": {
                     "by_country": {
-                        "terms": {"field": "country_code", "size": 60},
+                        "terms": {"field": "country_code.keyword", "size": 60},
                         "aggs": {
                             "by_threat_type": {
-                                "terms": {"field": "threat_type", "size": 10}
+                                "terms": {"field": "threat_type.keyword", "size": 10}
                             },
                             "avg_confidence": {
                                 "avg": {"field": "confidence"}
@@ -424,8 +505,12 @@ class ElasticsearchService:
                 }
             return result
         except Exception as e:
-            logger.error(f"Country threat stats error: {e}")
-            return {}
+            # ES is up but the query/aggregation failed — do NOT hide it behind an
+            # empty map. (An actual ES outage is already handled above by the
+            # `if not self.client: return {}` guard, so this only fires on a real
+            # query/mapping error that must surface.)
+            logger.error(f"Country threat stats error: {e}", exc_info=True)
+            raise
     
     async def _indicator_to_doc_async(self, indicator: Indicator, enrich_geo: bool = True) -> Dict[str, Any]:
         """Convert Indicator object to Elasticsearch document with optional GeoIP enrichment."""

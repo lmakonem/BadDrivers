@@ -15,9 +15,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.services.elasticsearch import es_service
 from app.services.report_generator import (
     generate_report as build_report,
@@ -127,6 +129,7 @@ async def _ensure_index():
                             "pages": {"type": "integer"},
                             "html": {"type": "text", "index": False},
                             "is_sample": {"type": "boolean"},
+                            "owner_user_id": {"type": "integer"},
                         }
                     }
                 },
@@ -268,7 +271,10 @@ async def download_sample(report_type: str):
 
 
 @router.post("/generate", response_model=ReportDetail)
-async def generate_report(req: GenerateReportRequest):
+async def generate_report(
+    req: GenerateReportRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Generate a new threat report from real Elasticsearch data.
     Stored in ES for later retrieval and download.
@@ -307,6 +313,7 @@ async def generate_report(req: GenerateReportRequest):
         "pages": result.get("pages", 1),
         "html": result["html"],
         "is_sample": False,
+        "owner_user_id": current_user.id,
     }
 
     stored = await _store_report(doc)
@@ -322,6 +329,7 @@ async def list_reports(
     page_size: int = Query(default=20, ge=1, le=100),
     report_type: Optional[str] = Query(default=None),
     severity: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
 ):
     """List generated reports with pagination and optional filtering."""
     await _ensure_index()
@@ -334,6 +342,8 @@ async def list_reports(
         filters.append({"term": {"type": mapped}})
     if severity:
         filters.append({"term": {"severity": severity}})
+    if not current_user.is_admin:
+        filters.append({"term": {"owner_user_id": current_user.id}})
 
     body = {
         "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
@@ -361,7 +371,10 @@ async def list_reports(
 # =============================================================================
 
 @router.get("/{report_id}", response_model=ReportDetail)
-async def get_report(report_id: str):
+async def get_report(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """Get a specific report by ID (includes HTML content)."""
     sample = _get_sample_if_exists(report_id)
     if sample:
@@ -372,13 +385,21 @@ async def get_report(report_id: str):
         raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
     try:
         resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
-        return ReportDetail(**resp["_source"])
+        doc = resp["_source"]
+        if not current_user.is_admin and doc.get("owner_user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+        return ReportDetail(**doc)
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
 
 
 @router.get("/{report_id}/html")
-async def view_report_html(report_id: str):
+async def view_report_html(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """Return the report as a rendered HTML page."""
     sample = _get_sample_if_exists(report_id)
     if sample:
@@ -389,14 +410,23 @@ async def view_report_html(report_id: str):
         raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
     try:
         resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
-        html = resp["_source"].get("html", "")
+        doc = resp["_source"]
+        if not current_user.is_admin and doc.get("owner_user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+        html = doc.get("html", "")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
     return Response(content=html, media_type="text/html")
 
 
 @router.get("/{report_id}/download")
-async def download_report(report_id: str, format: str = Query(default="html")):
+async def download_report(
+    report_id: str,
+    format: str = Query(default="html"),
+    current_user: User = Depends(get_current_user),
+):
     """Download a report file."""
     sample = _get_sample_if_exists(report_id)
     if sample:
@@ -412,8 +442,12 @@ async def download_report(report_id: str, format: str = Query(default="html")):
     try:
         resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
         doc = resp["_source"]
+        if not current_user.is_admin and doc.get("owner_user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
         html = doc.get("html", "")
         title = doc.get("title", "report").replace(" ", "_")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
     filename = f"{title}_{report_id[:8]}.html"
@@ -424,7 +458,10 @@ async def download_report(report_id: str, format: str = Query(default="html")):
 
 
 @router.delete("/{report_id}", response_model=DeleteResponse)
-async def delete_report(report_id: str):
+async def delete_report(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """Delete a report by ID."""
     if _get_sample_if_exists(report_id):
         raise HTTPException(status_code=400, detail="Cannot delete sample reports")
@@ -433,7 +470,13 @@ async def delete_report(report_id: str):
     if not es_service.client:
         raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
     try:
+        resp = await es_service.client.get(index=REPORTS_INDEX, id=report_id)
+        doc = resp["_source"]
+        if not current_user.is_admin and doc.get("owner_user_id") != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
         await es_service.client.delete(index=REPORTS_INDEX, id=report_id, refresh="wait_for")
         return DeleteResponse(success=True, message=f"Report {report_id} deleted")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")

@@ -15,7 +15,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "5432:5432"
+      # Bind to localhost only — never expose the datastore on the LAN/all interfaces.
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U jichodns"]
       interval: 10s
@@ -35,8 +36,9 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./backend/migrations/clickhouse_init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native interface
+      # Bind to localhost only — never expose the datastore on the LAN/all interfaces.
+      - "127.0.0.1:8123:8123"  # HTTP interface
+      - "127.0.0.1:9000:9000"  # Native interface
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
@@ -52,7 +54,8 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      # Bind to localhost only — unauthenticated Redis must never be reachable off-host.
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

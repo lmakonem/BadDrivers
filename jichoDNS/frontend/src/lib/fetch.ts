@@ -83,16 +83,71 @@ export async function apiFetch(
 }
 
 /**
- * Fetch JSON with auth. Returns parsed JSON or null on error.
+ * Thrown by apiFetchJSONOrThrow on any non-2xx response, network failure,
+ * or JSON parse failure. Lets call sites distinguish "empty result" from
+ * "request failed" and render real error states.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  constructor(message: string, status: number, body: unknown = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/**
+ * Fetch JSON with auth. Resolves with parsed JSON of type T, or THROWS an
+ * ApiError on non-ok / network / parse failure. Prefer this in new code so
+ * pages can show real error states.
+ */
+export async function apiFetchJSONOrThrow<T = unknown>(
+  path: string,
+  options?: RequestInit,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await apiFetch(path, options);
+  } catch (err) {
+    throw new ApiError(
+      err instanceof Error ? err.message : "Network request failed",
+      0,
+    );
+  }
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* non-JSON error body */
+    }
+    const detail =
+      (body && typeof body === "object" && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : null) || `Request failed (${res.status})`;
+    throw new ApiError(detail, res.status, body);
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new ApiError("Malformed JSON response", res.status);
+  }
+}
+
+/**
+ * Back-compat wrapper: parsed JSON or null on error.
+ * @deprecated Prefer apiFetchJSONOrThrow so callers can render error states.
+ * Retained so existing null-tolerant call sites (asm, brand, settings) keep
+ * working unchanged.
  */
 export async function apiFetchJSON<T = unknown>(
   path: string,
   options?: RequestInit,
 ): Promise<T | null> {
   try {
-    const res = await apiFetch(path, options);
-    if (!res.ok) return null;
-    return await res.json();
+    return await apiFetchJSONOrThrow<T>(path, options);
   } catch {
     return null;
   }

@@ -191,7 +191,7 @@ export default function PortalLayout({
   };
 
   return (
-    <div className="min-h-screen bg-ebony-950">
+    <div className="h-screen overflow-hidden bg-ebony-950 flex flex-col">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -310,9 +310,9 @@ export default function PortalLayout({
       </aside>
 
       {/* Main content */}
-      <div className="lg:ml-64">
+      <div className="lg:ml-64 flex flex-col" style={{ height: "100vh" }}>
         {/* Header */}
-        <header className="sticky top-0 z-30 h-16 bg-card-dark/80 backdrop-blur-md border-b border-white/10">
+        <header className="flex-shrink-0 z-30 h-16 bg-card-dark/80 backdrop-blur-md border-b border-white/10">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             {/* Mobile menu button */}
             <button
@@ -450,8 +450,8 @@ export default function PortalLayout({
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="p-4 lg:p-8">{children}</main>
+        {/* Page content — flex-1, position:relative so ASM page can use position:absolute inset-0 */}
+        <main className="flex-1 overflow-y-auto relative" style={{ minHeight: 0 }}>{children}</main>
       </div>
     </div>
   );

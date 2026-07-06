@@ -1,894 +1,1150 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiFetch } from "@/lib/fetch";
+import { apiFetchJSON } from "@/lib/fetch";
 
-// Types
-interface Brand {
-  id: string;
-  name: string;
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface CredRecord {
+  email: string;
+  username?: string;
   domain: string;
-  logo?: string;
-  status: "active" | "paused";
-  typosquatCount: number;
-  phishingCount: number;
-  lastScan: string;
-  createdAt: string;
+  password_type: string;
+  password_length?: string;
+  source_name: string;
+  breach_date?: string;
+  severity: string;
+  country?: string;
+  vip_match?: string;
 }
 
-interface TyposquatDomain {
+interface CredData {
+  total: number;
+  plaintext_count: number;
+  by_severity: Record<string, number>;
+  by_source: Record<string, number>;
+  by_type: Record<string, number>;
+  by_domain: Record<string, number>;
+  domains_checked: string[];
+  records: CredRecord[];
+}
+
+interface IocRecord {
+  indicator: string;
+  indicator_type: string;
+  threat_type: string;
+  source: string;
+  risk_score: string | number;
+  tags?: string;
+  country_code?: string;
+}
+
+interface IntelData {
+  total: number;
+  by_threat_type: Record<string, number>;
+  by_source: Record<string, number>;
+  by_ioc_type: Record<string, number>;
+  bases_searched: string[];
+  records: IocRecord[];
+}
+
+interface BrandMonitor {
   id: string;
-  domain: string;
-  brandId: string;
-  brandName: string;
-  type: "homograph" | "typo" | "combosquat" | "soundsquat" | "bitsquat";
-  similarity: number;
-  registeredAt?: string;
-  ipAddress?: string;
-  hasContent: boolean;
-  isPhishing: boolean;
-  status: "active" | "taken_down" | "monitoring" | "investigating";
-  discoveredAt: string;
-  riskScore: number;
+  client_id?: number;
+  brand_name: string;
+  primary_keyword: string;
+  domains: string[];
+  keywords: string[];
+  industry?: string;
+  country_code?: string;
+  active: boolean;
+  last_scan_at: string | null;
+  typosquat_count: number;
 }
 
-interface PhishingAlert {
+interface BrandAlert {
   id: string;
-  url: string;
-  brandId: string;
-  brandName: string;
-  targetType: "login" | "payment" | "form" | "download";
-  status: "active" | "taken_down" | "investigating";
-  discoveredAt: string;
-  screenshotUrl?: string;
-  similarity: number;
-  reportedTo: string[];
+  brand_id: string;
+  client_id?: number;
+  brand_name?: string;
+  country_code?: string;
+  industry?: string;
+  alert_type: string;
+  severity: "critical" | "high" | "medium" | "low";
+  title: string;
+  domain?: string;
+  similarity?: number;
+  details?: Record<string, unknown>;
+  detected_at: string;
+  acknowledged: boolean;
 }
 
-// Mock data
-const mockBrands: Brand[] = [
-  {
-    id: "1",
-    name: "Safaricom",
-    domain: "safaricom.co.ke",
-    status: "active",
-    typosquatCount: 23,
-    phishingCount: 5,
-    lastScan: "2024-01-15T12:00:00Z",
-    createdAt: "2024-01-01T00:00:00Z",
-  },
-  {
-    id: "2",
-    name: "M-Pesa",
-    domain: "mpesa.com",
-    status: "active",
-    typosquatCount: 45,
-    phishingCount: 12,
-    lastScan: "2024-01-15T11:30:00Z",
-    createdAt: "2024-01-01T00:00:00Z",
-  },
-  {
-    id: "3",
-    name: "KCB Bank",
-    domain: "kcbgroup.com",
-    status: "active",
-    typosquatCount: 18,
-    phishingCount: 3,
-    lastScan: "2024-01-15T10:45:00Z",
-    createdAt: "2024-01-05T00:00:00Z",
-  },
-  {
-    id: "4",
-    name: "Equity Bank",
-    domain: "equitybankgroup.com",
-    status: "active",
-    typosquatCount: 15,
-    phishingCount: 2,
-    lastScan: "2024-01-15T09:00:00Z",
-    createdAt: "2024-01-05T00:00:00Z",
-  },
-  {
-    id: "5",
-    name: "Airtel Kenya",
-    domain: "airtel.co.ke",
-    status: "paused",
-    typosquatCount: 8,
-    phishingCount: 1,
-    lastScan: "2024-01-10T14:00:00Z",
-    createdAt: "2024-01-08T00:00:00Z",
-  },
-];
+interface Stats {
+  total_monitors: number;
+  total_alerts: number;
+  critical_alerts: number;
+  high_alerts: number;
+  total_typosquats: number;
+}
 
-const mockTyposquats: TyposquatDomain[] = [
-  {
-    id: "1",
-    domain: "safar1com.co.ke",
-    brandId: "1",
-    brandName: "Safaricom",
-    type: "homograph",
-    similarity: 92,
-    registeredAt: "2024-01-10T00:00:00Z",
-    ipAddress: "185.123.45.67",
-    hasContent: true,
-    isPhishing: true,
-    status: "active",
-    discoveredAt: "2024-01-12T08:00:00Z",
-    riskScore: 95,
-  },
-  {
-    id: "2",
-    domain: "safariicom.co.ke",
-    brandId: "1",
-    brandName: "Safaricom",
-    type: "typo",
-    similarity: 88,
-    registeredAt: "2024-01-08T00:00:00Z",
-    ipAddress: "192.168.1.1",
-    hasContent: false,
-    isPhishing: false,
-    status: "monitoring",
-    discoveredAt: "2024-01-09T14:30:00Z",
-    riskScore: 45,
-  },
-  {
-    id: "3",
-    domain: "m-pesa-pay.com",
-    brandId: "2",
-    brandName: "M-Pesa",
-    type: "combosquat",
-    similarity: 75,
-    registeredAt: "2024-01-05T00:00:00Z",
-    ipAddress: "45.67.89.12",
-    hasContent: true,
-    isPhishing: true,
-    status: "active",
-    discoveredAt: "2024-01-06T10:00:00Z",
-    riskScore: 98,
-  },
-  {
-    id: "4",
-    domain: "mpeza.com",
-    brandId: "2",
-    brandName: "M-Pesa",
-    type: "typo",
-    similarity: 85,
-    registeredAt: "2024-01-01T00:00:00Z",
-    hasContent: true,
-    isPhishing: false,
-    status: "monitoring",
-    discoveredAt: "2024-01-02T16:45:00Z",
-    riskScore: 60,
-  },
-  {
-    id: "5",
-    domain: "kcb-online.co.ke",
-    brandId: "3",
-    brandName: "KCB Bank",
-    type: "combosquat",
-    similarity: 70,
-    registeredAt: "2024-01-11T00:00:00Z",
-    ipAddress: "78.90.12.34",
-    hasContent: true,
-    isPhishing: true,
-    status: "investigating",
-    discoveredAt: "2024-01-13T09:00:00Z",
-    riskScore: 88,
-  },
-  {
-    id: "6",
-    domain: "safaricom-rewards.com",
-    brandId: "1",
-    brandName: "Safaricom",
-    type: "combosquat",
-    similarity: 65,
-    hasContent: false,
-    isPhishing: false,
-    status: "taken_down",
-    discoveredAt: "2024-01-05T11:00:00Z",
-    riskScore: 30,
-  },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const mockPhishingAlerts: PhishingAlert[] = [
-  {
-    id: "1",
-    url: "https://safar1com.co.ke/login",
-    brandId: "1",
-    brandName: "Safaricom",
-    targetType: "login",
-    status: "active",
-    discoveredAt: "2024-01-15T08:30:00Z",
-    similarity: 94,
-    reportedTo: ["Google Safe Browsing"],
-  },
-  {
-    id: "2",
-    url: "https://m-pesa-pay.com/verify",
-    brandId: "2",
-    brandName: "M-Pesa",
-    targetType: "payment",
-    status: "active",
-    discoveredAt: "2024-01-14T14:00:00Z",
-    similarity: 89,
-    reportedTo: ["Google Safe Browsing", "Microsoft SmartScreen"],
-  },
-  {
-    id: "3",
-    url: "https://kcb-online.co.ke/secure-login",
-    brandId: "3",
-    brandName: "KCB Bank",
-    targetType: "login",
-    status: "investigating",
-    discoveredAt: "2024-01-13T10:15:00Z",
-    similarity: 86,
-    reportedTo: [],
-  },
-];
-
-// Icons
-const ShieldCheckIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-  </svg>
-);
-
-const GlobeIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-  </svg>
-);
-
-const ExclamationIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-  </svg>
-);
-
-const PlusIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-  </svg>
-);
-
-const ExternalLinkIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-  </svg>
-);
-
-const FlagIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-  </svg>
-);
-
-const SearchIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-);
-
-const RefreshIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-  </svg>
-);
-
-const typeColors: Record<TyposquatDomain["type"], string> = {
-  homograph: "bg-red-500/20 text-red-400",
-  typo: "bg-orange-500/20 text-orange-400",
-  combosquat: "bg-yellow-500/20 text-yellow-400",
-  soundsquat: "bg-blue-500/20 text-blue-400",
-  bitsquat: "bg-purple-500/20 text-purple-400",
+const fmtDate = (d: string | null | undefined) => {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+const timeAgo = (d: string | null | undefined) => {
+  if (!d) return "Never";
+  const h = Math.floor((Date.now() - new Date(d).getTime()) / 3600000);
+  if (h < 1) return `${Math.floor((Date.now() - new Date(d).getTime()) / 60000)}m ago`;
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 };
 
-const statusColors = {
-  active: "bg-red-500/20 text-red-400",
-  taken_down: "bg-green-500/20 text-green-400",
-  monitoring: "bg-blue-500/20 text-blue-400",
-  investigating: "bg-yellow-500/20 text-yellow-400",
+const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+const sevBadge = (s: string) => ({
+  critical: "text-red-300 bg-red-900/40 border-red-700/50",
+  high:     "text-orange-300 bg-orange-900/40 border-orange-700/50",
+  medium:   "text-yellow-300 bg-yellow-900/40 border-yellow-700/50",
+  low:      "text-blue-300 bg-blue-900/40 border-blue-700/50",
+}[s] ?? "text-gray-300 bg-gray-700/40 border-gray-600");
+
+const sevDot = (s: string) => ({
+  critical: "bg-red-400",
+  high:     "bg-orange-400",
+  medium:   "bg-yellow-400",
+  low:      "bg-blue-400",
+}[s] ?? "bg-gray-400");
+
+const ALERT_TYPE_LABEL: Record<string, string> = {
+  typosquat_detected:   "Typosquat",
+  domain_registered:    "Domain Squatting",
+  phishing_detected:    "Phishing",
+  ssl_certificate:      "Cert Transparency",
+  brand_mention:        "Dark Web",
+  social_impersonation: "Social Media",
+  credential_leak:      "Credential Leak",
+  ti_hit:               "Threat Intel",
+  ioc_match:            "IOC Match",
 };
 
-const phishingStatusColors = {
-  active: "bg-red-500/20 text-red-400",
-  taken_down: "bg-green-500/20 text-green-400",
-  investigating: "bg-yellow-500/20 text-yellow-400",
+const ALERT_TYPE_ICON: Record<string, string> = {
+  typosquat_detected:   "🔡",
+  domain_registered:    "🌐",
+  phishing_detected:    "🎣",
+  ssl_certificate:      "🔐",
+  brand_mention:        "🕳",
+  social_impersonation: "📱",
+  credential_leak:      "🔑",
+  ti_hit:               "🎯",
+  ioc_match:            "🎯",
 };
 
-const targetTypeLabels: Record<PhishingAlert["targetType"], string> = {
-  login: "Login Page",
-  payment: "Payment Form",
-  form: "Data Form",
-  download: "Malware Download",
-};
+const industryIcon = (ind?: string) =>
+  (ind ?? "").toLowerCase().includes("bank") ? "🏦" : "📡";
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const getRiskColor = (score: number) => {
-  if (score >= 80) return "text-red-400";
-  if (score >= 60) return "text-orange-400";
-  if (score >= 40) return "text-yellow-400";
-  return "text-green-400";
-};
-
-type TabType = "brands" | "typosquats" | "phishing";
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function BrandPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("brands");
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [typosquats, setTyposquats] = useState<TyposquatDomain[]>([]);
-  const [phishingAlerts, setPhishingAlerts] = useState<PhishingAlert[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [monitors, setMonitors] = useState<BrandMonitor[]>([]);
+  const [allAlerts, setAllAlerts] = useState<BrandAlert[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddBrandModal, setShowAddBrandModal] = useState(false);
-  const [brandForm, setBrandForm] = useState({
-    name: "",
-    domain: "",
-    keywords: "",
-  });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [brandFilter, setBrandFilter] = useState<string>("all");
 
-  const fetchData = useCallback(async () => {
+  // Client navigation
+  const [selectedMonitor, setSelectedMonitor] = useState<BrandMonitor | null>(null);
+  const [clientAlerts, setClientAlerts] = useState<BrandAlert[]>([]);
+  const [clientAlertsTotal, setClientAlertsTotal] = useState(0);
+  const [loadingClient, setLoadingClient] = useState(false);
+  const [clientAlertPage, setClientAlertPage] = useState(0);
+  const CLIENT_LIMIT = 50;
+
+  // Client detail tab
+  const [clientTab, setClientTab] = useState<"overview" | "typosquats" | "certs" | "credentials" | "intel">("overview");
+
+  // Credential leaks
+  const [credData, setCredData] = useState<CredData | null>(null);
+  const [loadingCred, setLoadingCred] = useState(false);
+  const [credPage, setCredPage] = useState(0);
+  const [credSev, setCredSev] = useState("all");
+  const CRED_LIMIT = 50;
+
+  // Threat intel
+  const [intelData, setIntelData] = useState<IntelData | null>(null);
+  const [loadingIntel, setLoadingIntel] = useState(false);
+
+  // Global filters
+  const [sevFilter, setSevFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [monSearch, setMonSearch] = useState("");
+
+  // Alert detail drawer
+  const [selectedAlert, setSelectedAlert] = useState<BrandAlert | null>(null);
+
+  // Add monitor modal
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", domain: "", keywords: "" });
+  const [adding, setAdding] = useState(false);
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
-      // Fetch brand data in parallel
-      const [monitorsRes, typosquatsRes, alertsRes] = await Promise.allSettled([
-        apiFetch(`/api/v1/brand/monitors?limit=50`),
-        apiFetch(`/api/v1/brand/typosquats?limit=100`),
-        apiFetch(`/api/v1/brand/alerts?limit=50`),
+      const [s, m, a] = await Promise.all([
+        apiFetchJSON("/api/v1/brand/stats") as Promise<Stats | null>,
+        apiFetchJSON("/api/v1/brand/monitors?limit=200") as Promise<{ total: number; brands: BrandMonitor[] } | null>,
+        apiFetchJSON("/api/v1/brand/alerts?limit=100") as Promise<{ total: number; alerts: BrandAlert[] } | null>,
       ]);
-      
-      // Process brand monitors
-      if (monitorsRes.status === "fulfilled" && monitorsRes.value.ok) {
-        const monitorsData = await monitorsRes.value.json();
-        const monitorsList = monitorsData.brands || monitorsData || [];
-        setBrands(monitorsList.map((brand: Record<string, unknown>) => ({
-          id: brand.id || brand._id || Math.random().toString(),
-          name: brand.name || brand.brand_name || "Unknown",
-          domain: brand.domain || brand.primary_domain || "",
-          logo: brand.logo || undefined,
-          status: brand.status || brand.active ? "active" : "paused",
-          typosquatCount: brand.typosquat_count || brand.typosquatCount || 0,
-          phishingCount: brand.phishing_count || brand.phishingCount || 0,
-          lastScan: brand.last_scan || brand.lastScan || new Date().toISOString(),
-          createdAt: brand.created_at || brand.createdAt || new Date().toISOString(),
-        })));
-      } else {
-        setBrands(mockBrands);
+      if (s) setStats(s);
+      const mons = m?.brands ?? [];
+      setMonitors(mons);
+      setAllAlerts(a?.alerts ?? []);
+      // Auto-select first monitor that has alerts
+      if (!selectedMonitor && mons.length > 0) {
+        const first = mons.find(m => m.typosquat_count > 0) ?? mons[0];
+        setSelectedMonitor(first);
       }
-      
-      // Process typosquats
-      if (typosquatsRes.status === "fulfilled" && typosquatsRes.value.ok) {
-        const typosquatsData = await typosquatsRes.value.json();
-        const typosquatsList = typosquatsData.typosquats || typosquatsData || [];
-        setTyposquats(typosquatsList.map((t: Record<string, unknown>) => ({
-          id: t.id || t._id || Math.random().toString(),
-          domain: t.domain || t.typosquat_domain || "",
-          brandId: t.brand_id || t.brandId || "",
-          brandName: t.brand_name || t.brandName || "Unknown",
-          type: t.type || t.technique || "typo",
-          similarity: t.similarity || t.similarity_score || 0,
-          registeredAt: t.registered_at || t.registeredAt || undefined,
-          ipAddress: t.ip_address || t.ipAddress || undefined,
-          hasContent: t.has_content || t.hasContent || false,
-          isPhishing: t.is_phishing || t.isPhishing || false,
-          status: t.status || "monitoring",
-          discoveredAt: t.discovered_at || t.discoveredAt || new Date().toISOString(),
-          riskScore: t.risk_score || t.riskScore || 0,
-        })));
-      } else {
-        setTyposquats(mockTyposquats);
-      }
-      
-      // Process phishing alerts
-      if (alertsRes.status === "fulfilled" && alertsRes.value.ok) {
-        const alertsData = await alertsRes.value.json();
-        const alertsList = (alertsData.alerts || alertsData || []).filter(
-          (a: Record<string, unknown>) => a.alert_type === "phishing" || a.type === "phishing" || a.is_phishing
-        );
-        setPhishingAlerts(alertsList.map((a: Record<string, unknown>) => ({
-          id: a.id || a._id || Math.random().toString(),
-          url: a.url || a.domain || "",
-          brandId: a.brand_id || a.brandId || "",
-          brandName: a.brand_name || a.brandName || "Unknown",
-          targetType: a.target_type || a.targetType || "login",
-          status: a.status || "active",
-          discoveredAt: a.discovered_at || a.discoveredAt || new Date().toISOString(),
-          screenshotUrl: a.screenshot_url || a.screenshotUrl || undefined,
-          similarity: a.similarity || 0,
-          reportedTo: a.reported_to || a.reportedTo || [],
-        })));
-      } else {
-        setPhishingAlerts(mockPhishingAlerts);
-      }
-      
-    } catch (error) {
-      console.error("Failed to fetch brand data:", error);
-      setBrands(mockBrands);
-      setTyposquats(mockTyposquats);
-      setPhishingAlerts(mockPhishingAlerts);
     } finally {
       setLoading(false);
     }
+  }, [selectedMonitor]);
+
+  const fetchCredentials = useCallback(async (monitorId: string, page = 0, sev = "all") => {
+    setLoadingCred(true);
+    try {
+      const params = new URLSearchParams({ limit: String(CRED_LIMIT), offset: String(page * CRED_LIMIT) });
+      if (sev !== "all") params.set("severity", sev);
+      const d = await apiFetchJSON(`/api/v1/brand/monitors/${monitorId}/credentials?${params}`) as CredData | null;
+      setCredData(d);
+      setCredPage(page);
+    } finally {
+      setLoadingCred(false);
+    }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const filteredTyposquats = typosquats.filter((t) => {
-    const matchesSearch = t.domain.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesBrand = brandFilter === "all" || t.brandId === brandFilter;
-    return matchesSearch && matchesBrand;
-  });
-
-  const handleAddBrand = async () => {
-    if (!brandForm.name.trim() || !brandForm.domain.trim()) return;
-
-    const newBrand: Brand = {
-      id: Date.now().toString(),
-      name: brandForm.name.trim(),
-      domain: brandForm.domain.trim(),
-      status: "active",
-      typosquatCount: 0,
-      phishingCount: 0,
-      lastScan: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-
-    setBrands([newBrand, ...brands]);
-    setShowAddBrandModal(false);
-    
-    // Call the real API to add brand monitor
+  const fetchIntel = useCallback(async (monitorId: string) => {
+    setLoadingIntel(true);
     try {
-      const response = await apiFetch(`/api/v1/brand/monitor`, {
+      const d = await apiFetchJSON(`/api/v1/brand/monitors/${monitorId}/intel?limit=100`) as IntelData | null;
+      setIntelData(d);
+    } finally {
+      setLoadingIntel(false);
+    }
+  }, []);
+
+  const fetchClientAlerts = useCallback(async (monitor: BrandMonitor, page = 0, sev = "all", type = "all") => {
+    setLoadingClient(true);
+    try {
+      const params = new URLSearchParams({ limit: String(CLIENT_LIMIT), offset: String(page * CLIENT_LIMIT) });
+      params.set("brand_id", monitor.id);
+      if (sev !== "all") params.set("severity", sev);
+      if (type !== "all") params.set("alert_type", type);
+      const d = await apiFetchJSON(`/api/v1/brand/alerts?${params}`) as { total: number; alerts: BrandAlert[] } | null;
+      setClientAlerts(d?.alerts ?? []);
+      setClientAlertsTotal(d?.total ?? 0);
+      setClientAlertPage(page);
+    } finally {
+      setLoadingClient(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, []);
+
+  useEffect(() => {
+    if (selectedMonitor) {
+      setClientTab("overview");
+      setClientAlertPage(0);
+      setSevFilter("all");
+      setTypeFilter("all");
+      setCredData(null);
+      setIntelData(null);
+      setCredPage(0);
+      setCredSev("all");
+      fetchClientAlerts(selectedMonitor, 0);
+    }
+  }, [selectedMonitor]);
+
+  // Fetch cred/intel data when tab is selected
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!selectedMonitor) return;
+    if (clientTab === "credentials" && !credData && !loadingCred) {
+      fetchCredentials(selectedMonitor.id, 0);
+    }
+    if (clientTab === "intel" && !intelData && !loadingIntel) {
+      fetchIntel(selectedMonitor.id);
+    }
+  }, [clientTab, selectedMonitor]); // eslint-disable-line
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  const acknowledgeAlert = async (alertId: string) => {
+    await apiFetchJSON(`/api/v1/brand/alerts/${alertId}/acknowledge`, { method: "POST" });
+    setClientAlerts(prev => prev.map(a => a.id === alertId ? { ...a, acknowledged: true } : a));
+    if (selectedAlert?.id === alertId) setSelectedAlert(a => a ? { ...a, acknowledged: true } : a);
+  };
+
+  const handleAddMonitor = async () => {
+    if (!addForm.name.trim() || !addForm.domain.trim()) return;
+    setAdding(true);
+    try {
+      await apiFetchJSON("/api/v1/brand/monitor", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brand_name: brandForm.name.trim(),
-          primary_domain: brandForm.domain.trim(),
-          keywords: brandForm.keywords.split(",").map(k => k.trim()).filter(k => k),
+          brand_name: addForm.name.trim(),
+          primary_domain: addForm.domain.trim(),
+          keywords: addForm.keywords.split(",").map(k => k.trim()).filter(Boolean),
         }),
       });
-      
-      if (response.ok) {
-        // Refresh data to show updated results
-        setTimeout(fetchData, 1000);
-      }
-    } catch (error) {
-      console.error("Failed to add brand:", error);
+      setShowAdd(false);
+      setAddForm({ name: "", domain: "", keywords: "" });
+      fetchAll();
+    } finally {
+      setAdding(false);
     }
-    
-    setBrandForm({ name: "", domain: "", keywords: "" });
   };
 
-  const handleToggleBrandStatus = (brandId: string) => {
-    setBrands(brands.map((b) =>
-      b.id === brandId
-        ? { ...b, status: b.status === "active" ? "paused" : "active" }
-        : b
-    ));
-  };
+  // ── Derived data ───────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-10 w-64 bg-card-dark rounded animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-32 bg-card-dark rounded-2xl animate-pulse" />
-          ))}
+  // Alerts grouped by type for the selected client
+  const byType = clientAlerts.reduce((acc, a) => {
+    acc[a.alert_type] = (acc[a.alert_type] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const bySev = clientAlerts.reduce((acc, a) => {
+    acc[a.severity] = (acc[a.severity] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Client alert tabs
+  const typosquatAlerts = clientAlerts.filter(a => a.alert_type === "typosquat_detected" || a.alert_type === "domain_registered");
+  const certAlerts      = clientAlerts.filter(a => a.alert_type === "ssl_certificate");
+  const credAlerts      = clientAlerts.filter(a => a.alert_type === "credential_leak");
+  const intelAlerts     = clientAlerts.filter(a => a.alert_type === "ti_hit" || a.alert_type === "ioc_match" || a.alert_type === "brand_mention");
+
+
+  const filteredMons = monitors.filter(m => {
+    if (!monSearch) return true;
+    const q = monSearch.toLowerCase();
+    return m.brand_name.toLowerCase().includes(q) || (m.country_code ?? "").toLowerCase().includes(q);
+  });
+
+  // Sort monitors: most threats first
+  const sortedMons = [...filteredMons].sort((a, b) => b.typosquat_count - a.typosquat_count);
+
+  const maxThreat = sortedMons[0]?.typosquat_count ?? 1;
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+
+  const AlertRow = ({ a }: { a: BrandAlert }) => (
+    <tr
+      onClick={() => setSelectedAlert(a)}
+      className={`hover:bg-white/[0.025] cursor-pointer transition-colors group ${a.acknowledged ? "opacity-40" : ""}`}
+    >
+      <td className="px-4 py-2.5 w-24">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sevDot(a.severity)}`} />
+          <span className={`text-xs font-semibold px-1.5 py-0 rounded border ${sevBadge(a.severity)}`}>
+            {a.severity.toUpperCase()}
+          </span>
         </div>
-        <div className="h-96 bg-card-dark rounded-2xl animate-pulse" />
-      </div>
-    );
-  }
+      </td>
+      <td className="px-4 py-2.5 max-w-xs">
+        <div className="text-sm text-white truncate font-medium">{a.title}</div>
+        {a.domain && <div className="text-xs text-blue-400 font-mono truncate mt-0.5">{a.domain}</div>}
+      </td>
+      <td className="px-4 py-2.5 hidden md:table-cell">
+        <span className="text-xs text-gray-400 flex items-center gap-1 whitespace-nowrap">
+          {ALERT_TYPE_ICON[a.alert_type] ?? "⚠"} {ALERT_TYPE_LABEL[a.alert_type] ?? a.alert_type}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 hidden lg:table-cell">
+        {a.similarity ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-10 bg-white/10 rounded-full h-1.5">
+              <div className={`h-1.5 rounded-full ${a.similarity >= 80 ? "bg-red-400" : "bg-orange-400"}`}
+                style={{ width: `${a.similarity}%` }} />
+            </div>
+            <span className="text-xs text-gray-400">{a.similarity}%</span>
+          </div>
+        ) : <span className="text-gray-600 text-xs">—</span>}
+      </td>
+      <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">{timeAgo(a.detected_at)}</td>
+      <td className="px-4 py-2.5 text-gray-600 group-hover:text-gray-300 text-sm transition-colors">›</td>
+    </tr>
+  );
+
+  const AlertTable = ({ alerts, showEmpty = "No alerts in this category" }: { alerts: BrandAlert[]; showEmpty?: string }) => (
+    <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+      <table className="w-full">
+        <thead>
+          <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528] sticky top-0 z-10">
+            <th className="px-4 py-2.5 font-medium">Severity</th>
+            <th className="px-4 py-2.5 font-medium">Finding</th>
+            <th className="px-4 py-2.5 font-medium hidden md:table-cell">Type</th>
+            <th className="px-4 py-2.5 font-medium hidden lg:table-cell">Similarity</th>
+            <th className="px-4 py-2.5 font-medium hidden sm:table-cell">When</th>
+            <th className="px-4 py-2.5 w-6" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {alerts.length === 0 ? (
+            <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-500">{showEmpty}</td></tr>
+          ) : (
+            alerts.sort((a, b) => (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4))
+              .map(a => <AlertRow key={a.id} a={a} />)
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // ── Layout ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Brand Protection</h1>
-          <p className="text-gray-400 mt-1">Monitor and protect your brands from impersonation</p>
-        </div>
-        <button
-          onClick={() => setShowAddBrandModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors"
-        >
-          <PlusIcon />
-          Add Brand
-        </button>
-      </div>
+    <div className="flex bg-gray-900 text-white" style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-              <ShieldCheckIcon />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{brands.filter((b) => b.status === "active").length}</p>
-              <p className="text-sm text-gray-400">Monitored Brands</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-400">
-              <GlobeIcon />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{typosquats.length}</p>
-              <p className="text-sm text-gray-400">Typosquat Domains</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/10 rounded-lg text-red-400">
-              <ExclamationIcon />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{phishingAlerts.filter((p) => p.status === "active").length}</p>
-              <p className="text-sm text-gray-400">Active Phishing</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500/10 rounded-lg text-green-400">
-              <FlagIcon />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">
-                {typosquats.filter((t) => t.status === "taken_down").length}
-              </p>
-              <p className="text-sm text-gray-400">Taken Down</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* ── LEFT SIDEBAR: client list ── */}
+      <div className="flex-shrink-0 flex flex-col bg-gray-800 border-r border-gray-700"
+        style={{ width: "17rem", height: "100%", overflow: "hidden" }}>
 
-      {/* Tabs */}
-      <div className="bg-card-dark border border-white/10 rounded-2xl">
-        <div className="border-b border-white/10">
-          <div className="flex gap-1 p-2">
-            {[
-              { id: "brands" as TabType, label: "Monitored Brands", count: brands.filter((b) => b.status === "active").length },
-              { id: "typosquats" as TabType, label: "Typosquat Domains", count: typosquats.filter((t) => t.status === "active").length },
-              { id: "phishing" as TabType, label: "Phishing Alerts", count: phishingAlerts.filter((p) => p.status === "active").length },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${
-                    activeTab === tab.id ? "bg-primary/20 text-primary" : "bg-white/10 text-gray-400"
+        {/* Sidebar header */}
+        <div className="flex-shrink-0 p-3 border-b border-gray-700 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Brand Monitors</span>
+            <button onClick={() => setShowAdd(true)}
+              className="text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-2 py-1 rounded transition-colors flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add
+            </button>
+          </div>
+          <input
+            type="text" value={monSearch} onChange={e => setMonSearch(e.target.value)}
+            placeholder="Search brands…"
+            className="w-full bg-gray-700 border border-gray-600 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary/50"
+          />
+          {/* Summary pills */}
+          <div className="flex gap-1.5 flex-wrap">
+            <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">{sortedMons.length} brands</span>
+            {stats && stats.critical_alerts > 0 && (
+              <span className="text-xs bg-red-900/50 text-red-300 border border-red-700/40 px-2 py-0.5 rounded">{stats.critical_alerts} critical</span>
+            )}
+          </div>
+        </div>
+
+        {/* Client list */}
+        <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : sortedMons.length === 0 ? (
+            <div className="py-10 text-center text-xs text-gray-500">No brands yet</div>
+          ) : (
+            sortedMons.map(m => {
+              const isSelected = selectedMonitor?.id === m.id;
+              const clientCritical = allAlerts.filter(a => a.brand_id === m.id && a.severity === "critical").length;
+              return (
+                <button key={m.id} onClick={() => setSelectedMonitor(m)}
+                  className={`w-full text-left px-3 py-2.5 border-b border-gray-700/50 transition-colors hover:bg-gray-700/40 ${
+                    isSelected ? "bg-gray-700/70 border-l-2 border-l-primary" : ""
                   }`}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+                  {/* Row 1: name + critical badge */}
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-sm font-semibold text-white truncate leading-tight">{m.brand_name}</span>
+                    {clientCritical > 0 && (
+                      <span className="text-xs bg-red-900/60 text-red-300 border border-red-700/40 px-1.5 py-0 rounded font-mono flex-shrink-0">
+                        {clientCritical}!
+                      </span>
+                    )}
+                  </div>
+                  {/* Row 2: country + industry */}
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {[m.country_code, m.industry].filter(Boolean).join(" · ")}
+                  </div>
+                  {/* Row 3: threat bar */}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex-1 bg-gray-700 rounded-full h-1">
+                      <div className={`h-1 rounded-full ${m.typosquat_count > 20 ? "bg-red-500" : m.typosquat_count > 5 ? "bg-orange-500" : "bg-yellow-500"}`}
+                        style={{ width: `${Math.max((m.typosquat_count / maxThreat) * 100, m.typosquat_count > 0 ? 6 : 0)}%` }} />
+                    </div>
+                    <span className={`text-xs flex-shrink-0 ${m.typosquat_count > 20 ? "text-red-400" : m.typosquat_count > 5 ? "text-orange-400" : m.typosquat_count > 0 ? "text-yellow-400" : "text-gray-600"}`}>
+                      {m.typosquat_count}
+                    </span>
+                  </div>
+                  {/* Row 4: domains */}
+                  {m.domains?.length > 0 && (
+                    <div className="text-xs text-gray-600 font-mono truncate mt-0.5">
+                      {m.domains[0]}
+                    </div>
+                  )}
+                </button>
+              );
+            })
+          )}
         </div>
 
-        {/* Tab content */}
-        <div className="p-6">
-          {/* Brands tab */}
-          {activeTab === "brands" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {brands.map((brand) => (
-                <div
-                  key={brand.id}
-                  className={`p-4 border rounded-xl transition-colors ${
-                    brand.status === "active"
-                      ? "bg-white/[0.02] border-white/10 hover:border-white/20"
-                      : "bg-white/[0.01] border-white/5 opacity-60"
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                        <span className="text-lg font-bold text-primary">
-                          {brand.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <h3 className="text-white font-semibold">{brand.name}</h3>
-                        <p className="text-xs text-gray-400">{brand.domain}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleToggleBrandStatus(brand.id)}
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        brand.status === "active"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-gray-500/20 text-gray-400"
-                      }`}
-                    >
-                      {brand.status === "active" ? "Active" : "Paused"}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <p className="text-lg font-bold text-orange-400">{brand.typosquatCount}</p>
-                      <p className="text-xs text-gray-400">Typosquats</p>
-                    </div>
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <p className="text-lg font-bold text-red-400">{brand.phishingCount}</p>
-                      <p className="text-xs text-gray-400">Phishing</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Last scan: {formatDate(brand.lastScan)}</span>
-                    <button className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors">
-                      <RefreshIcon />
-                      Scan
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Add brand card */}
-              <button
-                onClick={() => setShowAddBrandModal(true)}
-                className="p-4 border-2 border-dashed border-white/10 rounded-xl hover:border-primary/30 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center min-h-[200px] group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-white/5 group-hover:bg-primary/10 flex items-center justify-center mb-3 transition-colors">
-                  <PlusIcon />
-                </div>
-                <p className="text-gray-400 group-hover:text-white transition-colors">Add New Brand</p>
-              </button>
+        {/* Sidebar footer: global stats */}
+        {stats && (
+          <div className="flex-shrink-0 border-t border-gray-700 p-3 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500">Total alerts</span>
+              <span className="text-gray-300 font-mono">{(stats.total_alerts).toLocaleString()}</span>
             </div>
-          )}
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500">Typosquats</span>
+              <span className="text-yellow-400 font-mono">{stats.total_typosquats.toLocaleString()}</span>
+            </div>
+            <button onClick={() => { fetchAll(); if (selectedMonitor) fetchClientAlerts(selectedMonitor, 0); }}
+              className="w-full text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded py-1.5 mt-1 transition-colors flex items-center justify-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+        )}
+      </div>
 
-          {/* Typosquats tab */}
-          {activeTab === "typosquats" && (
-            <div>
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search domains..."
-                    className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary/50"
-                  />
-                  <SearchIcon />
+      {/* ── RIGHT: client detail pane ── */}
+      <div className="flex flex-col" style={{ flex: 1, height: "100%", overflow: "hidden" }}>
+
+        {!selectedMonitor ? (
+          <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+            Select a brand from the list
+          </div>
+        ) : (
+          <>
+            {/* Client header */}
+            <div className="flex-shrink-0 bg-gray-800/60 border-b border-gray-700 px-6 py-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{industryIcon(selectedMonitor.industry)}</span>
+                  <div>
+                    <h1 className="text-lg font-bold text-white leading-tight">{selectedMonitor.brand_name}</h1>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-xs text-gray-400">{selectedMonitor.country_code}</span>
+                      {selectedMonitor.industry && <span className="text-xs text-gray-500">· {selectedMonitor.industry}</span>}
+                      <span className="text-xs text-gray-600">· Last scan {timeAgo(selectedMonitor.last_scan_at)}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${selectedMonitor.active ? "text-green-300 bg-green-900/20 border-green-700/30" : "text-gray-400 bg-gray-700/30 border-gray-600"}`}>
+                        {selectedMonitor.active ? "Active" : "Paused"}
+                      </span>
+                    </div>
+                    {/* Official domains */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {(selectedMonitor.domains ?? []).slice(0,4).map(d => (
+                        <a key={d} href={`https://${d}`} target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-xs font-mono text-blue-400 hover:text-blue-300 bg-blue-900/10 border border-blue-700/20 px-1.5 py-0.5 rounded transition-colors">
+                          {d} ↗
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <select
-                  value={brandFilter}
-                  onChange={(e) => setBrandFilter(e.target.value)}
-                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-primary/50"
-                >
-                  <option value="all">All Brands</option>
-                  {brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>{brand.name}</option>
-                  ))}
-                </select>
+                {/* Severity summary */}
+                <div className="flex gap-2 flex-wrap flex-shrink-0">
+                  {(["critical","high","medium","low"] as const).map(s => {
+                    const cnt = bySev[s] ?? 0;
+                    if (!cnt) return null;
+                    return (
+                      <button key={s}
+                        onClick={() => { setSevFilter(s); setClientTab("overview"); fetchClientAlerts(selectedMonitor, 0, s, typeFilter); }}
+                        className={`flex flex-col items-center px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80 ${sevBadge(s)}`}>
+                        <span className="text-lg font-bold leading-none">{cnt}</span>
+                        <span className="text-xs capitalize">{s}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-sm text-gray-400 border-b border-white/10">
-                      <th className="pb-3 font-medium">Domain</th>
-                      <th className="pb-3 font-medium">Brand</th>
-                      <th className="pb-3 font-medium">Type</th>
-                      <th className="pb-3 font-medium">Similarity</th>
-                      <th className="pb-3 font-medium">Risk</th>
-                      <th className="pb-3 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Discovered</th>
-                      <th className="pb-3 font-medium"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {filteredTyposquats.map((typo) => (
-                      <tr key={typo.id} className="hover:bg-white/[0.02]">
-                        <td className="py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-medium">{typo.domain}</span>
-                            {typo.isPhishing && (
-                              <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
-                                Phishing
-                              </span>
-                            )}
-                          </div>
-                          {typo.ipAddress && (
-                            <p className="text-xs text-gray-500 mt-0.5">{typo.ipAddress}</p>
-                          )}
-                        </td>
-                        <td className="py-4 text-sm text-gray-400">{typo.brandName}</td>
-                        <td className="py-4">
-                          <span className={`text-xs px-2 py-1 rounded capitalize ${typeColors[typo.type]}`}>
-                            {typo.type}
-                          </span>
-                        </td>
-                        <td className="py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-12 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary rounded-full"
-                                style={{ width: `${typo.similarity}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-gray-400">{typo.similarity}%</span>
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <span className={`text-sm font-medium ${getRiskColor(typo.riskScore)}`}>
-                            {typo.riskScore}
-                          </span>
-                        </td>
-                        <td className="py-4">
-                          <span className={`text-xs px-2 py-1 rounded ${statusColors[typo.status]}`}>
-                            {typo.status.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="py-4 text-sm text-gray-400">{formatDate(typo.discoveredAt)}</td>
-                        <td className="py-4">
-                          <button className="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-colors">
-                            <ExternalLinkIcon />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Client sub-tabs */}
+              <div className="flex gap-1 mt-4 border-b border-gray-700 overflow-x-auto">
+                {([
+                  ["overview",    `Overview (${clientAlertsTotal})`],
+                  ["typosquats",  `Typosquats (${typosquatAlerts.length})`],
+                  ["certs",       `Cert Watch (${certAlerts.length})`],
+                  ["credentials", `Credential Leaks${credData ? ` (${credData.total.toLocaleString()})` : credAlerts.length > 0 ? ` (${credAlerts.length})` : ""}`],
+                  ["intel",       `Threat Intel${intelData ? ` (${intelData.total.toLocaleString()})` : intelAlerts.length > 0 ? ` (${intelAlerts.length})` : ""}`],
+                ] as [typeof clientTab, string][]).map(([t, label]) => (
+                  <button key={t} onClick={() => setClientTab(t)}
+                    className={`px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0 ${
+                      clientTab === t ? "border-primary text-primary" : "border-transparent text-gray-400 hover:text-white"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
 
-          {/* Phishing tab */}
-          {activeTab === "phishing" && (
-            <div className="space-y-4">
-              {phishingAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="p-4 bg-white/[0.02] border border-white/5 rounded-xl hover:border-white/10 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className={`text-xs px-2 py-1 rounded ${phishingStatusColors[alert.status]}`}>
-                          {alert.status.replace("_", " ").toUpperCase()}
-                        </span>
-                        <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded">
-                          {targetTypeLabels[alert.targetType]}
-                        </span>
-                        <span className="text-xs text-gray-500">{alert.similarity}% match</span>
-                      </div>
-                      
-                      <h3 className="font-semibold text-white mb-2">
-                        {alert.brandName} Phishing Detected
-                      </h3>
-                      
-                      <div className="flex items-center gap-2 mb-3">
-                        <code className="text-sm text-red-400 bg-red-500/10 px-2 py-1 rounded">
-                          {alert.url}
-                        </code>
-                        <button className="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white transition-colors">
-                          <ExternalLinkIcon />
-                        </button>
-                      </div>
+            {/* Client detail body */}
+            <div className="p-6 space-y-5" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
 
-                      {alert.reportedTo.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Reported to:</span>
-                          {alert.reportedTo.map((service) => (
-                            <span key={service} className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">
-                              {service}
-                            </span>
-                          ))}
+              {loadingClient ? (
+                <div className="flex items-center gap-2 text-gray-400 text-sm py-12">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  Loading brand intelligence…
+                </div>
+              ) : (
+
+                <>
+                  {/* ── Overview ── */}
+                  {clientTab === "overview" && (
+                    <div className="space-y-5">
+                      {/* Alert type breakdown */}
+                      {Object.keys(byType).length > 0 ? (
+                        <div className="bg-card-dark border border-white/10 rounded-xl p-5">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Threat Breakdown</h3>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                            {(["critical","high","medium","low"] as const).map(s => {
+                              const cnt = bySev[s] ?? 0;
+                              return (
+                                <button key={s}
+                                  onClick={() => { setSevFilter(s); fetchClientAlerts(selectedMonitor, 0, s, "all"); }}
+                                  className={`rounded-xl p-3 text-left border transition-all hover:opacity-80 ${
+                                    s === "critical" ? "bg-red-900/15 border-red-700/30" :
+                                    s === "high"     ? "bg-orange-900/15 border-orange-700/30" :
+                                    s === "medium"   ? "bg-yellow-900/15 border-yellow-700/30" :
+                                                       "bg-blue-900/15 border-blue-700/30"
+                                  }`}>
+                                  <div className={`text-2xl font-bold ${s === "critical" ? "text-red-300" : s === "high" ? "text-orange-300" : s === "medium" ? "text-yellow-300" : "text-blue-300"}`}>
+                                    {cnt}
+                                  </div>
+                                  <div className="text-xs text-gray-400 capitalize mt-0.5">{s}</div>
+                                  <div className="text-xs text-gray-600 mt-0.5">click to filter</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="space-y-2.5">
+                            {Object.entries(byType).sort(([,a],[,b]) => b - a).map(([type, count]) => {
+                              const total = Object.values(byType).reduce((s,v) => s+v, 0);
+                              return (
+                                <button key={type}
+                                  onClick={() => { setTypeFilter(type); fetchClientAlerts(selectedMonitor, 0, "all", type); setClientTab("overview"); }}
+                                  className="w-full flex items-center gap-3 text-left hover:opacity-80 transition-opacity group">
+                                  <span className="w-8 text-center text-sm">{ALERT_TYPE_ICON[type] ?? "⚠"}</span>
+                                  <span className="text-xs text-gray-400 w-36 flex-shrink-0 truncate">
+                                    {ALERT_TYPE_LABEL[type] ?? type}
+                                  </span>
+                                  <div className="flex-1 bg-white/5 rounded-full h-2">
+                                    <div className="h-2 bg-primary rounded-full transition-all"
+                                      style={{ width: `${(count/total*100).toFixed(1)}%` }} />
+                                  </div>
+                                  <span className="text-xs text-gray-300 w-8 text-right flex-shrink-0">{count}</span>
+                                  <span className="text-xs text-gray-600 group-hover:text-primary transition-colors">→</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                          <div className="text-3xl mb-2">✓</div>
+                          <div className="text-sm text-gray-300 font-medium">No threats detected</div>
+                          <div className="text-xs text-gray-500 mt-1">This brand has no active brand protection alerts</div>
                         </div>
                       )}
 
-                      <p className="text-xs text-gray-500 mt-3">
-                        Discovered {formatDate(alert.discoveredAt)}
-                      </p>
-                    </div>
+                      {/* Keywords being monitored */}
+                      <div className="bg-card-dark border border-white/10 rounded-xl p-4">
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Monitored Keywords</h3>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(selectedMonitor.keywords ?? []).map(k => (
+                            <span key={k} className="text-xs bg-primary/10 text-primary/80 border border-primary/20 px-2 py-0.5 rounded">{k}</span>
+                          ))}
+                          {(!selectedMonitor.keywords || selectedMonitor.keywords.length === 0) && (
+                            <span className="text-xs text-gray-500">No keywords configured</span>
+                          )}
+                        </div>
+                      </div>
 
-                    <div className="flex flex-col gap-2">
-                      {alert.status === "active" && (
+                      {/* Recent alerts */}
+                      {clientAlerts.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">All Findings ({clientAlertsTotal})</h3>
+                            <div className="flex gap-2">
+                              <select value={sevFilter}
+                                onChange={e => { setSevFilter(e.target.value); fetchClientAlerts(selectedMonitor, 0, e.target.value, typeFilter); }}
+                                className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                <option value="all">All severities</option>
+                                {["critical","high","medium","low"].map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                              <select value={typeFilter}
+                                onChange={e => { setTypeFilter(e.target.value); fetchClientAlerts(selectedMonitor, 0, sevFilter, e.target.value); }}
+                                className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                <option value="all">All types</option>
+                                {Object.entries(ALERT_TYPE_LABEL).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <AlertTable alerts={clientAlerts} />
+                          {clientAlertsTotal > CLIENT_LIMIT && (
+                            <div className="flex items-center justify-between mt-3">
+                              <button disabled={clientAlertPage === 0}
+                                onClick={() => fetchClientAlerts(selectedMonitor, clientAlertPage - 1, sevFilter, typeFilter)}
+                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">← Prev</button>
+                              <span className="text-xs text-gray-400">
+                                {clientAlertPage * CLIENT_LIMIT + 1}–{Math.min((clientAlertPage+1)*CLIENT_LIMIT, clientAlertsTotal)} of {clientAlertsTotal}
+                              </span>
+                              <button disabled={(clientAlertPage+1)*CLIENT_LIMIT >= clientAlertsTotal}
+                                onClick={() => fetchClientAlerts(selectedMonitor, clientAlertPage + 1, sevFilter, typeFilter)}
+                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">Next →</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Typosquats tab ── */}
+                  {clientTab === "typosquats" && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-400">
+                        Registered domains detected impersonating <strong className="text-white">{selectedMonitor.brand_name}</strong> via typosquatting, domain squatting, or TLD abuse.
+                      </p>
+                      <AlertTable alerts={typosquatAlerts} showEmpty="No typosquat or domain squatting detected" />
+                    </div>
+                  )}
+
+                  {/* ── Cert watch tab ── */}
+                  {clientTab === "certs" && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-400">
+                        SSL certificates issued for lookalike domains found in certificate transparency logs.
+                      </p>
+                      <AlertTable alerts={certAlerts} showEmpty="No suspicious SSL certificates detected in CT logs" />
+                    </div>
+                  )}
+
+                  {/* ── Credential leaks tab ── */}
+                  {clientTab === "credentials" && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <p className="text-sm text-gray-400">
+                          Leaked credentials matching <strong className="text-white">{selectedMonitor.brand_name}</strong> domains in platform breach databases.
+                        </p>
+                        {credData && (
+                          <button onClick={() => fetchCredentials(selectedMonitor.id, 0, credSev)}
+                            className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
+                        )}
+                      </div>
+
+                      {loadingCred ? (
+                        <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          Searching breach databases…
+                        </div>
+                      ) : !credData ? null : credData.total === 0 ? (
+                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                          <div className="text-3xl mb-2">✓</div>
+                          <div className="text-sm text-gray-300 font-medium">No credential leaks found</div>
+                          <div className="text-xs text-gray-500 mt-1">Domains checked: {credData.domains_checked.join(", ")}</div>
+                        </div>
+                      ) : (
                         <>
-                          <button className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors flex items-center gap-1">
-                            <FlagIcon />
-                            Report
-                          </button>
-                          <button className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-sm transition-colors">
-                            Takedown
-                          </button>
+                          {/* Stats bar */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-3 text-center">
+                              <div className="text-2xl font-bold text-red-300">{credData.total.toLocaleString()}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">Total Records</div>
+                            </div>
+                            <div className={`${credData.plaintext_count > 0 ? "bg-red-900/30 border-red-600/50" : "bg-gray-700/30 border-gray-600"} border rounded-xl p-3 text-center`}>
+                              <div className={`text-2xl font-bold ${credData.plaintext_count > 0 ? "text-red-200" : "text-gray-400"}`}>{credData.plaintext_count.toLocaleString()}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">Plaintext Passwords</div>
+                            </div>
+                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
+                              <div className="text-xs text-gray-400 mb-1.5">By Source</div>
+                              {Object.entries(credData.by_source).slice(0,3).map(([src, cnt]) => (
+                                <div key={src} className="flex justify-between text-xs">
+                                  <span className="text-gray-300 truncate max-w-[120px]" title={src}>{src}</span>
+                                  <span className="text-gray-400 ml-1 flex-shrink-0">{cnt.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
+                              <div className="text-xs text-gray-400 mb-1.5">By Password Type</div>
+                              {Object.entries(credData.by_type).slice(0,4).map(([type, cnt]) => (
+                                <div key={type} className="flex justify-between text-xs">
+                                  <span className={`${type === "plaintext" ? "text-red-300" : "text-gray-300"}`}>{type}</span>
+                                  <span className="text-gray-400">{cnt.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Filters */}
+                          <div className="flex gap-2 items-center">
+                            <select value={credSev}
+                              onChange={e => { setCredSev(e.target.value); fetchCredentials(selectedMonitor.id, 0, e.target.value); }}
+                              className="bg-gray-700 border border-gray-600 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none">
+                              <option value="all">All severities</option>
+                              {["critical","high","medium","low"].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <span className="text-xs text-gray-500 ml-auto">
+                              {credPage * CRED_LIMIT + 1}–{Math.min((credPage+1)*CRED_LIMIT, credData.total)} of {credData.total.toLocaleString()} records
+                            </span>
+                          </div>
+
+                          {/* Records table */}
+                          <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 z-10">
+                                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528]">
+                                  <th className="px-4 py-2.5 font-medium">Email / Username</th>
+                                  <th className="px-4 py-2.5 font-medium">Domain</th>
+                                  <th className="px-4 py-2.5 font-medium">Password Type</th>
+                                  <th className="px-4 py-2.5 font-medium">Breach Source</th>
+                                  <th className="px-4 py-2.5 font-medium">Breach Date</th>
+                                  <th className="px-4 py-2.5 font-medium">Severity</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {credData.records.map((r, i) => (
+                                  <tr key={i} className="hover:bg-white/[0.02]">
+                                    <td className="px-4 py-2.5">
+                                      <div className="text-xs font-mono text-blue-300 truncate max-w-[200px]" title={r.email}>{r.email}</div>
+                                      {r.username && r.username !== r.email?.split("@")[0] && (
+                                        <div className="text-xs text-gray-500">{r.username}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs font-mono text-gray-300">{r.domain}</td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                                        r.password_type === "plaintext" ? "bg-red-900/40 text-red-300 border-red-700/40" :
+                                        r.password_type === "md5"       ? "bg-orange-900/40 text-orange-300 border-orange-700/40" :
+                                        "bg-gray-700/40 text-gray-300 border-gray-600"
+                                      }`}>{r.password_type}{r.password_length ? ` (${r.password_length})` : ""}</span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[160px] truncate" title={r.source_name}>{r.source_name}</td>
+                                    <td className="px-4 py-2.5 text-xs text-gray-500">{r.breach_date ? new Date(r.breach_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded border ${sevBadge(r.severity)}`}>{r.severity?.toUpperCase()}</span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Pagination */}
+                          {credData.total > CRED_LIMIT && (
+                            <div className="flex items-center justify-between">
+                              <button disabled={credPage === 0}
+                                onClick={() => fetchCredentials(selectedMonitor.id, credPage - 1, credSev)}
+                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">← Prev</button>
+                              <span className="text-xs text-gray-400">{credPage * CRED_LIMIT + 1}–{Math.min((credPage+1)*CRED_LIMIT, credData.total)} of {credData.total.toLocaleString()}</span>
+                              <button disabled={(credPage+1)*CRED_LIMIT >= credData.total}
+                                onClick={() => fetchCredentials(selectedMonitor.id, credPage + 1, credSev)}
+                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">Next →</button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
-                  </div>
-                </div>
-              ))}
+                  )}
+
+                  {/* ── Threat intel tab ── */}
+                  {clientTab === "intel" && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <p className="text-sm text-gray-400">
+                          Live IOC feed matches for <strong className="text-white">{selectedMonitor.brand_name}</strong> domains and brand keywords.
+                        </p>
+                        {intelData && (
+                          <button onClick={() => fetchIntel(selectedMonitor.id)}
+                            className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
+                        )}
+                      </div>
+
+                      {loadingIntel ? (
+                        <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          Querying threat intelligence feed…
+                        </div>
+                      ) : !intelData ? null : intelData.total === 0 ? (
+                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                          <div className="text-3xl mb-2">✓</div>
+                          <div className="text-sm text-gray-300 font-medium">No threat intelligence hits</div>
+                          <div className="text-xs text-gray-500 mt-1">Brand keywords searched: {intelData.bases_searched.join(", ") || "none"}</div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Stats */}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="bg-orange-900/20 border border-orange-700/30 rounded-xl p-3 text-center">
+                              <div className="text-2xl font-bold text-orange-300">{intelData.total.toLocaleString()}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">Total IOC Hits</div>
+                            </div>
+                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
+                              <div className="text-xs text-gray-400 mb-1.5">By Threat Type</div>
+                              {Object.entries(intelData.by_threat_type).slice(0,4).map(([t, cnt]) => (
+                                <div key={t} className="flex justify-between text-xs">
+                                  <span className="text-gray-300 capitalize">{t}</span>
+                                  <span className="text-gray-400">{cnt}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
+                              <div className="text-xs text-gray-400 mb-1.5">By IOC Type</div>
+                              {Object.entries(intelData.by_ioc_type).slice(0,4).map(([t, cnt]) => (
+                                <div key={t} className="flex justify-between text-xs">
+                                  <span className="text-gray-300 capitalize">{t}</span>
+                                  <span className="text-gray-400">{cnt}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* IOC records table */}
+                          <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 z-10">
+                                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528]">
+                                  <th className="px-4 py-2.5 font-medium">Indicator</th>
+                                  <th className="px-4 py-2.5 font-medium">Type</th>
+                                  <th className="px-4 py-2.5 font-medium">Threat</th>
+                                  <th className="px-4 py-2.5 font-medium">Source</th>
+                                  <th className="px-4 py-2.5 font-medium">Risk</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {intelData.records.map((r, i) => {
+                                  const risk = parseFloat(String(r.risk_score));
+                                  return (
+                                    <tr key={i} className="hover:bg-white/[0.02]">
+                                      <td className="px-4 py-2.5">
+                                        <div className="text-xs font-mono text-blue-300 truncate max-w-[250px]" title={r.indicator}>{r.indicator}</div>
+                                      </td>
+                                      <td className="px-4 py-2.5">
+                                        <span className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">{r.indicator_type}</span>
+                                      </td>
+                                      <td className="px-4 py-2.5">
+                                        <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                                          r.threat_type === "c2" ? "bg-red-900/40 text-red-300 border-red-700/40" :
+                                          r.threat_type === "phishing" ? "bg-orange-900/40 text-orange-300 border-orange-700/40" :
+                                          r.threat_type === "malware" ? "bg-purple-900/40 text-purple-300 border-purple-700/40" :
+                                          "bg-gray-700/40 text-gray-300 border-gray-600"
+                                        } capitalize`}>{r.threat_type}</span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-400">{r.source}</td>
+                                      <td className="px-4 py-2.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-10 bg-white/10 rounded-full h-1.5">
+                                            <div className={`h-1.5 rounded-full ${risk >= 80 ? "bg-red-400" : risk >= 60 ? "bg-orange-400" : "bg-yellow-400"}`}
+                                              style={{ width: `${risk}%` }} />
+                                          </div>
+                                          <span className="text-xs text-gray-400">{Math.round(risk)}</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Add Brand Modal */}
-      {showAddBrandModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-md">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <ShieldCheckIcon />
-                Add Brand to Monitor
-              </h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Brand Name</label>
-                <input
-                  type="text"
-                  value={brandForm.name}
-                  onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })}
-                  placeholder="e.g., Safaricom"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Primary Domain</label>
-                <input
-                  type="text"
-                  value={brandForm.domain}
-                  onChange={(e) => setBrandForm({ ...brandForm, domain: e.target.value })}
-                  placeholder="e.g., safaricom.co.ke"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Additional Keywords (Optional)</label>
-                <textarea
-                  value={brandForm.keywords}
-                  onChange={(e) => setBrandForm({ ...brandForm, keywords: e.target.value })}
-                  placeholder="Enter related keywords, one per line"
-                  rows={3}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 resize-none"
-                />
+      {/* ── Alert Detail Drawer ── */}
+      {selectedAlert && (
+        <div className="fixed inset-0 z-50 flex" onClick={() => setSelectedAlert(null)}>
+          <div className="flex-1 bg-black/50" />
+          <div className="w-full max-w-md bg-[#0d1528] border-l border-white/10 overflow-y-auto flex flex-col shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex-shrink-0 p-5 border-b border-white/10">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${sevBadge(selectedAlert.severity)}`}>
+                      {selectedAlert.severity.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      {ALERT_TYPE_ICON[selectedAlert.alert_type] ?? "⚠"} {ALERT_TYPE_LABEL[selectedAlert.alert_type] ?? selectedAlert.alert_type}
+                    </span>
+                    {selectedAlert.acknowledged && (
+                      <span className="text-xs text-green-400 bg-green-900/20 border border-green-700/30 px-2 py-0.5 rounded">✓ Acknowledged</span>
+                    )}
+                  </div>
+                  <h2 className="text-sm font-bold text-white leading-snug">{selectedAlert.title}</h2>
+                </div>
+                <button onClick={() => setSelectedAlert(null)}
+                  className="flex-shrink-0 text-gray-500 hover:text-white text-xl leading-none mt-0.5">✕</button>
               </div>
             </div>
-            <div className="p-6 border-t border-white/10 flex gap-3">
-              <button
-                onClick={() => setShowAddBrandModal(false)}
-                className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl font-medium transition-colors"
-              >
-                Cancel
+
+            {/* Body */}
+            <div className="flex-1 p-5 space-y-4">
+              {/* Domain */}
+              {selectedAlert.domain && (
+                <div className="bg-white/5 rounded-xl p-3.5">
+                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">Domain / Indicator</div>
+                  <div className="font-mono text-sm text-blue-300 break-all">{selectedAlert.domain}</div>
+                  <div className="flex gap-2 mt-2">
+                    <a href={`https://${selectedAlert.domain}`} target="_blank" rel="noreferrer"
+                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">Visit ↗</a>
+                    <a href={`https://who.is/whois/${selectedAlert.domain}`} target="_blank" rel="noreferrer"
+                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">WHOIS ↗</a>
+                    <a href={`https://urlscan.io/search/#domain:${selectedAlert.domain}`} target="_blank" rel="noreferrer"
+                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">Scan ↗</a>
+                  </div>
+                </div>
+              )}
+
+              {/* Similarity */}
+              {selectedAlert.similarity != null && selectedAlert.similarity > 0 && (
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-1.5">Brand Similarity</div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-white/5 rounded-full h-2.5">
+                      <div className={`h-2.5 rounded-full ${selectedAlert.similarity >= 80 ? "bg-red-500" : selectedAlert.similarity >= 60 ? "bg-orange-500" : "bg-yellow-500"}`}
+                        style={{ width: `${selectedAlert.similarity}%` }} />
+                    </div>
+                    <span className={`text-lg font-bold flex-shrink-0 ${selectedAlert.similarity >= 80 ? "text-red-300" : "text-orange-300"}`}>
+                      {selectedAlert.similarity}%
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Evidence details */}
+              {selectedAlert.details && Object.keys(selectedAlert.details).length > 0 && (
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Evidence</div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.entries(selectedAlert.details)
+                      .filter(([,v]) => v !== null && v !== undefined && v !== "" && !Array.isArray(v) && typeof v !== "object")
+                      .slice(0,8)
+                      .map(([k, v]) => (
+                        <div key={k} className="bg-white/5 rounded p-2">
+                          <div className="text-xs text-gray-500 capitalize">{k.replace(/_/g, " ")}</div>
+                          <div className="text-xs text-gray-200 font-mono mt-0.5 truncate" title={String(v)}>{String(v).slice(0,50)}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Detected */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white/5 rounded p-2.5">
+                  <div className="text-xs text-gray-500">Detected</div>
+                  <div className="text-xs text-gray-200 mt-0.5">{fmtDate(selectedAlert.detected_at)}</div>
+                </div>
+                <div className="bg-white/5 rounded p-2.5">
+                  <div className="text-xs text-gray-500">Brand</div>
+                  <div className="text-xs text-gray-200 mt-0.5 truncate">{selectedAlert.brand_name ?? selectedMonitor?.brand_name ?? "—"}</div>
+                </div>
+              </div>
+
+              {/* Recommended actions */}
+              <div className="bg-orange-900/10 border border-orange-700/20 rounded-xl p-4">
+                <div className="text-xs font-semibold text-orange-300 uppercase tracking-wider mb-2">Recommended Actions</div>
+                <ul className="space-y-1.5 text-xs text-gray-300">
+                  {(selectedAlert.alert_type === "typosquat_detected" || selectedAlert.alert_type === "domain_registered") && (<>
+                    <li>• Submit takedown to registrar via ICANN UDRP process</li>
+                    <li>• File abuse report with hosting provider</li>
+                    <li>• Add to DNS blocklist and WAF rules immediately</li>
+                    <li>• Alert customers via official channels</li>
+                    <li>• Report to national CERT and AfriNIC abuse team</li>
+                  </>)}
+                  {selectedAlert.alert_type === "credential_leak" && (<>
+                    <li>• Force immediate password reset for all accounts</li>
+                    <li>• Enable MFA on all corporate systems</li>
+                    <li>• Notify affected users under POPIA/GDPR obligations</li>
+                    <li>• Review access logs for suspicious activity</li>
+                  </>)}
+                  {selectedAlert.alert_type === "ssl_certificate" && (<>
+                    <li>• Investigate the domain for active phishing content</li>
+                    <li>• Report to Certificate Authority for revocation</li>
+                    <li>• Submit to Google Safe Browsing and Microsoft SmartScreen</li>
+                  </>)}
+                  {(selectedAlert.alert_type === "ti_hit" || selectedAlert.alert_type === "ioc_match") && (<>
+                    <li>• Block indicator at DNS resolver and perimeter firewall</li>
+                    <li>• Check for internal connections to this indicator</li>
+                    <li>• Alert customers not to interact with this domain</li>
+                  </>)}
+                  {selectedAlert.alert_type === "brand_mention" && (<>
+                    <li>• Review content for leaked data or attack planning</li>
+                    <li>• Engage incident response if sensitive data is exposed</li>
+                    <li>• Notify relevant authorities</li>
+                  </>)}
+                </ul>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 p-4 border-t border-white/10 flex gap-2 flex-wrap">
+              {!selectedAlert.acknowledged && (
+                <button onClick={() => acknowledgeAlert(selectedAlert.id)}
+                  className="flex-1 px-4 py-2 bg-green-900/20 hover:bg-green-900/30 text-green-400 border border-green-700/30 rounded-lg text-xs font-medium transition-colors">
+                  ✓ Acknowledge
+                </button>
+              )}
+              <a href={`https://www.virustotal.com/gui/domain/${selectedAlert.domain}`} target="_blank" rel="noreferrer"
+                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-lg text-xs transition-colors">
+                VT ↗
+              </a>
+              <button onClick={() => setSelectedAlert(null)}
+                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 rounded-lg text-xs transition-colors">
+                Close
               </button>
-              <button
-                onClick={handleAddBrand}
-                className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-medium transition-colors"
-              >
-                Add Brand
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Monitor Modal ── */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-[#0d1528] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Add Brand Monitor</h3>
+              <button onClick={() => setShowAdd(false)} className="text-gray-500 hover:text-white text-lg">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Brand Name *</label>
+                <input type="text" value={addForm.name} onChange={e => setAddForm(f => ({...f, name: e.target.value}))}
+                  placeholder="e.g. Equity Bank Kenya"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Primary Domain *</label>
+                <input type="text" value={addForm.domain} onChange={e => setAddForm(f => ({...f, domain: e.target.value}))}
+                  placeholder="e.g. equitybank.co.ke"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Keywords (comma-separated)</label>
+                <input type="text" value={addForm.keywords} onChange={e => setAddForm(f => ({...f, keywords: e.target.value}))}
+                  placeholder="e.g. equity, equitybank, eazzy"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+              </div>
+            </div>
+            <div className="p-5 border-t border-white/10 flex gap-3 justify-end">
+              <button onClick={() => setShowAdd(false)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-lg text-sm transition-colors">Cancel</button>
+              <button onClick={handleAddMonitor} disabled={adding || !addForm.name || !addForm.domain}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                {adding && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {adding ? "Adding…" : "Add Monitor"}
               </button>
             </div>
           </div>

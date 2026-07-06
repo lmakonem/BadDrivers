@@ -1,6 +1,6 @@
 import { getAccessToken, refreshAccessToken, clearTokens } from "./auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.36.50:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export interface Indicator {
   id: string;

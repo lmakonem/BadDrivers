@@ -35,11 +35,7 @@ export function DemoSection() {
     setError("");
 
     try {
-      const apiUrl = typeof window !== "undefined" 
-        ? `http://${window.location.hostname}:8000`
-        : "";
-      
-      const response = await fetch(`${apiUrl}/api/v1/forms/demo`, {
+      const response = await fetch(`/api/v1/forms/demo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),

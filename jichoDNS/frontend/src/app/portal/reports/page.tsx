@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { apiFetch, apiFetchJSON } from "@/lib/fetch";
+import { apiFetch, apiFetchJSONOrThrow, ApiError } from "@/lib/fetch";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,6 +133,7 @@ export default function ReportsPage() {
   const [samples, setSamples] = useState<Report[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ReportFilter>("all");
   const [page, setPage] = useState(1);
   const [showSamples, setShowSamples] = useState(false);
@@ -157,21 +158,37 @@ export default function ReportsPage() {
   // ── Fetch reports ─────────────────────────────────────────────────────
   const fetchReports = useCallback(async () => {
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams();
     params.set("page", page.toString());
     params.set("page_size", "20");
     if (filter !== "all") params.set("report_type", filter);
 
-    const data = await apiFetchJSON<ReportListResponse>(`/api/v1/reports?${params}`);
-    if (data) { setReports(data.reports); setTotal(data.total); }
-    else { setReports([]); setTotal(0); }
-    setLoading(false);
+    try {
+      const data = await apiFetchJSONOrThrow<ReportListResponse>(`/api/v1/reports?${params}`);
+      setReports(data.reports);
+      setTotal(data.total);
+    } catch (err) {
+      setReports([]);
+      setTotal(0);
+      setError(
+        err instanceof ApiError
+          ? `Could not load reports: ${err.message}`
+          : "Could not load reports. Please retry.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [page, filter]);
 
   // ── Fetch samples ─────────────────────────────────────────────────────
   const fetchSamples = useCallback(async () => {
-    const data = await apiFetchJSON<SamplesResponse>("/api/v1/reports/samples");
-    if (data) setSamples(data.reports);
+    try {
+      const data = await apiFetchJSONOrThrow<SamplesResponse>("/api/v1/reports/samples");
+      setSamples(data.reports);
+    } catch {
+      setSamples([]); // samples are non-critical; failure is silent
+    }
   }, []);
 
   useEffect(() => { fetchReports(); fetchSamples(); }, [fetchReports, fetchSamples]);
@@ -233,15 +250,44 @@ export default function ReportsPage() {
   };
 
   // ── Print / PDF ───────────────────────────────────────────────────────
+  // SECURITY: never window.open() an untrusted-HTML blob — a blob: URL inherits
+  // this app's origin, so any script in the report would run same-origin and can
+  // read the JWTs in localStorage. Instead we render into a hidden iframe that is
+  // sandboxed WITHOUT allow-scripts (report JS cannot execute) and print it from
+  // the parent. `allow-same-origin` lets the parent call print(); `allow-modals`
+  // permits the print dialog.
   const handlePrint = (report: Report) => {
     (async () => {
       const res = await apiFetch(`/api/v1/reports/${report.id}/html`);
       if (!res.ok) return;
       const html = await res.text();
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("sandbox", "allow-same-origin allow-modals");
+      iframe.setAttribute("aria-hidden", "true");
+      iframe.title = "Report print frame";
+      // Off-screen but rendered (0x0 / display:none can print blank in some browsers).
+      Object.assign(iframe.style, {
+        position: "fixed",
+        left: "-10000px",
+        top: "0",
+        width: "816px",
+        height: "1056px",
+        border: "0",
+      });
+      iframe.srcdoc = html;
+      iframe.onload = () => {
+        // Let layout settle before invoking the print dialog.
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } finally {
+            setTimeout(() => iframe.remove(), 1000);
+          }
+        }, 50);
+      };
+      document.body.appendChild(iframe);
     })();
   };
 
@@ -265,8 +311,9 @@ export default function ReportsPage() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4 pb-8">
+      {/* Sticky header + tab bar + filters */}
+      <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Threat Reports</h1>
@@ -327,6 +374,14 @@ export default function ReportsPage() {
               {label}
             </button>
           ))}
+        </div>
+      )}
+
+      </div>{/* end sticky header */}
+
+      {error && !showSamples && (
+        <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+          {error}
         </div>
       )}
 

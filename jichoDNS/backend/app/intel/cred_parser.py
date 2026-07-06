@@ -180,7 +180,9 @@ async def store_credentials(
         else:
             cred["vip_match"] = False
 
-        doc_id = f"cred:{hashlib.md5(f'{email}:{cred[\"source\"]}'.encode()).hexdigest()}"
+        source_val = cred.get("source", "")
+        raw_id = f"{email}:{source_val}"
+        doc_id = f"cred:{hashlib.md5(raw_id.encode(), usedforsecurity=False).hexdigest()}"
         try:
             await es_client.index(index=CRED_INDEX, id=doc_id, document=cred)
             stored += 1

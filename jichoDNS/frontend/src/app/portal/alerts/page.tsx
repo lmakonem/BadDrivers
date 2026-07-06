@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/fetch";
+
+// Sample/mock alerts are demo-only and OFF by default so users never act on
+// fabricated intel. Set NEXT_PUBLIC_ENABLE_SAMPLE_ALERTS=true to show them.
+const SHOW_SAMPLE_ALERTS = process.env.NEXT_PUBLIC_ENABLE_SAMPLE_ALERTS === "true";
 
 // Types
 interface Alert {
@@ -250,41 +254,47 @@ type FilterStatus = "all" | Alert["status"];
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSample, setIsSample] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<FilterType>("all");
   const [severityFilter, setSeverityFilter] = useState<FilterSeverity>("all");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const fetchAlerts = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await apiFetch(`/api/v1/alerts/feed?limit=100`);
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.items || [];
-        if (items.length > 0) {
-          setAlerts(items.map((a: Record<string, unknown>) => ({
-            id: String(a.id || Math.random()),
-            title: String(a.title || ""),
-            description: String(a.description || ""),
-            type: String(a.type || "malware") as Alert["type"],
-            severity: String(a.severity || "medium") as Alert["severity"],
-            status: "new" as Alert["status"],
-            source: String(a.source || ""),
-            indicator: String(a.indicator || ""),
-            timestamp: String(a.timestamp || new Date().toISOString()),
-          })));
-        } else {
-          // API returned empty — use mock data as demo
-          setAlerts(mockAlerts);
-        }
+      if (!res.ok) throw new Error(`Failed to load alerts (${res.status})`);
+      const data = await res.json();
+      const items = (data.items || []) as Record<string, unknown>[];
+      if (items.length > 0) {
+        setIsSample(false);
+        setAlerts(items.map((a, i) => ({
+          id: String(a.id ?? `alert-${i}`),
+          title: String(a.title || ""),
+          description: String(a.description || ""),
+          type: String(a.type || "malware") as Alert["type"],
+          severity: String(a.severity || "medium") as Alert["severity"],
+          status: String(a.status || "new") as Alert["status"],
+          source: String(a.source || ""),
+          indicator: a.indicator ? String(a.indicator) : undefined,
+          timestamp: String(a.timestamp || new Date().toISOString()),
+        })));
       } else {
-        setAlerts(mockAlerts);
+        // No real alerts. Show sample data ONLY behind the explicit flag,
+        // otherwise show a genuine empty state (never fabricate intel).
+        setIsSample(SHOW_SAMPLE_ALERTS);
+        setAlerts(SHOW_SAMPLE_ALERTS ? mockAlerts : []);
       }
-    } catch (error) {
-      console.error("Failed to fetch alerts:", error);
-      setAlerts(mockAlerts);
+    } catch (err) {
+      console.error("Failed to fetch alerts:", err);
+      setError(err instanceof Error ? err.message : "Failed to load alerts");
+      setIsSample(SHOW_SAMPLE_ALERTS);
+      setAlerts(SHOW_SAMPLE_ALERTS ? mockAlerts : []);
     } finally {
       setLoading(false);
     }
@@ -295,6 +305,47 @@ export default function AlertsPage() {
     const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAlerts]);
+
+  // Dialog a11y: focus into the dialog, trap Tab, close on Escape, restore focus.
+  useEffect(() => {
+    if (!selectedAlert) return;
+    const dialog = dialogRef.current;
+    const prevFocus = document.activeElement as HTMLElement | null;
+
+    const focusable = () =>
+      dialog
+        ? Array.from(
+            dialog.querySelectorAll<HTMLElement>(
+              'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => el.offsetParent !== null)
+        : [];
+
+    (focusable()[0] ?? dialog)?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedAlert(null);
+        return;
+      }
+      if (e.key === "Tab") {
+        const items = focusable();
+        if (items.length === 0) { e.preventDefault(); return; }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement as HTMLElement;
+        if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      prevFocus?.focus?.();
+    };
+  }, [selectedAlert]);
 
   const filteredAlerts = alerts.filter((alert) => {
     const matchesSearch = 
@@ -307,14 +358,32 @@ export default function AlertsPage() {
     return matchesSearch && matchesType && matchesSeverity && matchesStatus;
   });
 
-  const handleStatusChange = (alertId: string, newStatus: Alert["status"]) => {
-    setAlerts(alerts.map((a) =>
-      a.id === alertId
-        ? { ...a, status: newStatus, updatedAt: new Date().toISOString() }
-        : a
+  const handleStatusChange = async (alertId: string, newStatus: Alert["status"]) => {
+    const now = new Date().toISOString();
+    const prev = alerts;
+    // Optimistic update
+    setAlerts((cur) => cur.map((a) =>
+      a.id === alertId ? { ...a, status: newStatus, updatedAt: now } : a,
     ));
-    if (selectedAlert?.id === alertId) {
-      setSelectedAlert({ ...selectedAlert, status: newStatus, updatedAt: new Date().toISOString() });
+    setSelectedAlert((cur) =>
+      cur && cur.id === alertId ? { ...cur, status: newStatus, updatedAt: now } : cur,
+    );
+    // Sample/demo alerts aren't real records — don't try to persist them.
+    if (isSample) return;
+    try {
+      const res = await apiFetch(`/api/v1/alerts/${encodeURIComponent(alertId)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+    } catch {
+      // Revert on failure and surface the error.
+      setAlerts(prev);
+      setSelectedAlert((cur) =>
+        cur && cur.id === alertId ? (prev.find((a) => a.id === alertId) ?? cur) : cur,
+      );
+      setError("Could not save alert status. Please retry.");
     }
   };
 
@@ -341,8 +410,9 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4 pb-8">
+      {/* Sticky page header */}
+      <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">All Alerts</h1>
@@ -399,9 +469,23 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {/* Search and filters */}
+      </div>{/* end sticky header */}
+
+      {error && (
+        <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+      {isSample && alerts.length > 0 && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm">
+          Showing sample data — no live alerts are available.
+        </div>
+      )}
+
+      {/* Search/filter bar + alerts list */}
       <div className="bg-card-dark border border-white/10 rounded-2xl">
-        <div className="p-4 border-b border-white/10">
+        {/* Sticky filter bar inside the card */}
+        <div className="sticky top-[120px] z-10 bg-card-dark rounded-t-2xl p-4 border-b border-white/10">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="relative flex-1">
@@ -514,8 +598,7 @@ export default function AlertsPage() {
             filteredAlerts.map((alert) => (
               <div
                 key={alert.id}
-                onClick={() => setSelectedAlert(alert)}
-                className="p-4 hover:bg-white/[0.02] cursor-pointer transition-colors"
+                className="p-4 hover:bg-white/[0.02] transition-colors"
               >
                 <div className="flex items-start gap-4">
                   {/* Severity indicator */}
@@ -524,7 +607,12 @@ export default function AlertsPage() {
                   {/* Main content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAlert(alert)}
+                        aria-label={`View alert: ${alert.title}`}
+                        className="flex-1 min-w-0 text-left cursor-pointer rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      >
                         <div className="flex items-center flex-wrap gap-2 mb-1">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium border ${typeColors[alert.type]}`}>
                             {typeLabels[alert.type]}
@@ -563,7 +651,7 @@ export default function AlertsPage() {
                             </>
                           )}
                         </div>
-                      </div>
+                      </button>
 
                       {/* Quick actions */}
                       <div className="flex items-center gap-2">
@@ -597,8 +685,18 @@ export default function AlertsPage() {
 
       {/* Alert details modal */}
       {selectedAlert && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedAlert(null)}
+        >
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alert-dialog-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none">
             <div className="p-6 border-b border-white/10">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -617,7 +715,7 @@ export default function AlertsPage() {
                   <CloseIcon />
                 </button>
               </div>
-              <h2 className="text-xl font-semibold text-white mt-4">{selectedAlert.title}</h2>
+              <h2 id="alert-dialog-title" className="text-xl font-semibold text-white mt-4">{selectedAlert.title}</h2>
             </div>
 
             <div className="p-6 space-y-6">

@@ -127,17 +127,28 @@ async def stripe_webhook(
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
 
-    if settings.STRIPE_WEBHOOK_SECRET:
-        try:
-            event = stripe.Webhook.construct_event(
-                payload, sig, settings.STRIPE_WEBHOOK_SECRET
-            )
-        except stripe.error.SignatureVerificationError:
-            raise HTTPException(400, "Invalid webhook signature")
-    else:
-        # No webhook secret configured — parse payload directly (dev/test mode)
-        import json
-        event = json.loads(payload)
+    # Fail CLOSED: if no signing secret is configured we cannot verify the
+    # event came from Stripe, so we must reject rather than trust an unsigned
+    # payload (an unsigned event could forge a subscription upgrade).
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.error(
+            "Stripe webhook received but STRIPE_WEBHOOK_SECRET is not configured "
+            "— rejecting the event."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook processing is not configured.",
+        )
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        # Malformed / non-JSON payload.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid webhook signature")
 
     event_type = event.get("type", "")
     data = event.get("data", {}).get("object", {})

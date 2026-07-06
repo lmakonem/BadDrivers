@@ -200,7 +200,9 @@ def _generate_password(pw_type: str, rng=None) -> tuple:
             pw = r.choice(WORD_PARTS) + r.choice(NUMBERS)
             if r.random() < 0.3:
                 pw = pw.capitalize()
-        return pw, pw  # plaintext: password visible as-is
+        # password_type="plaintext" records that the breach exposed it in clear,
+        # but we persist ONLY the SHA-256 digest — never the plaintext.
+        return hashlib.sha256(pw.encode()).hexdigest(), pw
 
     # For hash types, generate a password then hash it
     raw_pw = r.choice(WORD_PARTS) + r.choice(NUMBERS)
@@ -294,7 +296,6 @@ def generate_breach_credentials(breach: Dict[str, Any], count: int = 100) -> Lis
             "email": email.lower(),
             "username": email.split("@")[0].lower(),
             "domain": email.split("@")[1].lower() if "@" in email else domain,
-            "password": pw_plain,
             "password_hash": pw_hash,
             "password_type": pw_type,
             "password_length": len(pw_plain),
@@ -375,7 +376,6 @@ async def ingest_credentials(es_client, credentials: List[Dict[str, Any]]) -> Di
                             "email": {"type": "keyword"},
                             "username": {"type": "keyword"},
                             "domain": {"type": "keyword"},
-                            "password": {"type": "keyword"},
                             "password_hash": {"type": "keyword"},
                             "password_type": {"type": "keyword"},
                             "password_length": {"type": "integer"},

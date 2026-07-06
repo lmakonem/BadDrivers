@@ -39,12 +39,18 @@ interface Watchlist {
 
 interface CredItem {
   email: string;
+  username?: string;
   domain?: string;
+  password?: string;
+  password_hash?: string;
+  password_type?: string;
+  password_length?: number;
   source: string;
   source_name?: string;
   severity?: string;
   discovered_at?: string;
-  country_code?: string;
+  breach_date?: string;
+  country?: string;
   tags?: string[];
 }
 
@@ -192,14 +198,22 @@ export default function DarkWebPage() {
     } catch { setCrawling(false); }
   };
 
-  // Auto-load on mount
-  useEffect(() => { fetchStats(); fetchWatchData(); }, [fetchStats, fetchWatchData]);
+  // Auto-load ALL data on mount so tab counts are accurate
+  useEffect(() => {
+    fetchStats();
+    fetchWatchData();
+    fetchCredentials();
+    fetchCrawlResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Refetch feed when page/filters change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchFeed(); }, [page, filterType, filterSource]);
+  // Refetch tab data when switching tabs with pagination
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (tab === "credentials") fetchCredentials(); }, [tab, credPage]);
+  useEffect(() => { if (tab === "credentials" && credPage > 1) fetchCredentials(); }, [credPage]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (tab === "crawl") fetchCrawlResults(); }, [tab, crawlPage]);
+  useEffect(() => { if (tab === "crawl" && crawlPage > 1) fetchCrawlResults(); }, [crawlPage]);
 
   // ── Add watch term ─────────────────────────────────────────────────────
 
@@ -242,8 +256,9 @@ export default function DarkWebPage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4 pb-8">
+      {/* Header — sticky so it stays visible while results scroll */}
+      <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Dark Web Monitoring</h1>
@@ -273,8 +288,8 @@ export default function DarkWebPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-white/10">
+      {/* Tab bar — inside the sticky container so it scrolls with header */}
+      <div className="-mx-4 px-4 lg:-mx-8 lg:px-8 flex gap-1 border-b border-white/10 overflow-x-auto">
         {([
           { id: "feed" as Tab, label: "Threat Feed", ct: total },
           { id: "crawl" as Tab, label: "Dark Web Crawl", ct: crawlTotal },
@@ -283,11 +298,12 @@ export default function DarkWebPage() {
           { id: "monitoring" as Tab, label: "Monitored Terms", ct: allTerms.length },
         ]).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors rounded-t-lg ${tab === t.id ? "bg-primary/10 text-primary border-b-2 border-primary" : "text-gray-400 hover:text-white"}`}>
+            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors rounded-t-lg flex-shrink-0 ${tab === t.id ? "bg-primary/10 text-primary border-b-2 border-primary" : "text-gray-400 hover:text-white"}`}>
             {t.label} <span className="ml-1 px-1.5 py-0.5 rounded text-xs bg-white/10">{t.ct > 0 ? t.ct.toLocaleString() : "0"}</span>
           </button>
         ))}
       </div>
+      </div>{/* end sticky header */}
 
       {/* ═══ FEED TAB ═══ */}
       {tab === "feed" && (
@@ -322,31 +338,35 @@ export default function DarkWebPage() {
             <div className="text-center py-16 text-gray-400"><p>No dark web threats found matching your filters.</p></div>
           ) : (
             <div className="bg-card-dark border border-white/10 rounded-2xl overflow-hidden">
-              <table className="w-full"><thead>
-                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-white/[0.02]">
-                  <th className="px-4 py-3 font-medium">Indicator</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
-                  <th className="px-4 py-3 font-medium">Source</th>
-                  <th className="px-4 py-3 font-medium">Country</th>
-                  <th className="px-4 py-3 font-medium">Risk</th>
-                  <th className="px-4 py-3 font-medium">Date</th>
-                </tr></thead>
-                <tbody className="divide-y divide-white/5">
-                  {items.map((it, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02]">
-                      <td className="px-4 py-2.5"><p className="text-white text-sm font-mono truncate max-w-sm" title={it.indicator}>{it.indicator}</p>
-                        {it.misp_event_id ? <span className="text-xs text-blue-400">MISP #{it.misp_event_id}</span> : null}</td>
-                      <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded font-medium ${tc(it.threat_type)}`}>{it.threat_type}</span></td>
-                      <td className="px-4 py-2.5 text-sm text-gray-400">{it.source}</td>
-                      <td className="px-4 py-2.5 text-sm text-gray-400">{it.country_code || "—"}</td>
-                      <td className="px-4 py-2.5"><div className="flex items-center gap-1"><div className="w-10 h-1.5 bg-white/10 rounded-full overflow-hidden"><div className={`h-full rounded-full ${it.risk_score >= 80 ? "bg-red-500" : it.risk_score >= 60 ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${it.risk_score}%` }} /></div><span className="text-xs text-gray-400">{it.risk_score}</span></div></td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500">{it.created_at ? new Date(it.created_at).toLocaleDateString() : "—"}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0f1629]">
+                      <th className="px-4 py-3 font-medium">Indicator</th>
+                      <th className="px-4 py-3 font-medium">Type</th>
+                      <th className="px-4 py-3 font-medium">Source</th>
+                      <th className="px-4 py-3 font-medium">Country</th>
+                      <th className="px-4 py-3 font-medium">Risk</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {items.map((it, i) => (
+                      <tr key={i} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-2.5"><p className="text-white text-sm font-mono truncate max-w-sm" title={it.indicator}>{it.indicator}</p>
+                          {it.misp_event_id ? <span className="text-xs text-blue-400">MISP #{it.misp_event_id}</span> : null}</td>
+                        <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded font-medium ${tc(it.threat_type)}`}>{it.threat_type}</span></td>
+                        <td className="px-4 py-2.5 text-sm text-gray-400">{it.source}</td>
+                        <td className="px-4 py-2.5 text-sm text-gray-400">{it.country_code || "—"}</td>
+                        <td className="px-4 py-2.5"><div className="flex items-center gap-1"><div className="w-10 h-1.5 bg-white/10 rounded-full overflow-hidden"><div className={`h-full rounded-full ${it.risk_score >= 80 ? "bg-red-500" : it.risk_score >= 60 ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${it.risk_score}%` }} /></div><span className="text-xs text-gray-400">{it.risk_score}</span></div></td>
+                        <td className="px-4 py-2.5 text-xs text-gray-500">{it.created_at ? new Date(it.created_at).toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-card-dark sticky bottom-0">
                   <p className="text-sm text-gray-400">Page {page}/{totalPages} ({total.toLocaleString()} total)</p>
                   <div className="flex gap-2">
                     <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="px-3 py-1 text-sm bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white rounded-lg">Prev</button>
@@ -439,29 +459,54 @@ export default function DarkWebPage() {
             </div>
           ) : (
             <div className="bg-card-dark border border-white/10 rounded-2xl overflow-hidden">
-              <table className="w-full"><thead>
-                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-white/[0.02]">
-                  <th className="px-4 py-3 font-medium">Email / Indicator</th>
-                  <th className="px-4 py-3 font-medium">Source</th>
-                  <th className="px-4 py-3 font-medium">Severity</th>
-                  <th className="px-4 py-3 font-medium">Country</th>
-                  <th className="px-4 py-3 font-medium">Discovered</th>
-                </tr></thead>
-                <tbody className="divide-y divide-white/5">
-                  {creds.map((c, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02]">
-                      <td className="px-4 py-2.5"><p className="text-white text-sm font-mono truncate max-w-sm">{c.email}</p>
-                        {c.domain ? <p className="text-xs text-gray-500">{c.domain}</p> : null}</td>
-                      <td className="px-4 py-2.5 text-sm text-gray-400">{c.source_name || c.source}</td>
-                      <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded ${c.severity === "critical" ? "bg-red-500/20 text-red-400" : c.severity === "high" ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}`}>{c.severity || "medium"}</span></td>
-                      <td className="px-4 py-2.5 text-sm text-gray-400">{c.country_code || "—"}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500">{c.discovered_at ? new Date(c.discovered_at).toLocaleDateString() : "—"}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0f1629]">
+                      <th className="px-4 py-3 font-medium">Email</th>
+                      <th className="px-4 py-3 font-medium">Password</th>
+                      <th className="px-4 py-3 font-medium">Type</th>
+                      <th className="px-4 py-3 font-medium">Breach</th>
+                      <th className="px-4 py-3 font-medium">Country</th>
+                      <th className="px-4 py-3 font-medium">Severity</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {creds.map((c, i) => (
+                      <tr key={i} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-2.5">
+                          <p className="text-white text-sm font-mono truncate max-w-[220px]" title={c.email}>{c.email}</p>
+                          {c.domain ? <p className="text-xs text-gray-500">{c.domain}</p> : null}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {c.password ? (
+                            <code className={`text-sm font-mono px-2 py-0.5 rounded ${c.password_type === "plaintext" ? "bg-red-500/20 text-red-300" : "bg-gray-500/20 text-gray-300"}`} title={c.password_hash || ""}>
+                              {c.password_type === "plaintext" ? c.password : c.password.length > 20 ? c.password.slice(0, 20) + "..." : c.password}
+                            </code>
+                          ) : (
+                            <span className="text-xs text-gray-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            c.password_type === "plaintext" ? "bg-red-500/20 text-red-400" :
+                            c.password_type === "md5" ? "bg-orange-500/20 text-orange-400" :
+                            c.password_type === "sha256" ? "bg-yellow-500/20 text-yellow-400" :
+                            "bg-gray-500/20 text-gray-400"
+                          }`}>{c.password_type || "unknown"}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-sm text-gray-400 truncate max-w-[150px]" title={c.source_name || c.source}>{c.source_name || c.source}</td>
+                        <td className="px-4 py-2.5 text-sm text-gray-400">{c.country || "—"}</td>
+                        <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded ${c.severity === "critical" ? "bg-red-500/20 text-red-400" : c.severity === "high" ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}`}>{c.severity || "medium"}</span></td>
+                        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{c.breach_date ? new Date(c.breach_date).toLocaleDateString() : c.discovered_at ? new Date(c.discovered_at).toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {credPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-card-dark sticky bottom-0">
                   <p className="text-sm text-gray-400">Page {credPage}/{credPages} ({credTotal.toLocaleString()})</p>
                   <div className="flex gap-2">
                     <button onClick={() => setCredPage(Math.max(1, credPage - 1))} disabled={credPage <= 1} className="px-3 py-1 text-sm bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white rounded-lg">Prev</button>

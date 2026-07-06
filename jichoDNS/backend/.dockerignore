@@ -1,0 +1,31 @@
+# Keep secrets, VCS, local envs, and caches OUT of the build context / image.
+# The Dockerfile does `COPY . .`, so without this file .env, .git, and any
+# local credentials would be baked into the image layers.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+credentials/
+*.pem
+*.key
+vault_password
+.vault_password
+
+# Python caches / local virtualenvs
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-test/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
