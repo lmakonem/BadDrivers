@@ -41,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${sora.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100`}
+        className={`${sora.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100 overflow-x-hidden`}
       >
         <Providers>{children}</Providers>
       </body>
