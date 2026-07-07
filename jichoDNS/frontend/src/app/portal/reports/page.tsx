@@ -44,19 +44,24 @@ const reportTypeLabels: Record<string, string> = {
   dark_web_exposure: "Dark Web",
 };
 
+// Report *type* is a non-semantic category — render every type as one neutral
+// slate chip (no blue/purple/red rainbow). Severity below keeps its meaning.
+const CATEGORY_CHIP = "bg-[#152032] text-slate-300 border-[#1E2A3D]";
 const reportTypeColors: Record<string, string> = {
-  threat_intelligence: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  incident_summary: "bg-red-500/20 text-red-400 border-red-500/30",
-  executive_briefing: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  ioc_analysis: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-  dark_web_exposure: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  threat_intelligence: CATEGORY_CHIP,
+  incident_summary: CATEGORY_CHIP,
+  executive_briefing: CATEGORY_CHIP,
+  ioc_analysis: CATEGORY_CHIP,
+  dark_web_exposure: CATEGORY_CHIP,
 };
 
+// Severity IS semantic — keep the threat scale, but low reads as neutral slate
+// so it never collides with the green brand accent.
 const severityColors: Record<string, string> = {
   critical: "text-red-400",
   high: "text-orange-400",
   medium: "text-yellow-400",
-  low: "text-green-400",
+  low: "text-slate-400",
 };
 
 // ── Icons ────────────────────────────────────────────────────────────────────
@@ -298,11 +303,11 @@ export default function ReportsPage() {
   // ── Loading ───────────────────────────────────────────────────────────
   if (loading && reports.length === 0 && samples.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div className="h-10 w-48 bg-card-dark rounded animate-pulse" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-64 bg-card-dark rounded-2xl animate-pulse" />
+            <div key={i} className="h-64 bg-card-dark border border-[#1E2A3D] rounded-[14px] animate-pulse" />
           ))}
         </div>
       </div>
@@ -311,7 +316,7 @@ export default function ReportsPage() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 pb-8">
+    <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6 space-y-4">
       {/* Sticky header + tab bar + filters */}
       <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -324,7 +329,7 @@ export default function ReportsPage() {
         </div>
         <button
           onClick={() => setShowGenerateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-body-dark rounded-[10px] font-medium transition-colors"
         >
           <SparklesIcon />
           Generate Report
@@ -332,11 +337,11 @@ export default function ReportsPage() {
       </div>
 
       {/* Tab bar: My Reports / Sample Reports */}
-      <div className="flex gap-1 bg-card-dark rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-card-dark border border-[#1E2A3D] rounded-xl p-1 w-fit">
         <button
           onClick={() => setShowSamples(false)}
           className={`px-5 py-2 rounded-lg font-medium text-sm transition-colors ${
-            !showSamples ? "bg-primary text-white" : "text-gray-400 hover:text-white"
+            !showSamples ? "bg-primary/15 text-primary" : "text-slate-400 hover:text-white"
           }`}
         >
           My Reports {total > 0 && `(${total})`}
@@ -344,7 +349,7 @@ export default function ReportsPage() {
         <button
           onClick={() => setShowSamples(true)}
           className={`px-5 py-2 rounded-lg font-medium text-sm transition-colors ${
-            showSamples ? "bg-primary text-white" : "text-gray-400 hover:text-white"
+            showSamples ? "bg-primary/15 text-primary" : "text-slate-400 hover:text-white"
           }`}
         >
           Sample Reports ({samples.length})
@@ -365,10 +370,10 @@ export default function ReportsPage() {
             <button
               key={value}
               onClick={() => { setFilter(value); setPage(1); }}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm border ${
                 filter === value
-                  ? "bg-primary text-white"
-                  : "bg-card-dark text-gray-400 hover:text-white hover:bg-card-light"
+                  ? "bg-primary/10 text-primary border-primary/25"
+                  : "bg-card-dark text-slate-400 border-[#1E2A3D] hover:text-white hover:border-primary/30"
               }`}
             >
               {label}
@@ -391,7 +396,7 @@ export default function ReportsPage() {
           {displayReports.map((report) => (
             <div
               key={report.id}
-              className="bg-card-dark border border-white/10 rounded-2xl overflow-hidden hover:border-white/20 transition-all group cursor-pointer"
+              className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden hover:border-primary/40 hover:-translate-y-0.5 transition-all group cursor-pointer"
               onClick={() => setViewingReport(report)}
               role="button"
               tabIndex={0}
@@ -405,11 +410,11 @@ export default function ReportsPage() {
                   </span>
                   <div className="flex items-center gap-1.5">
                     {report.is_sample && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-cyan/10 text-cyan border border-cyan/25">
                         Sample
                       </span>
                     )}
-                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">
                       Ready
                     </span>
                   </div>
@@ -439,7 +444,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Meta */}
-              <div className="px-6 py-4 border-t border-white/5">
+              <div className="px-6 py-4 border-t border-[#1E2A3D]">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1 text-gray-400">
                     <ClockIcon />
@@ -456,11 +461,11 @@ export default function ReportsPage() {
               </div>
 
               {/* Actions — stop propagation so button clicks don't also trigger the card click */}
-              <div className="px-6 py-4 border-t border-white/5 bg-white/[0.02]" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-t border-[#1E2A3D] bg-white/[0.02]" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setViewingReport(report)}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors text-sm"
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-body-dark font-medium rounded-lg transition-colors text-sm"
                   >
                     <EyeIcon />
                     View
@@ -495,25 +500,27 @@ export default function ReportsPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16">
-          <div className="flex justify-center mb-4 text-gray-600"><DocumentIcon /></div>
+        <div className="flex flex-col items-center text-center py-20">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+            <DocumentIcon />
+          </div>
           <h3 className="text-lg font-medium text-white">
             {showSamples ? "No sample reports available" : "No reports found"}
           </h3>
-          <p className="text-gray-400 mt-2">
-            {showSamples ? "Sample reports could not be loaded" : "Generate a new report to get started with real threat data"}
+          <p className="text-slate-400 mt-2 max-w-sm">
+            {showSamples ? "Sample reports could not be loaded right now." : "Generate a new report to turn your live threat data into a shareable briefing."}
           </p>
           {!showSamples && (
-            <div className="flex justify-center gap-3 mt-4">
+            <div className="flex justify-center gap-3 mt-5">
               <button
                 onClick={() => setShowGenerateModal(true)}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors"
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-body-dark rounded-[10px] font-medium transition-colors"
               >
                 Generate Report
               </button>
               <button
                 onClick={() => setShowSamples(true)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg font-medium transition-colors"
+                className="px-4 py-2 bg-transparent border border-[#1E2A3D] hover:border-primary/40 text-slate-300 rounded-[10px] font-medium transition-colors"
               >
                 View Samples
               </button>
@@ -547,7 +554,7 @@ export default function ReportsPage() {
                 {reportTypeLabels[viewingReport.type] || viewingReport.type}
               </span>
               {viewingReport.is_sample && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-cyan/10 text-cyan border border-cyan/25 shrink-0">
                   Sample
                 </span>
               )}
@@ -577,7 +584,7 @@ export default function ReportsPage() {
       {/* ── Generate Report Modal (portalled to body) ────────────────────── */}
       {showGenerateModal && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-          <div className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-white/10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white flex items-center gap-2">
@@ -665,7 +672,7 @@ export default function ReportsPage() {
                 Cancel
               </button>
               <button onClick={handleGenerateReport} disabled={generating}
-                className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-body-dark rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                 {generating ? (<><LoadingSpinner /> Generating...</>) : (<><SparklesIcon /> Generate</>)}
               </button>
             </div>

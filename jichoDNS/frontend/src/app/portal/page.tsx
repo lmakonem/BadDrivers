@@ -273,28 +273,28 @@ const quickActions: QuickAction[] = [
     description: "Create a threat report",
     href: "/portal/reports",
     icon: <DocumentIcon />,
-    color: "from-blue-500/20 to-blue-600/10",
+    color: "bg-primary/10 text-primary",
   },
   {
     title: "Analyze Domain",
     description: "Check domain for threats",
     href: "/analysis",
     icon: <SearchIcon />,
-    color: "from-green-500/20 to-green-600/10",
+    color: "bg-primary/10 text-primary",
   },
   {
     title: "Start Discovery",
     description: "Scan attack surface",
     href: "/portal/asm",
     icon: <GlobeIcon />,
-    color: "from-purple-500/20 to-purple-600/10",
+    color: "bg-cyan/10 text-cyan",
   },
   {
     title: "View Analytics",
     description: "Threat intelligence insights",
     href: "/portal/reports",
     icon: <ChartIcon />,
-    color: "from-orange-500/20 to-orange-600/10",
+    color: "bg-primary/10 text-primary",
   },
 ];
 
@@ -352,7 +352,7 @@ export default function PortalDashboard() {
       // Calculate threat distribution for the chart
       const threatTypes = iocData?.by_threat_type || {};
       const total = Object.values(threatTypes).reduce((a: number, b: number) => a + b, 0) || 1;
-      const colors = ["bg-red-500", "bg-orange-500", "bg-yellow-500", "bg-purple-500", "bg-gray-500"];
+      const colors = ["bg-primary", "bg-primary/80", "bg-primary/60", "bg-primary/45", "bg-primary/30"];
       const distribution = Object.entries(threatTypes)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
@@ -401,22 +401,22 @@ export default function PortalDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-32 bg-card-dark rounded-2xl animate-pulse" />
+            <div key={i} className="h-32 bg-card-dark rounded-[14px] animate-pulse" />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-96 bg-card-dark rounded-2xl animate-pulse" />
-          <div className="h-96 bg-card-dark rounded-2xl animate-pulse" />
+          <div className="lg:col-span-2 h-96 bg-card-dark rounded-[14px] animate-pulse" />
+          <div className="h-96 bg-card-dark rounded-[14px] animate-pulse" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative space-y-6">
+    <div className="relative mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Ambient brand glow — the watchful eye's ambient light */}
       <div aria-hidden className="glow-gold pointer-events-none absolute inset-x-0 -top-4 h-72" />
 
@@ -426,17 +426,17 @@ export default function PortalDashboard() {
           <JichoMark size={38} />
           <div>
             <h1 className="text-2xl font-bold font-display text-white">Dashboard</h1>
-            <p className="text-gray-400 mt-1">Welcome back! Here&apos;s your security overview.</p>
+            <p className="text-slate-400 mt-1">Welcome back! Here&apos;s your security overview.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">
+          <span className="text-sm text-slate-400">
             Last updated: {lastUpdated ? formatTimeAgo(lastUpdated.toISOString()) : "Never"}
           </span>
           <button 
             onClick={fetchData}
             disabled={loading}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-body-dark rounded-[10px] font-display font-medium transition-colors flex items-center gap-2"
           >
             <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -449,10 +449,10 @@ export default function PortalDashboard() {
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {/* Total IOCs */}
-        <div className="bg-card-dark border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">Total IOCs</p>
+              <p className="text-slate-400 text-sm font-medium">Total IOCs</p>
               <p className="text-3xl font-bold font-display text-white mt-2">
                 {stats?.totalIOCs.toLocaleString()}
               </p>
@@ -473,15 +473,15 @@ export default function PortalDashboard() {
                 <span className="ml-1">{Math.abs(stats?.trends.iocs || 0)}%</span>
               </span>
             )}
-            <span className="text-gray-500 text-sm">vs last week</span>
+            <span className="text-slate-500 text-sm">vs last week</span>
           </div>
         </div>
 
         {/* Active Alerts */}
-        <div className="bg-card-dark border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">Active Alerts</p>
+              <p className="text-slate-400 text-sm font-medium">Active Alerts</p>
               <p className="text-3xl font-bold font-display text-white mt-2">{stats?.activeAlerts}</p>
             </div>
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
@@ -500,18 +500,18 @@ export default function PortalDashboard() {
                 <span className="ml-1">{stats?.trends.alerts}%</span>
               </span>
             )}
-            <span className="text-gray-500 text-sm">vs last week</span>
+            <span className="text-slate-500 text-sm">vs last week</span>
           </div>
         </div>
 
         {/* Risk Score */}
-        <div className="bg-card-dark border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">Risk Score</p>
+              <p className="text-slate-400 text-sm font-medium">Risk Score</p>
               <p className="text-3xl font-bold font-display text-white mt-2">{stats?.riskScore}/100</p>
             </div>
-            <div className="p-3 bg-orange-500/10 rounded-xl">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <ShieldIcon />
             </div>
           </div>
@@ -534,16 +534,16 @@ export default function PortalDashboard() {
                   <span className="ml-1">{Math.abs(stats?.trends.risk || 0)}%</span>
                 </span>
               )}
-              <span className="text-gray-500 text-sm">vs last week</span>
+              <span className="text-slate-500 text-sm">vs last week</span>
             </div>
           </div>
         </div>
 
         {/* Assets Monitored */}
-        <div className="bg-card-dark border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">Assets Monitored</p>
+              <p className="text-slate-400 text-sm font-medium">Assets Monitored</p>
               <p className="text-3xl font-bold font-display text-white mt-2">
                 {stats?.assetsMonitored.toLocaleString()}
               </p>
@@ -564,7 +564,7 @@ export default function PortalDashboard() {
                 <span className="ml-1">{Math.abs(stats?.trends.assets || 0)}%</span>
               </span>
             )}
-            <span className="text-gray-500 text-sm">vs last week</span>
+            <span className="text-slate-500 text-sm">vs last week</span>
           </div>
         </div>
       </div>
@@ -572,10 +572,10 @@ export default function PortalDashboard() {
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent alerts timeline */}
-        <div className="lg:col-span-2 bg-card-dark border border-white/10 rounded-2xl">
-          <div className="p-6 border-b border-white/10">
+        <div className="lg:col-span-2 bg-card-dark border border-[#1E2A3D] rounded-[14px]">
+          <div className="p-6 border-b border-[#1E2A3D]">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Recent Alerts</h2>
+              <h2 className="text-lg font-semibold font-display text-white">Recent Alerts</h2>
               <Link
                 href="/portal/alerts"
                 className="text-sm text-primary hover:text-primary-light transition-colors flex items-center gap-1"
@@ -585,7 +585,19 @@ export default function PortalDashboard() {
               </Link>
             </div>
           </div>
-          <div className="p-6 space-y-4">
+          <div className="p-6">
+            {alerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-14">
+                <div className="w-12 h-12 rounded-full bg-white/5 text-slate-500 flex items-center justify-center mb-4">
+                  <BellIcon />
+                </div>
+                <p className="text-white font-medium">No recent alerts</p>
+                <p className="text-sm text-slate-400 mt-1 max-w-xs">
+                  You&apos;re all caught up — new threat alerts from your feeds will appear here as they&apos;re detected.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
             {alerts.map((alert, index) => (
               <div
                 key={alert.id}
@@ -607,37 +619,39 @@ export default function PortalDashboard() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(alert.severity)}`}>
                           {alert.severity.toUpperCase()}
                         </span>
-                        <span className="text-xs text-gray-500">{alert.type}</span>
+                        <span className="text-xs text-slate-500">{alert.type}</span>
                       </div>
                       <h3 className="text-white font-medium group-hover:text-primary transition-colors">
                         {alert.title}
                       </h3>
-                      <p className="text-sm text-gray-400 mt-1">{alert.description}</p>
+                      <p className="text-sm text-slate-400 mt-1">{alert.description}</p>
                       <div className="flex items-center gap-3 mt-2">
-                        <span className="text-xs text-gray-500">{formatTimeAgo(alert.timestamp)}</span>
-                        <span className="text-xs text-gray-600">|</span>
-                        <span className="text-xs text-gray-500">{alert.source}</span>
+                        <span className="text-xs text-slate-500">{formatTimeAgo(alert.timestamp)}</span>
+                        <span className="text-xs text-slate-600">|</span>
+                        <span className="text-xs text-slate-500">{alert.source}</span>
                       </div>
                     </div>
                     <button className="opacity-0 group-hover:opacity-100 p-2 hover:bg-white/5 rounded-lg transition-all">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right sidebar */}
         <div className="space-y-6">
           {/* Threat map mini preview */}
-          <div className="bg-card-dark border border-white/10 rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-white/10">
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
+            <div className="p-4 border-b border-[#1E2A3D]">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-white">Threat Map</h2>
+                <h2 className="font-semibold font-display text-white">Threat Map</h2>
                 <Link
                   href="/map"
                   className="text-sm text-primary hover:text-primary-light transition-colors"
@@ -650,12 +664,15 @@ export default function PortalDashboard() {
               {/* Mini map with top countries */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-primary/20 flex items-center justify-center mb-3">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
                     <GlobeIcon />
                   </div>
-                  <p className="text-sm text-gray-400">Global Threat Overview</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {stats?.totalIOCs.toLocaleString() || 0} IOCs from {iocStats ? Object.keys(iocStats.by_country || {}).length : 0} countries
+                  <p className="text-sm text-slate-400">Global Threat Overview</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {(stats?.totalIOCs ?? 0).toLocaleString()} IOCs
+                    {iocStats && Object.keys(iocStats.by_country || {}).length > 0
+                      ? ` from ${Object.keys(iocStats.by_country || {}).length} countries`
+                      : " tracked"}
                   </p>
                   {iocStats && (
                     <div className="flex flex-wrap justify-center gap-1 mt-2">
@@ -663,7 +680,7 @@ export default function PortalDashboard() {
                         .sort((a, b) => b[1] - a[1])
                         .slice(0, 5)
                         .map(([country, count]) => (
-                          <span key={country} className="text-xs px-2 py-0.5 bg-white/10 rounded text-gray-300">
+                          <span key={country} className="text-xs px-2 py-0.5 bg-white/5 rounded text-slate-300">
                             {country}: {count.toLocaleString()}
                           </span>
                         ))}
@@ -672,34 +689,34 @@ export default function PortalDashboard() {
                 </div>
               </div>
               {/* Decorative elements */}
-              <div className="absolute top-4 left-4 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <div className="absolute top-8 right-8 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-              <div className="absolute bottom-6 left-8 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-              <div className="absolute bottom-4 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <div className="absolute top-4 left-4 w-2 h-2 bg-primary rounded-full animate-pulse" />
+              <div className="absolute top-8 right-8 w-2 h-2 bg-cyan rounded-full animate-pulse" />
+              <div className="absolute bottom-6 left-8 w-2 h-2 bg-primary rounded-full animate-pulse" />
+              <div className="absolute bottom-4 right-4 w-2 h-2 bg-cyan rounded-full animate-pulse" />
             </div>
           </div>
 
           {/* Quick actions */}
-          <div className="bg-card-dark border border-white/10 rounded-2xl">
-            <div className="p-4 border-b border-white/10">
-              <h2 className="font-semibold text-white">Quick Actions</h2>
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px]">
+            <div className="p-4 border-b border-[#1E2A3D]">
+              <h2 className="font-semibold font-display text-white">Quick Actions</h2>
             </div>
             <div className="p-4 space-y-3">
               {quickActions.map((action) => (
                 <Link
                   key={action.title}
                   href={action.href}
-                  className={`flex items-center gap-4 p-3 rounded-xl bg-gradient-to-r ${action.color} hover:scale-[1.02] transition-all group`}
+                  className="flex items-center gap-4 p-3 rounded-[10px] border border-[#1E2A3D] hover:border-primary/40 hover:bg-card-hover transition-all group"
                 >
-                  <div className="p-2 bg-white/10 rounded-lg text-white">
+                  <div className={`p-2 rounded-lg ${action.color}`}>
                     {action.icon}
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-white">{action.title}</p>
-                    <p className="text-xs text-gray-400">{action.description}</p>
+                    <p className="text-xs text-slate-400">{action.description}</p>
                   </div>
                   <svg
-                    className="w-4 h-4 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all"
+                    className="w-4 h-4 text-slate-400 group-hover:text-primary group-hover:translate-x-1 transition-all"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -712,13 +729,13 @@ export default function PortalDashboard() {
           </div>
 
           {/* Threat distribution mini chart */}
-          <div className="bg-card-dark border border-white/10 rounded-2xl p-4">
-            <h2 className="font-semibold text-white mb-4">Threat Distribution</h2>
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+            <h2 className="font-semibold font-display text-white mb-4">Threat Distribution</h2>
             <div className="space-y-3">
               {threatDistribution.length > 0 ? threatDistribution.map((item) => (
                 <div key={item.type}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-400">{item.type}</span>
+                    <span className="text-slate-400">{item.type}</span>
                     <span className="text-white font-medium">{item.count.toLocaleString()}</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -729,7 +746,7 @@ export default function PortalDashboard() {
                   </div>
                 </div>
               )) : (
-                <div className="text-gray-500 text-sm text-center py-4">Loading threat data...</div>
+                <div className="text-slate-500 text-sm text-center py-4">Loading threat data...</div>
               )}
             </div>
           </div>

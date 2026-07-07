@@ -117,54 +117,61 @@ export default function SettingsPage() {
     setTimeout(() => setAccessMsg(null), 3000);
   };
 
+  // Access-level is a non-semantic category — map to the brand palette
+  // (green for the top level, cyan for admin, neutral slate for read) instead
+  // of an off-palette blue/purple rainbow.
   const levelColor = (lvl: string) =>
-    lvl === "owner" ? "text-blue-300 bg-blue-900/30 border-blue-700/40" :
-    lvl === "admin" ? "text-purple-300 bg-purple-900/30 border-purple-700/40" :
-    "text-gray-300 bg-gray-700/40 border-gray-600";
+    lvl === "owner" ? "text-primary bg-primary/10 border-primary/25" :
+    lvl === "admin" ? "text-cyan bg-cyan/10 border-cyan/25" :
+    "text-slate-300 bg-[#152032] border-[#1E2A3D]";
 
   return (
-    <div className="max-w-4xl space-y-8 pb-12">
-      <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-gray-400 mt-1">Manage your account, preferences, and access control</p>
+    <div className="mx-auto w-full max-w-[720px] px-4 sm:px-6 lg:px-8 py-6 space-y-8 pb-12">
+      <div className="sticky top-0 z-20 bg-body-dark/90 backdrop-blur-sm pt-4 pb-3">
+        <p className="section-label !mb-1.5">Account</p>
+        <h1 className="text-2xl font-bold font-display text-white">Settings</h1>
+        <p className="text-slate-400 mt-1">Manage your account, preferences, and access control</p>
       </div>
 
       {/* Profile */}
-      <div className="bg-card-dark border border-white/10 rounded-2xl p-6">
+      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Profile</h2>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
-            <input type="email" value={user?.email || ""} disabled
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 cursor-not-allowed" />
+            <label className="block text-sm text-slate-400 mb-1.5">Email</label>
+            <div className="w-full px-4 py-2.5 bg-[#0D131F] border border-[#1E2A3D] rounded-xl text-white break-all">
+              {user?.email || <span className="text-slate-500">—</span>}
+            </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Name</label>
-            <input type="text" value={user?.name || ""} disabled
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 cursor-not-allowed" />
+            <label className="block text-sm text-slate-400 mb-1.5">Name</label>
+            <div className="w-full px-4 py-2.5 bg-[#0D131F] border border-[#1E2A3D] rounded-xl text-white">
+              {user?.name || <span className="text-slate-500">Not set</span>}
+            </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Organization</label>
-            <input type="text" value={user?.organization || ""} disabled
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 cursor-not-allowed" />
+            <label className="block text-sm text-slate-400 mb-1.5">Organization</label>
+            <div className="w-full px-4 py-2.5 bg-[#0D131F] border border-[#1E2A3D] rounded-xl text-white">
+              {user?.organization || <span className="text-slate-500">Not set</span>}
+            </div>
           </div>
-          <p className="text-xs text-gray-500">Profile editing is not available in this release.</p>
+          <p className="text-xs text-slate-500">Profile editing is not available in this release.</p>
         </div>
       </div>
 
       {/* Subscription */}
-      <div className="bg-card-dark border border-white/10 rounded-2xl p-6">
+      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Subscription</h2>
-        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+        <div className="flex items-center justify-between p-4 bg-[#0D131F] border border-[#1E2A3D] rounded-xl">
           <div>
             <p className="text-white font-medium capitalize">{user?.tier || "free"} Plan</p>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-slate-400">
               {user?.is_admin ? "Full admin access" : user?.tier === "free" ? "Upgrade for premium features" : "All premium features included"}
             </p>
           </div>
           {!user?.is_admin && user?.tier === "free" && (
             <Link href="/pricing"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg transition-colors">
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-body-dark text-sm font-medium rounded-[10px] transition-colors">
               Upgrade
             </Link>
           )}
@@ -172,7 +179,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Notifications */}
-      <div className="bg-card-dark border border-white/10 rounded-2xl p-6">
+      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Notifications</h2>
         <div className="space-y-3">
           {[
@@ -183,7 +190,7 @@ export default function SettingsPage() {
             { label: "API usage warnings", defaultOn: false },
           ].map((item) => (
             <label key={item.label}
-              className="flex items-center justify-between p-3 bg-white/5 rounded-xl cursor-not-allowed opacity-70">
+              className="flex items-center justify-between p-3 bg-[#0D131F] border border-[#1E2A3D] rounded-xl cursor-not-allowed opacity-70">
               <span className="text-sm text-white">{item.label}</span>
               <input type="checkbox" defaultChecked={item.defaultOn} disabled
                 className="w-5 h-5 rounded border-white/20 bg-white/10 text-primary focus:ring-primary/50" />
@@ -194,9 +201,9 @@ export default function SettingsPage() {
 
       {/* ── Admin: Access Control ── */}
       {user?.is_admin && (
-        <div className="bg-card-dark border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
           {/* Header */}
-          <div className="p-5 border-b border-white/10">
+          <div className="p-5 border-b border-[#1E2A3D]">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-white">Access Control</h2>
@@ -205,7 +212,7 @@ export default function SettingsPage() {
                 </p>
               </div>
               {accessMsg && (
-                <span className="text-xs text-green-400 bg-green-900/20 border border-green-700/30 px-3 py-1.5 rounded-lg">
+                <span className="text-xs text-primary bg-primary/10 border border-primary/25 px-3 py-1.5 rounded-lg">
                   {accessMsg}
                 </span>
               )}
@@ -214,7 +221,7 @@ export default function SettingsPage() {
             <div className="flex gap-2 mt-4">
               {([["by_client", "Manage by Client"], ["by_user", "Manage by User"]] as const).map(([v, l]) => (
                 <button key={v} onClick={() => { setAdminTab(v); setSelectedClient(null); setSelectedUser(null); setClientAccess([]); }}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${adminTab === v ? "bg-primary text-white" : "bg-white/5 text-gray-400 hover:text-white"}`}>
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${adminTab === v ? "bg-primary/10 text-primary border-primary/25" : "bg-[#0D131F] text-slate-400 border-[#1E2A3D] hover:text-white"}`}>
                   {l}
                 </button>
               ))}
@@ -226,10 +233,12 @@ export default function SettingsPage() {
             {adminTab === "by_client" && (
               <>
                 {/* Client list */}
-                <div className="w-64 flex-shrink-0 border-r border-white/10 overflow-y-auto" style={{ maxHeight: 520 }}>
-                  {clients.map((c) => (
+                <div className="w-64 flex-shrink-0 border-r border-[#1E2A3D] overflow-y-auto" style={{ maxHeight: 520 }}>
+                  {clients.length === 0 ? (
+                    <p className="px-4 py-6 text-xs text-slate-500">No clients yet.</p>
+                  ) : clients.map((c) => (
                     <button key={c.id} onClick={() => setSelectedClient(c)}
-                      className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors ${selectedClient?.id === c.id ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}>
+                      className={`w-full text-left px-4 py-3 border-b border-[#1E2A3D] hover:bg-white/5 transition-colors ${selectedClient?.id === c.id ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}>
                       <div className="text-sm font-medium text-white truncate">{c.name}</div>
                       <div className="text-xs text-gray-500">{c.country_code} · Grade {c.risk_grade || "?"}</div>
                     </button>
@@ -256,7 +265,7 @@ export default function SettingsPage() {
                         ) : clientAccess.length === 0 ? (
                           <div className="text-xs text-gray-500">No users have access to this client.</div>
                         ) : clientAccess.map((a) => (
-                          <div key={a.user_id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+                          <div key={a.user_id} className="flex items-center justify-between bg-[#0D131F] border border-[#1E2A3D] rounded-lg px-3 py-2">
                             <div>
                               <div className="text-sm text-white">{a.email}</div>
                               <div className="text-xs text-gray-500">{a.name || ""}</div>
@@ -275,7 +284,7 @@ export default function SettingsPage() {
                       </div>
 
                       {/* Grant access to a new user */}
-                      <div className="border-t border-white/10 pt-4">
+                      <div className="border-t border-[#1E2A3D] pt-4">
                         <div className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">Grant Access</div>
                         <div className="flex gap-2 flex-wrap">
                           <select defaultValue="" onChange={(e) => {
@@ -283,7 +292,7 @@ export default function SettingsPage() {
                             if (uid) grantAccess(selectedClient.id, uid, grantLevel);
                             e.target.value = "";
                           }}
-                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary/50">
+                            className="flex-1 bg-[#0D131F] border border-[#1E2A3D] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary/50">
                             <option value="" disabled>Select user to grant...</option>
                             {users
                               .filter((u) => !clientAccess.find((a) => a.user_id === u.id))
@@ -292,7 +301,7 @@ export default function SettingsPage() {
                               ))}
                           </select>
                           <select value={grantLevel} onChange={(e) => setGrantLevel(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary/50">
+                            className="bg-[#0D131F] border border-[#1E2A3D] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary/50">
                             <option value="read">Read</option>
                             <option value="admin">Admin</option>
                           </select>
@@ -308,13 +317,15 @@ export default function SettingsPage() {
             {adminTab === "by_user" && (
               <>
                 {/* User list */}
-                <div className="w-64 flex-shrink-0 border-r border-white/10 overflow-y-auto" style={{ maxHeight: 520 }}>
-                  {users.map((u) => (
+                <div className="w-64 flex-shrink-0 border-r border-[#1E2A3D] overflow-y-auto" style={{ maxHeight: 520 }}>
+                  {users.length === 0 ? (
+                    <p className="px-4 py-6 text-xs text-slate-500">No users yet.</p>
+                  ) : users.map((u) => (
                     <button key={u.id} onClick={() => setSelectedUser(u)}
-                      className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors ${selectedUser?.id === u.id ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}>
+                      className={`w-full text-left px-4 py-3 border-b border-[#1E2A3D] hover:bg-white/5 transition-colors ${selectedUser?.id === u.id ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white truncate">{u.email}</span>
-                        {u.is_admin && <span className="text-xs bg-purple-900/40 text-purple-300 border border-purple-700/40 px-1.5 py-0 rounded flex-shrink-0">admin</span>}
+                        {u.is_admin && <span className="text-xs bg-primary/10 text-primary border border-primary/25 px-1.5 py-0 rounded flex-shrink-0">admin</span>}
                       </div>
                       <div className="text-xs text-gray-500 capitalize">{u.tier}</div>
                     </button>
@@ -336,7 +347,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="flex gap-2">
                           <select value={grantLevel} onChange={(e) => setGrantLevel(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                            className="bg-[#0D131F] border border-[#1E2A3D] rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
                             <option value="read">Read</option>
                             <option value="admin">Admin</option>
                           </select>
@@ -358,7 +369,7 @@ export default function SettingsPage() {
                           // Find if this user has access to this client
                           // We'll check by fetching per-client or estimate from clientAccess
                           return (
-                            <div key={c.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+                            <div key={c.id} className="flex items-center justify-between bg-[#0D131F] border border-[#1E2A3D] rounded-lg px-3 py-2">
                               <div>
                                 <div className="text-sm text-white">{c.name}</div>
                                 <div className="text-xs text-gray-500">{c.country_code}</div>
@@ -394,7 +405,7 @@ export default function SettingsPage() {
           type="button"
           disabled
           title="Profile & notification settings are not editable in this release"
-          className="px-6 py-2.5 bg-white/5 text-gray-500 font-medium rounded-xl cursor-not-allowed">
+          className="px-6 py-2.5 bg-[#0D131F] border border-[#1E2A3D] text-slate-500 font-medium rounded-xl cursor-not-allowed">
           Save Changes (coming soon)
         </button>
         <button onClick={logout}

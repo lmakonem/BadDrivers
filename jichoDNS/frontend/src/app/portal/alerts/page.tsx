@@ -192,19 +192,23 @@ const typeLabels: Record<Alert["type"], string> = {
   unknown: "Unknown",
 };
 
+// Alert-type category badges. These encode the alert taxonomy (not severity),
+// so they keep a restrained categorical palette grouped by risk family:
+// malicious-infra → red, phishing/social → orange, exposure/brand → yellow,
+// intel/analysis → cyan (the one sparing secondary accent), else neutral slate.
 const typeColors: Record<Alert["type"], string> = {
   c2: "bg-red-500/20 text-red-400 border-red-500/30",
   phishing: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-  darkweb: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  asm: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  darkweb: "bg-secondary/20 text-secondary border-secondary/30",
+  asm: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   brand: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  malware: "bg-pink-500/20 text-pink-400 border-pink-500/30",
-  dga: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-  credential_leak: "bg-rose-500/20 text-rose-400 border-rose-500/30",
-  darkweb_mention: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  malware: "bg-red-500/20 text-red-400 border-red-500/30",
+  dga: "bg-secondary/20 text-secondary border-secondary/30",
+  credential_leak: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  darkweb_mention: "bg-secondary/20 text-secondary border-secondary/30",
   botnet: "bg-red-500/20 text-red-400 border-red-500/30",
-  exfiltration: "bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30",
-  spam: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  exfiltration: "bg-red-500/20 text-red-400 border-red-500/30",
+  spam: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   unknown: "bg-slate-500/20 text-slate-400 border-slate-500/30",
 };
 
@@ -224,10 +228,13 @@ const severityColors: Record<Alert["severity"], string> = {
   low: "bg-green-500",
 };
 
+// Workflow-status badges. Kept on-palette: new = neutral slate (urgency is
+// carried by the severity bar, not the status), acknowledged = yellow,
+// investigating = cyan (sparing secondary), resolved = green.
 const statusColors: Record<Alert["status"], string> = {
-  new: "bg-blue-500/20 text-blue-400",
+  new: "bg-slate-500/20 text-slate-300",
   acknowledged: "bg-yellow-500/20 text-yellow-400",
-  investigating: "bg-purple-500/20 text-purple-400",
+  investigating: "bg-secondary/20 text-secondary",
   resolved: "bg-green-500/20 text-green-400",
 };
 
@@ -390,7 +397,7 @@ export default function AlertsPage() {
   }, [selectedAlert]);
 
   const filteredAlerts = alerts.filter((alert) => {
-    const matchesSearch = 
+    const matchesSearch =
       alert.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (alert.indicator && alert.indicator.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -439,29 +446,30 @@ export default function AlertsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-10 w-48 bg-card-dark rounded animate-pulse" />
+      <div className="mx-auto w-full max-w-[1600px] px-4 lg:px-8 space-y-6 pt-4">
+        <div className="h-10 w-48 bg-card-dark rounded-[14px] animate-pulse" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-card-dark rounded-xl animate-pulse" />
+            <div key={i} className="h-24 bg-card-dark rounded-[14px] animate-pulse" />
           ))}
         </div>
-        <div className="h-96 bg-card-dark rounded-2xl animate-pulse" />
+        <div className="h-96 bg-card-dark rounded-[14px] animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 pb-8">
+    <div className="mx-auto w-full max-w-[1600px] px-4 lg:px-8 space-y-4 pb-8">
       {/* Sticky page header */}
-      <div className="sticky top-0 z-20 bg-ebony-950/95 backdrop-blur-sm pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-4">
+      <div className="sticky top-0 z-20 bg-body-dark/90 backdrop-blur-md pt-4 pb-2 -mx-4 px-4 lg:-mx-8 lg:px-8 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">All Alerts</h1>
-          <p className="text-gray-400 mt-1">Unified view of security alerts across all modules</p>
+          <p className="section-label mb-1">Security Operations</p>
+          <h1 className="font-display text-2xl font-bold text-white">All Alerts</h1>
+          <p className="text-slate-400 mt-1">Unified view of security alerts across all modules</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">
+          <span className="text-sm text-slate-400">
             {filteredAlerts.length} of {alerts.length} alerts
           </span>
         </div>
@@ -469,42 +477,42 @@ export default function AlertsPage() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-400">Total Alerts</p>
+              <p className="text-sm text-slate-400">Total Alerts</p>
               <p className="text-2xl font-bold text-white mt-1">{alertCounts.total}</p>
             </div>
-            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
               <BellIcon />
             </div>
           </div>
         </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-400">Critical</p>
+              <p className="text-sm text-slate-400">Critical</p>
               <p className="text-2xl font-bold text-red-400 mt-1">{alertCounts.critical}</p>
             </div>
             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
           </div>
         </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-400">New</p>
-              <p className="text-2xl font-bold text-blue-400 mt-1">{alertCounts.new}</p>
+              <p className="text-sm text-slate-400">New</p>
+              <p className="text-2xl font-bold text-white mt-1">{alertCounts.new}</p>
             </div>
-            <div className="w-3 h-3 bg-blue-500 rounded-full" />
+            <div className="w-3 h-3 bg-slate-500 rounded-full" />
           </div>
         </div>
-        <div className="bg-card-dark border border-white/10 rounded-xl p-4">
+        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-400">Resolved</p>
+              <p className="text-sm text-slate-400">Resolved</p>
               <p className="text-2xl font-bold text-green-400 mt-1">{alertCounts.resolved}</p>
             </div>
-            <div className="p-1 bg-green-500/20 rounded-full">
+            <div className="p-1 bg-green-500/20 rounded-full text-green-400">
               <CheckIcon />
             </div>
           </div>
@@ -514,20 +522,20 @@ export default function AlertsPage() {
       </div>{/* end sticky header */}
 
       {error && (
-        <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+        <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-[10px] text-red-400 text-sm">
           {error}
         </div>
       )}
       {isSample && alerts.length > 0 && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm">
+        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-[10px] text-yellow-400 text-sm">
           Showing sample data — no live alerts are available.
         </div>
       )}
 
       {/* Search/filter bar + alerts list */}
-      <div className="bg-card-dark border border-white/10 rounded-2xl">
+      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px]">
         {/* Sticky filter bar inside the card */}
-        <div className="sticky top-[120px] z-10 bg-card-dark rounded-t-2xl p-4 border-b border-white/10">
+        <div className="sticky top-[120px] z-10 bg-card-dark rounded-t-[14px] p-4 border-b border-[#1E2A3D]">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="relative flex-1">
@@ -536,10 +544,10 @@ export default function AlertsPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search alerts, indicators, descriptions..."
-                className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary/50"
+                className="w-full pl-10 pr-4 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-primary/60"
               />
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -553,7 +561,7 @@ export default function AlertsPage() {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as FilterType)}
-                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary/50"
+                className="px-3 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white text-sm focus:outline-none focus:border-primary/60"
               >
                 <option value="all">All Types</option>
                 {Object.entries(typeLabels).map(([key, label]) => (
@@ -564,7 +572,7 @@ export default function AlertsPage() {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value as FilterSeverity)}
-                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary/50"
+                className="px-3 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white text-sm focus:outline-none focus:border-primary/60"
               >
                 <option value="all">All Severities</option>
                 <option value="critical">Critical</option>
@@ -576,7 +584,7 @@ export default function AlertsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
-                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary/50"
+                className="px-3 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white text-sm focus:outline-none focus:border-primary/60"
               >
                 <option value="all">All Status</option>
                 <option value="new">New</option>
@@ -620,7 +628,7 @@ export default function AlertsPage() {
                   setSeverityFilter("all");
                   setStatusFilter("all");
                 }}
-                className="text-sm text-gray-400 hover:text-white"
+                className="text-sm text-slate-400 hover:text-white"
               >
                 Clear all
               </button>
@@ -632,9 +640,15 @@ export default function AlertsPage() {
         <div className="divide-y divide-white/5">
           {filteredAlerts.length === 0 ? (
             <div className="p-12 text-center">
-              <BellIcon />
-              <h3 className="text-lg font-medium text-white mt-4">No alerts found</h3>
-              <p className="text-gray-400 mt-2">Try adjusting your filters or search query</p>
+              <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <h3 className="text-lg font-medium text-white mb-2">No alerts found</h3>
+              <p className="text-slate-400 text-sm">
+                {alerts.length === 0
+                  ? "You're all caught up — new alerts will appear here as they arrive."
+                  : "Try adjusting your filters or search query."}
+              </p>
             </div>
           ) : (
             filteredAlerts.map((alert) => (
@@ -662,23 +676,23 @@ export default function AlertsPage() {
                           <span className={`px-2 py-0.5 rounded text-xs ${statusColors[alert.status]}`}>
                             {alert.status.replace("_", " ")}
                           </span>
-                          <span className="text-xs text-gray-500">{formatTimeAgo(alert.timestamp)}</span>
+                          <span className="text-xs text-slate-500">{formatTimeAgo(alert.timestamp)}</span>
                         </div>
                         <h3 className="text-white font-medium truncate">{alert.title}</h3>
-                        <p className="text-sm text-gray-400 mt-1 line-clamp-2">{alert.description}</p>
-                        
+                        <p className="text-sm text-slate-400 mt-1 line-clamp-2">{alert.description}</p>
+
                         {alert.indicator && (
                           <div className="flex items-center gap-2 mt-2">
                             <code className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
                               {alert.indicator}
                             </code>
                             {alert.indicatorType && (
-                              <span className="text-xs text-gray-500 capitalize">{alert.indicatorType}</span>
+                              <span className="text-xs text-slate-500 capitalize">{alert.indicatorType}</span>
                             )}
                           </div>
                         )}
 
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                           <span>Source: {alert.source}</span>
                           {alert.affectedAsset && (
                             <>
@@ -703,7 +717,7 @@ export default function AlertsPage() {
                               e.stopPropagation();
                               handleStatusChange(alert.id, "resolved");
                             }}
-                            className="p-2 hover:bg-green-500/10 text-gray-400 hover:text-green-400 rounded-lg transition-colors"
+                            className="p-2 hover:bg-green-500/10 text-slate-400 hover:text-green-400 rounded-lg transition-colors"
                             title="Mark as resolved"
                           >
                             <CheckIcon />
@@ -711,7 +725,7 @@ export default function AlertsPage() {
                         )}
                         <button
                           onClick={(e) => e.stopPropagation()}
-                          className="p-2 hover:bg-white/5 text-gray-400 hover:text-white rounded-lg transition-colors"
+                          className="p-2 hover:bg-white/5 text-slate-400 hover:text-white rounded-lg transition-colors"
                         >
                           <ExternalLinkIcon />
                         </button>
@@ -738,8 +752,8 @@ export default function AlertsPage() {
             aria-labelledby="alert-dialog-title"
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none">
-            <div className="p-6 border-b border-white/10">
+            className="bg-card-dark border border-[#1E2A3D] rounded-[14px] w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none">
+            <div className="p-6 border-b border-[#1E2A3D]">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${severityColors[selectedAlert.severity]}`} />
@@ -752,7 +766,7 @@ export default function AlertsPage() {
                 </div>
                 <button
                   onClick={() => setSelectedAlert(null)}
-                  className="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-colors"
+                  className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
                 >
                   <CloseIcon />
                 </button>
@@ -763,20 +777,20 @@ export default function AlertsPage() {
             <div className="p-6 space-y-6">
               {/* Description */}
               <div>
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Description</h3>
-                <p className="text-gray-300">{selectedAlert.description}</p>
+                <h3 className="text-sm font-medium text-slate-400 mb-2">Description</h3>
+                <p className="text-slate-300">{selectedAlert.description}</p>
               </div>
 
               {/* Indicator */}
               {selectedAlert.indicator && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Indicator</h3>
+                  <h3 className="text-sm font-medium text-slate-400 mb-2">Indicator</h3>
                   <div className="flex items-center gap-3">
                     <code className="text-primary bg-primary/10 px-3 py-2 rounded-lg">
                       {selectedAlert.indicator}
                     </code>
                     {selectedAlert.indicatorType && (
-                      <span className="text-sm text-gray-500 capitalize">({selectedAlert.indicatorType})</span>
+                      <span className="text-sm text-slate-500 capitalize">({selectedAlert.indicatorType})</span>
                     )}
                   </div>
                 </div>
@@ -784,33 +798,33 @@ export default function AlertsPage() {
 
               {/* Details grid */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-white/[0.02] rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Source</p>
+                <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                  <p className="text-xs text-slate-500 mb-1">Source</p>
                   <p className="text-white">{selectedAlert.source}</p>
                 </div>
-                <div className="p-4 bg-white/[0.02] rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Severity</p>
+                <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                  <p className="text-xs text-slate-500 mb-1">Severity</p>
                   <p className="text-white capitalize">{selectedAlert.severity}</p>
                 </div>
-                <div className="p-4 bg-white/[0.02] rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Created</p>
+                <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                  <p className="text-xs text-slate-500 mb-1">Created</p>
                   <p className="text-white">{formatDate(selectedAlert.timestamp)}</p>
                 </div>
-                <div className="p-4 bg-white/[0.02] rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Last Updated</p>
+                <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                  <p className="text-xs text-slate-500 mb-1">Last Updated</p>
                   <p className="text-white">
                     {selectedAlert.updatedAt ? formatDate(selectedAlert.updatedAt) : "—"}
                   </p>
                 </div>
                 {selectedAlert.affectedAsset && (
-                  <div className="p-4 bg-white/[0.02] rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">Affected Asset</p>
+                  <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                    <p className="text-xs text-slate-500 mb-1">Affected Asset</p>
                     <p className="text-white">{selectedAlert.affectedAsset}</p>
                   </div>
                 )}
                 {selectedAlert.assignedTo && (
-                  <div className="p-4 bg-white/[0.02] rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">Assigned To</p>
+                  <div className="p-4 bg-white/[0.02] rounded-[10px]">
+                    <p className="text-xs text-slate-500 mb-1">Assigned To</p>
                     <p className="text-white">{selectedAlert.assignedTo}</p>
                   </div>
                 )}
@@ -819,14 +833,14 @@ export default function AlertsPage() {
               {/* Notes */}
               {selectedAlert.notes && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Notes</h3>
-                  <p className="text-gray-300 p-4 bg-white/[0.02] rounded-xl">{selectedAlert.notes}</p>
+                  <h3 className="text-sm font-medium text-slate-400 mb-2">Notes</h3>
+                  <p className="text-slate-300 p-4 bg-white/[0.02] rounded-[10px]">{selectedAlert.notes}</p>
                 </div>
               )}
 
               {/* Status actions */}
               <div>
-                <h3 className="text-sm font-medium text-gray-400 mb-3">Update Status</h3>
+                <h3 className="text-sm font-medium text-slate-400 mb-3">Update Status</h3>
                 <div className="flex flex-wrap gap-2">
                   {(["new", "acknowledged", "investigating", "resolved"] as Alert["status"][]).map((status) => (
                     <button
@@ -834,8 +848,8 @@ export default function AlertsPage() {
                       onClick={() => handleStatusChange(selectedAlert.id, status)}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         selectedAlert.status === status
-                          ? "bg-primary text-white"
-                          : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                          ? "bg-primary text-body-dark"
+                          : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                       }`}
                     >
                       {status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ")}
@@ -845,10 +859,10 @@ export default function AlertsPage() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+            <div className="p-6 border-t border-[#1E2A3D] flex justify-end gap-3">
               <button
                 onClick={() => setSelectedAlert(null)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg transition-colors"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-colors"
               >
                 Close
               </button>

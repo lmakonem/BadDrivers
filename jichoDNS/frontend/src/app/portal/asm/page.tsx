@@ -184,8 +184,8 @@ const severityColor = (s: string) => {
     case "critical": return "bg-red-900/60 text-red-200 border border-red-700";
     case "high":     return "bg-orange-900/60 text-orange-200 border border-orange-700";
     case "medium":   return "bg-yellow-900/60 text-yellow-200 border border-yellow-700";
-    case "low":      return "bg-blue-900/60 text-blue-200 border border-blue-700";
-    default:         return "bg-gray-700 text-gray-300 border border-gray-600";
+    case "low":      return "bg-slate-700/50 text-slate-300 border border-slate-600";
+    default:         return "bg-slate-700/50 text-slate-300 border border-slate-600";
   }
 };
 
@@ -203,7 +203,7 @@ const assetIcon = (t: string) => {
 };
 
 const gradeColor = (g: string) =>
-  g === "A" ? "text-green-400" : g === "B" ? "text-blue-400" : g === "C" ? "text-yellow-400" :
+  g === "A" ? "text-green-400" : g === "B" ? "text-cyan-400" : g === "C" ? "text-yellow-400" :
   g === "D" ? "text-orange-400" : "text-red-400";
 
 function fmt(iso: string | null) {
@@ -317,7 +317,7 @@ function ToastContainer({ toasts, remove }: { toasts: Toast[]; remove: (id: numb
           className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium max-w-sm cursor-pointer
             ${t.type === "success" ? "bg-green-800 text-green-100 border border-green-600" :
               t.type === "error" ? "bg-red-900 text-red-100 border border-red-700" :
-              "bg-gray-700 text-white border border-gray-600"}`}
+              "bg-card-dark text-white border border-[#1E2A3D]"}`}
           onClick={() => remove(t.id)}
         >
           <span>{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span>
@@ -333,10 +333,10 @@ function ToastContainer({ toasts, remove }: { toasts: Toast[]; remove: (id: numb
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4 transition-colors hover:border-primary/40">
+      <p className="text-xs text-slate-400 uppercase tracking-wide">{label}</p>
       <p className={`text-2xl font-bold mt-1 ${color ?? "text-white"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -768,17 +768,17 @@ export default function ASMPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex bg-gray-900 text-white" style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+    <div className="flex bg-body-dark text-white" style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
       <ToastContainer toasts={toasts} remove={removeToast} />
 
       {/* ── Client sidebar: fixed width, header pinned, list scrolls independently ── */}
-      <div className="flex-shrink-0 bg-gray-800 border-r border-gray-700 flex flex-col" style={{ width: "16rem", height: "100%", overflow: "hidden" }}>
-        <div className="p-4 border-b border-gray-700" style={{ flexShrink: 0 }}>
+      <div className="flex-shrink-0 bg-card-dark border-r border-[#1E2A3D] flex flex-col" style={{ width: "16rem", height: "100%", overflow: "hidden" }}>
+        <div className="p-4 border-b border-[#1E2A3D]" style={{ flexShrink: 0 }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Clients</h2>
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Clients</h2>
             <button
               onClick={() => setShowNewClient(true)}
-              className="text-blue-400 hover:text-blue-300 text-xs font-medium"
+              className="text-primary hover:text-primary-light text-xs font-medium"
               title="Add new client"
             >
               + Add
@@ -789,10 +789,10 @@ export default function ASMPage() {
           {clients.length === 0 ? (
             <div className="p-6 text-center">
               <div className="text-3xl mb-2">🏢</div>
-              <p className="text-xs text-gray-500 mb-3">No clients yet</p>
+              <p className="text-xs text-slate-500 mb-3">No clients yet</p>
               <button
                 onClick={() => setShowNewClient(true)}
-                className="text-xs text-blue-400 hover:text-blue-300"
+                className="text-xs text-primary hover:text-primary-light"
               >
                 Add your first client →
               </button>
@@ -802,8 +802,8 @@ export default function ASMPage() {
               <button
                 key={c.id}
                 onClick={() => setSelectedClient(c)}
-                className={`w-full text-left px-3 py-3 border-b border-gray-700/50 hover:bg-gray-700/40 transition-colors ${
-                  selectedClient?.id === c.id ? "bg-gray-700/70 border-l-2 border-l-blue-500" : ""
+                className={`w-full text-left px-3 py-3 border-b border-[#1E2A3D]/60 hover:bg-white/5 transition-colors ${
+                  selectedClient?.id === c.id ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
                 }`}
               >
                 {/* Row 1: name + grade */}
@@ -811,22 +811,22 @@ export default function ASMPage() {
                   <span className="text-sm font-semibold text-white truncate leading-tight">{c.name}</span>
                   <span className={`text-xs font-bold flex-shrink-0 px-1.5 py-0.5 rounded font-mono ${
                     c.risk_grade === "A" ? "bg-green-900/60 text-green-300" :
-                    c.risk_grade === "B" ? "bg-blue-900/60 text-blue-300" :
+                    c.risk_grade === "B" ? "bg-cyan-900/50 text-cyan-300" :
                     c.risk_grade === "C" ? "bg-yellow-900/60 text-yellow-300" :
                     c.risk_grade === "D" ? "bg-orange-900/60 text-orange-300" :
                     c.risk_grade === "F" ? "bg-red-900/70 text-red-200" :
-                    "bg-gray-700 text-gray-400"
+                    "bg-white/10 text-slate-400"
                   }`}>{c.risk_grade || "?"}</span>
                 </div>
                 {/* Row 2: industry + country */}
                 {(c.industry || c.country_code) && (
-                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                  <div className="text-xs text-slate-500 mt-0.5 truncate">
                     {[c.industry, c.country_code].filter(Boolean).join(" · ")}
                   </div>
                 )}
                 {/* Row 3: risk score bar */}
                 <div className="mt-1.5 flex items-center gap-2">
-                  <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div className="flex-1 bg-white/10 rounded-full h-1">
                     <div className={`h-1 rounded-full transition-all ${riskBg(c.risk_score)}`}
                       style={{ width: `${Math.min(c.risk_score, 100)}%` }} />
                   </div>
@@ -847,16 +847,16 @@ export default function ASMPage() {
                     </span>
                   )}
                   {c.total_assets > 0 && (
-                    <span className="text-xs text-gray-500 ml-auto">{c.total_assets} assets</span>
+                    <span className="text-xs text-slate-500 ml-auto">{c.total_assets} assets</span>
                   )}
                 </div>
                 {/* Row 5: port/ssl/TI indicators */}
                 {(c.open_ports > 0 || c.ssl_issues > 0 || c.ti_hit_count > 0) && (
-                  <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                  <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                     {c.open_ports > 0 && <span title="Open ports">🔌 {c.open_ports}</span>}
                     {c.ssl_issues > 0 && <span title="SSL issues" className="text-yellow-600">⚠ SSL</span>}
                     {c.ti_hit_count > 0 && <span title="TI hits" className="text-red-500">🎯 TI</span>}
-                    {!c.last_scan_at && <span className="text-gray-600 ml-auto">No scan</span>}
+                    {!c.last_scan_at && <span className="text-slate-600 ml-auto">No scan</span>}
                   </div>
                 )}
               </button>
@@ -872,13 +872,13 @@ export default function ASMPage() {
             <div className="text-center max-w-md">
               <div className="text-7xl mb-4">🛡️</div>
               <h2 className="text-xl font-bold text-white mb-2">Attack Surface Management</h2>
-              <p className="text-gray-400 text-sm mb-6">
+              <p className="text-slate-400 text-sm mb-6">
                 Monitor your clients&apos; external attack surface — domains, IPs, certificates, open ports,
                 vulnerabilities, and security posture in one place.
               </p>
               <button
                 onClick={() => setShowNewClient(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+                className="bg-primary hover:bg-primary-hover text-body-dark font-medium py-2 px-6 rounded-lg transition-colors"
               >
                 Add First Client
               </button>
@@ -887,28 +887,28 @@ export default function ASMPage() {
         ) : (
           <>
             {/* Header */}
-            <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex-shrink-0">
+            <div className="bg-card-dark border-b border-[#1E2A3D] px-6 py-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3">
                     <h1 className="text-lg font-bold text-white">{selectedClient.name}</h1>
                     {selectedClient.country_code && (
-                      <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">{selectedClient.country_code}</span>
+                      <span className="text-xs bg-white/10 text-slate-300 px-2 py-0.5 rounded">{selectedClient.country_code}</span>
                     )}
                     {selectedClient.industry && (
-                      <span className="text-xs text-gray-400">{selectedClient.industry}</span>
+                      <span className="text-xs text-slate-400">{selectedClient.industry}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
-                    <span>Scan: <span className="text-gray-300">{SCHEDULE_OPTIONS.find(s => s.minutes === selectedClient.scan_interval_minutes)?.label ?? selectedClient.scan_schedule}</span></span>
+                  <div className="flex items-center gap-4 mt-1 text-xs text-slate-400">
+                    <span>Scan: <span className="text-slate-300">{SCHEDULE_OPTIONS.find(s => s.minutes === selectedClient.scan_interval_minutes)?.label ?? selectedClient.scan_schedule}</span></span>
                     {selectedClient.last_scan_at && (
-                      <span>Last: <span className="text-gray-300">{fmt(selectedClient.last_scan_at)}</span></span>
+                      <span>Last: <span className="text-slate-300">{fmt(selectedClient.last_scan_at)}</span></span>
                     )}
                     {selectedClient.next_scan_at && selectedClient.scan_interval_minutes > 0 && (
-                      <span>Next: <span className="text-gray-300">{fmtTs(selectedClient.next_scan_at)}</span></span>
+                      <span>Next: <span className="text-slate-300">{fmtTs(selectedClient.next_scan_at)}</span></span>
                     )}
                     {scanning && scanJobState && (
-                      <span className="flex items-center gap-1 text-blue-400">
+                      <span className="flex items-center gap-1 text-primary">
                         <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
@@ -921,14 +921,14 @@ export default function ASMPage() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => fetchClientData(selectedClient)}
-                    className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2.5 py-1.5 transition-colors"
+                    className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-2.5 py-1.5 transition-colors"
                     title="Refresh"
                   >
                     ↻
                   </button>
                   <button
                     onClick={openEditClient}
-                    className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1.5 transition-colors"
+                    className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-3 py-1.5 transition-colors"
                   >
                     Edit
                   </button>
@@ -941,7 +941,7 @@ export default function ASMPage() {
                   <button
                     onClick={startScan}
                     disabled={scanning || groups.filter((g) => g.is_active).length === 0}
-                    className="bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-1.5 px-4 rounded-lg transition-colors"
+                    className="bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-body-dark text-sm font-semibold py-1.5 px-4 rounded-[10px] transition-colors"
                   >
                     {scanning ? "Scanning…" : "▶ Run Scan"}
                   </button>
@@ -950,7 +950,7 @@ export default function ASMPage() {
             </div>
 
             {/* Tab bar */}
-            <div className="bg-gray-800 border-b border-gray-700 px-6 flex gap-0 flex-shrink-0 overflow-x-auto">
+            <div className="bg-card-dark border-b border-[#1E2A3D] px-6 flex gap-0 flex-shrink-0 overflow-x-auto">
               {(["overview", "assets", "vulns", "changes", "security", "darkweb", "groups"] as const).map((t) => {
                 const labels: Record<typeof t, string> = {
                   overview: "Overview", assets: "Assets", vulns: "Findings",
@@ -966,12 +966,12 @@ export default function ASMPage() {
                     key={t}
                     onClick={() => setTab(t)}
                     className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 flex-shrink-0 ${
-                      tab === t ? "border-blue-500 text-blue-400" : "border-transparent text-gray-400 hover:text-white"
+                      tab === t ? "border-primary text-primary" : "border-transparent text-slate-400 hover:text-white"
                     }`}
                   >
                     {labels[t]}
                     {badges[t] ? (
-                      <span className="ml-1.5 bg-gray-700 text-gray-300 text-xs rounded-full px-1.5">{badges[t]}</span>
+                      <span className="ml-1.5 bg-white/10 text-slate-300 text-xs rounded-full px-1.5">{badges[t]}</span>
                     ) : null}
                   </button>
                 );
@@ -985,31 +985,31 @@ export default function ASMPage() {
               {tab === "overview" && (
                 <div className="space-y-5 max-w-5xl">
                   {loadingMain ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
-                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
                       <span>Loading…</span>
                     </div>
                   ) : summary ? (
                     <>
                       {/* ── Risk header ── */}
-                      <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-5">
                         <div className="flex items-start gap-6 flex-wrap">
                           {/* Grade dial */}
                           <div className="flex flex-col items-center gap-1 flex-shrink-0">
                             <div className={`text-6xl font-black leading-none ${gradeColor(summary.risk_grade || "?")}`}>
                               {summary.risk_grade || "?"}
                             </div>
-                            <div className="text-xs text-gray-500 uppercase tracking-wider">Risk Grade</div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider">Risk Grade</div>
                           </div>
                           {/* Score bar */}
                           <div className="flex-1 min-w-48">
                             <div className="flex items-baseline justify-between mb-1">
-                              <span className="text-xs text-gray-400">Risk Score</span>
+                              <span className="text-xs text-slate-400">Risk Score</span>
                               <span className={`text-2xl font-bold ${riskColor(summary.risk_score ?? summary.average_risk_score)}`}>
-                                {Math.round(summary.risk_score ?? summary.average_risk_score)}<span className="text-sm text-gray-500">/100</span>
+                                {Math.round(summary.risk_score ?? summary.average_risk_score)}<span className="text-sm text-slate-500">/100</span>
                               </span>
                             </div>
-                            <div className="w-full bg-gray-700 rounded-full h-3">
+                            <div className="w-full bg-white/10 rounded-full h-3">
                               <div className={`h-3 rounded-full transition-all ${riskBg(summary.risk_score ?? summary.average_risk_score)}`}
                                 style={{ width: `${Math.min(summary.risk_score ?? summary.average_risk_score, 100)}%` }} />
                             </div>
@@ -1017,7 +1017,7 @@ export default function ASMPage() {
                             {(summary.risk_factors || []).length > 0 && (
                               <ul className="mt-2 space-y-0.5">
                                 {summary.risk_factors.map((f, i) => (
-                                  <li key={i} className="text-xs text-gray-400 flex items-center gap-1.5">
+                                  <li key={i} className="text-xs text-slate-400 flex items-center gap-1.5">
                                     <span className="text-red-500 flex-shrink-0">▲</span>{f}
                                   </li>
                                 ))}
@@ -1039,9 +1039,9 @@ export default function ASMPage() {
                               </div>
                             )}
                             {summary.avg_epss > 0 && (
-                              <div className="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-center">
+                              <div className="bg-white/5 border border-[#1E2A3D] rounded-lg px-3 py-2 text-center">
                                 <div className="text-lg font-bold text-white">{(summary.avg_epss * 100).toFixed(1)}%</div>
-                                <div className="text-xs text-gray-400">Avg EPSS</div>
+                                <div className="text-xs text-slate-400">Avg EPSS</div>
                               </div>
                             )}
                           </div>
@@ -1058,26 +1058,26 @@ export default function ASMPage() {
 
                       {/* ── Finding severity breakdown ── */}
                       {Object.keys(summary.findings_by_severity || {}).length > 0 && (
-                        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Findings by Severity</h3>
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+                          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Findings by Severity</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {(["critical","high","medium","low"] as const).map((sev) => {
                               const count = (summary.findings_by_severity || {})[sev] ?? 0;
                               return (
-                                <div key={sev} className={`rounded-lg p-3 border text-center ${
+                                <div key={sev} className={`rounded-[14px] p-3 border text-center ${
                                   sev === "critical" ? "bg-red-900/20 border-red-700/40" :
                                   sev === "high"     ? "bg-orange-900/20 border-orange-700/40" :
                                   sev === "medium"   ? "bg-yellow-900/20 border-yellow-700/40" :
-                                                       "bg-blue-900/20 border-blue-700/40"
+                                                       "bg-slate-700/30 border-slate-600/50"
                                 }`}>
                                   <div className={`text-2xl font-bold ${
                                     sev === "critical" ? "text-red-300" : sev === "high" ? "text-orange-300" :
-                                    sev === "medium" ? "text-yellow-300" : "text-blue-300"
+                                    sev === "medium" ? "text-yellow-300" : "text-slate-300"
                                   }`}>{count}</div>
-                                  <div className="text-xs text-gray-400 capitalize mt-0.5">{sev}</div>
+                                  <div className="text-xs text-slate-400 capitalize mt-0.5">{sev}</div>
                                   <button
                                     onClick={() => { setTab("vulns"); setVulnSeverityFilter(sev); }}
-                                    className="text-xs text-gray-500 hover:text-blue-400 mt-1 transition-colors"
+                                    className="text-xs text-slate-500 hover:text-primary mt-1 transition-colors"
                                   >view →</button>
                                 </div>
                               );
@@ -1088,8 +1088,8 @@ export default function ASMPage() {
 
                       {/* ── Finding categories ── */}
                       {Object.keys(summary.findings_by_category || {}).length > 0 && (
-                        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Finding Categories</h3>
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+                          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Finding Categories</h3>
                           <div className="space-y-2">
                             {Object.entries(summary.findings_by_category)
                               .sort(([,a],[,b]) => b - a)
@@ -1106,11 +1106,11 @@ export default function ASMPage() {
                                 };
                                 return (
                                   <div key={cat} className="flex items-center gap-3">
-                                    <span className="text-xs text-gray-400 w-44 flex-shrink-0 truncate">{label[cat] ?? cat}</span>
-                                    <div className="flex-1 bg-gray-700 rounded-full h-2">
-                                      <div className="h-2 bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                                    <span className="text-xs text-slate-400 w-44 flex-shrink-0 truncate">{label[cat] ?? cat}</span>
+                                    <div className="flex-1 bg-white/10 rounded-full h-2">
+                                      <div className="h-2 bg-primary rounded-full" style={{ width: `${pct}%` }} />
                                     </div>
-                                    <span className="text-xs text-gray-300 w-6 text-right flex-shrink-0">{count}</span>
+                                    <span className="text-xs text-slate-300 w-6 text-right flex-shrink-0">{count}</span>
                                   </div>
                                 );
                               })}
@@ -1120,31 +1120,31 @@ export default function ASMPage() {
 
                       {/* ── Cross-dataset threat intelligence ── */}
                       {((summary.brand_exposures ?? 0) > 0 || (summary.credential_leaks ?? 0) > 0 || (summary.country_indicator_count ?? 0) > 0 || summary.region_risk) && (
-                        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Platform Threat Intelligence</h3>
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+                          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Platform Threat Intelligence</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {(summary.brand_exposures ?? 0) > 0 && (
-                              <div className="bg-purple-900/20 border border-purple-700/40 rounded-lg p-3 text-center">
-                                <div className="text-2xl font-bold text-purple-300">{summary.brand_exposures}</div>
-                                <div className="text-xs text-gray-400 mt-0.5">Brand Exposures</div>
+                              <div className="bg-cyan-900/20 border border-cyan-700/40 rounded-[14px] p-3 text-center">
+                                <div className="text-2xl font-bold text-cyan-300">{summary.brand_exposures}</div>
+                                <div className="text-xs text-slate-400 mt-0.5">Brand Exposures</div>
                               </div>
                             )}
                             {(summary.credential_leaks ?? 0) > 0 && (
                               <div className="bg-red-900/20 border border-red-700/40 rounded-lg p-3 text-center">
                                 <div className="text-2xl font-bold text-red-300">{summary.credential_leaks}</div>
-                                <div className="text-xs text-gray-400 mt-0.5">Credential Leaks</div>
+                                <div className="text-xs text-slate-400 mt-0.5">Credential Leaks</div>
                               </div>
                             )}
                             {(summary.country_indicator_count ?? 0) > 0 && (
                               <div className="bg-orange-900/20 border border-orange-700/40 rounded-lg p-3 text-center">
                                 <div className="text-2xl font-bold text-orange-300">{summary.country_indicator_count}</div>
-                                <div className="text-xs text-gray-400 mt-0.5">Country Indicators ({summary.country_code})</div>
+                                <div className="text-xs text-slate-400 mt-0.5">Country Indicators ({summary.country_code})</div>
                               </div>
                             )}
                             {summary.region_risk && (
-                              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 text-center">
+                              <div className="bg-white/5 border border-[#1E2A3D] rounded-lg p-3 text-center">
                                 <div className="text-2xl font-bold text-white">{Math.round(summary.region_risk.overall_risk)}</div>
-                                <div className="text-xs text-gray-400 mt-0.5">Regional Risk</div>
+                                <div className="text-xs text-slate-400 mt-0.5">Regional Risk</div>
                               </div>
                             )}
                           </div>
@@ -1155,10 +1155,10 @@ export default function ASMPage() {
                                 { label: "Exfil", value: summary.region_risk.exfil_risk, count: summary.region_risk.exfil_count, color: "text-orange-400" },
                                 { label: "Phishing", value: summary.region_risk.phishing_risk, count: summary.region_risk.phishing_count, color: "text-yellow-400" },
                               ].map(({ label, value, count, color }) => (
-                                <div key={label} className="bg-gray-700/30 rounded p-2 text-center">
+                                <div key={label} className="bg-white/5 rounded p-2 text-center">
                                   <div className={`text-sm font-bold ${color}`}>{Math.round(value)}</div>
-                                  <div className="text-xs text-gray-500">{label} risk</div>
-                                  <div className="text-xs text-gray-600">{count} IOCs</div>
+                                  <div className="text-xs text-slate-500">{label} risk</div>
+                                  <div className="text-xs text-slate-600">{count} IOCs</div>
                                 </div>
                               ))}
                             </div>
@@ -1168,18 +1168,18 @@ export default function ASMPage() {
 
                       {/* ── Asset type breakdown ── */}
                       {Object.keys(summary.by_type || {}).length > 0 && (
-                        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Asset Inventory</h3>
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+                          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Asset Inventory</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                             {Object.entries(summary.by_type).map(([type, count]) => (
                               <button
                                 key={type}
                                 onClick={() => { setTab("assets"); setAssetTypeFilter(type); }}
-                                className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-3 text-center transition-colors"
+                                className="bg-white/5 hover:bg-white/10 rounded-[14px] p-3 text-center transition-colors"
                               >
                                 <div className="text-2xl mb-1">{assetIcon(type)}</div>
                                 <div className="text-lg font-bold text-white">{count}</div>
-                                <div className="text-xs text-gray-400 capitalize">{type}</div>
+                                <div className="text-xs text-slate-400 capitalize">{type}</div>
                               </button>
                             ))}
                           </div>
@@ -1200,7 +1200,11 @@ export default function ASMPage() {
                       )}
                     </>
                   ) : (
-                    <div className="text-gray-500 text-sm py-8 text-center">No scan data yet. Run a scan to populate this dashboard.</div>
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-10 text-center">
+                      <div className="text-3xl mb-2 opacity-60">📡</div>
+                      <div className="text-sm text-slate-300 font-medium">No scan data yet</div>
+                      <div className="text-xs text-slate-500 mt-1">Add a discovery group and run a scan to populate this dashboard.</div>
+                    </div>
                   )}
                 </div>
               )}
@@ -1213,11 +1217,11 @@ export default function ASMPage() {
                       type="text" placeholder="Search assets…" value={assetSearch}
                       onChange={(e) => setAssetSearch(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && selectedClient) fetchAssets(selectedClient.id, 0, assetTypeFilter, assetSearch); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-400 w-56 focus:outline-none focus:border-blue-500"
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white placeholder-slate-400 w-56 focus:outline-none focus:border-primary"
                     />
                     <select value={assetTypeFilter}
                       onChange={(e) => { setAssetTypeFilter(e.target.value); setAssetOffset(0); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
                       <option value="all">All types</option>
                       {["domain","subdomain","ip","port","certificate","service"].map((t) => (
                         <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
@@ -1225,20 +1229,24 @@ export default function ASMPage() {
                     </select>
                     <button
                       onClick={() => selectedClient && fetchAssets(selectedClient.id, assetOffset, assetTypeFilter, assetSearch)}
-                      className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1.5">
+                      className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-3 py-1.5">
                       Search
                     </button>
-                    <span className="text-xs text-gray-400 ml-auto">{assetsTotal} total</span>
+                    <span className="text-xs text-slate-400 ml-auto">{assetsTotal} total</span>
                   </div>
 
                   {loadingTab ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-sm py-8"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/><span>Loading assets…</span></div>
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8"><div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/><span>Loading assets…</span></div>
                   ) : assets.length === 0 ? (
-                    <div className="text-gray-500 text-sm py-8 text-center">No assets found. Run a scan to discover assets.</div>
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-10 text-center">
+                      <div className="text-3xl mb-2 opacity-60">🗺️</div>
+                      <div className="text-sm text-slate-300 font-medium">No assets discovered</div>
+                      <div className="text-xs text-slate-500 mt-1">Run a scan to map this client&apos;s external attack surface.</div>
+                    </div>
                   ) : (
-                    <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                       <table className="w-full text-sm">
-                        <thead className="bg-gray-700/50 text-xs text-gray-400 uppercase">
+                        <thead className="bg-white/5 text-xs text-slate-400 uppercase">
                           <tr>
                             <th className="px-4 py-3 text-left">Asset</th>
                             <th className="px-4 py-3 text-left">Type</th>
@@ -1248,24 +1256,24 @@ export default function ASMPage() {
                             <th className="px-4 py-3 text-left">Last Seen</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-700/50">
+                        <tbody className="divide-y divide-white/5">
                           {assets.map((a) => (
-                            <tr key={a.id} className="hover:bg-gray-700/30 transition-colors">
-                              <td className="px-4 py-2.5 font-mono text-xs text-blue-300 max-w-xs truncate">{a.value}</td>
+                            <tr key={a.id} className="hover:bg-white/5 transition-colors">
+                              <td className="px-4 py-2.5 font-mono text-xs text-cyan-300 max-w-xs truncate">{a.value}</td>
                               <td className="px-4 py-2.5">
-                                <span className="flex items-center gap-1 text-xs text-gray-300">{assetIcon(a.type ?? "")} {a.type ?? "unknown"}</span>
+                                <span className="flex items-center gap-1 text-xs text-slate-300">{assetIcon(a.type ?? "")} {a.type ?? "unknown"}</span>
                               </td>
                               <td className="px-4 py-2.5">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${
                                   a.status === "active" ? "bg-green-900/50 text-green-300" :
                                   a.status === "vulnerable" ? "bg-red-900/50 text-red-300" :
-                                  "bg-gray-700 text-gray-400"}`}>
+                                  "bg-white/10 text-slate-400"}`}>
                                   {a.status ?? "unknown"}
                                 </span>
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-16 bg-gray-700 rounded-full h-1.5">
+                                  <div className="w-16 bg-white/10 rounded-full h-1.5">
                                     <div className={`h-1.5 rounded-full ${riskBg(a.risk_score)}`} style={{ width: `${a.risk_score}%` }} />
                                   </div>
                                   <span className={`text-xs font-medium ${riskColor(a.risk_score)}`}>{Math.round(a.risk_score)}</span>
@@ -1274,11 +1282,11 @@ export default function ASMPage() {
                               <td className="px-4 py-2.5">
                                 <div className="flex gap-1 flex-wrap">
                                   {(a.tags ?? []).slice(0, 2).map((tag) => (
-                                    <span key={tag} className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">{tag}</span>
+                                    <span key={tag} className="text-xs bg-white/10 text-slate-300 px-1.5 py-0.5 rounded">{tag}</span>
                                   ))}
                                 </div>
                               </td>
-                              <td className="px-4 py-2.5 text-xs text-gray-500">{fmt(a.last_seen)}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500">{fmt(a.last_seen)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1290,13 +1298,13 @@ export default function ASMPage() {
                     <div className="flex items-center justify-between">
                       <button disabled={assetOffset === 0}
                         onClick={() => setAssetOffset(Math.max(0, assetOffset - ASSET_LIMIT))}
-                        className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">
+                        className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">
                         ← Prev
                       </button>
-                      <span className="text-xs text-gray-400">{assetOffset + 1}–{Math.min(assetOffset + ASSET_LIMIT, assetsTotal)} of {assetsTotal}</span>
+                      <span className="text-xs text-slate-400">{assetOffset + 1}–{Math.min(assetOffset + ASSET_LIMIT, assetsTotal)} of {assetsTotal}</span>
                       <button disabled={assetOffset + ASSET_LIMIT >= assetsTotal}
                         onClick={() => setAssetOffset(assetOffset + ASSET_LIMIT)}
-                        className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">
+                        className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">
                         Next →
                       </button>
                     </div>
@@ -1313,11 +1321,11 @@ export default function ASMPage() {
                       type="text" placeholder="Search findings…" value={vulnSearch}
                       onChange={(e) => setVulnSearch(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && selectedClient) fetchVulns(selectedClient.id, vulnSeverityFilter, vulnCategoryFilter, vulnSearch, 0); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-400 w-48 focus:outline-none focus:border-blue-500"
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white placeholder-slate-400 w-48 focus:outline-none focus:border-primary"
                     />
                     <select value={vulnSeverityFilter}
                       onChange={(e) => { setVulnSeverityFilter(e.target.value); if (selectedClient) fetchVulns(selectedClient.id, e.target.value, vulnCategoryFilter, vulnSearch, 0); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
                       <option value="all">All severities</option>
                       {["critical","high","medium","low","info"].map((s) => (
                         <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
@@ -1325,7 +1333,7 @@ export default function ASMPage() {
                     </select>
                     <select value={vulnCategoryFilter}
                       onChange={(e) => { setVulnCategoryFilter(e.target.value); if (selectedClient) fetchVulns(selectedClient.id, vulnSeverityFilter, e.target.value, vulnSearch, 0); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
                       <option value="all">All categories</option>
                       {[
                         ["cve","CVE / Vulnerability"],["ssl","SSL/TLS"],["http_header","HTTP Headers"],
@@ -1338,23 +1346,27 @@ export default function ASMPage() {
                       ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                     <button onClick={() => selectedClient && fetchVulns(selectedClient.id, vulnSeverityFilter, vulnCategoryFilter, vulnSearch, 0)}
-                      className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1.5">↻ Refresh</button>
-                    <span className="text-xs text-gray-400 ml-auto">{vulnsTotal} finding{vulnsTotal !== 1 ? "s" : ""}</span>
+                      className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-3 py-1.5">↻ Refresh</button>
+                    <span className="text-xs text-slate-400 ml-auto">{vulnsTotal} finding{vulnsTotal !== 1 ? "s" : ""}</span>
                   </div>
 
                   {loadingTab ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
-                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
                       <span>Loading findings…</span>
                     </div>
                   ) : vulns.length === 0 ? (
-                    <div className="text-gray-500 text-sm py-8 text-center">No findings match the current filters.</div>
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-10 text-center">
+                      <div className="text-3xl mb-2 opacity-60">✓</div>
+                      <div className="text-sm text-slate-300 font-medium">No findings</div>
+                      <div className="text-xs text-slate-500 mt-1">Nothing matches the current filters. Adjust filters or run a scan.</div>
+                    </div>
                   ) : (
                     <>
                       {/* Table */}
-                      <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-900 text-xs text-gray-400 uppercase sticky top-0 z-10">
+                          <thead className="bg-body-dark text-xs text-slate-400 uppercase sticky top-0 z-10">
                             <tr>
                               <th className="px-4 py-3 text-left w-20">Severity</th>
                               <th className="px-4 py-3 text-left">Finding</th>
@@ -1365,12 +1377,12 @@ export default function ASMPage() {
                               <th className="px-4 py-3 text-left w-8"></th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-700/50">
+                          <tbody className="divide-y divide-white/5">
                             {vulns.map((v) => (
                               <tr
                                 key={v.id}
                                 onClick={() => setSelectedFinding(v)}
-                                className="hover:bg-gray-700/40 cursor-pointer transition-colors group"
+                                className="hover:bg-white/5 cursor-pointer transition-colors group"
                               >
                                 {/* Severity */}
                                 <td className="px-4 py-2.5">
@@ -1392,35 +1404,35 @@ export default function ASMPage() {
                                 </td>
                                 {/* Category */}
                                 <td className="px-4 py-2.5">
-                                  <span className="text-xs bg-gray-700 text-gray-300 border border-gray-600 px-2 py-0.5 rounded capitalize">
+                                  <span className="text-xs bg-white/10 text-slate-300 border border-[#1E2A3D] px-2 py-0.5 rounded capitalize">
                                     {(v.category ?? "unknown").replace(/_/g, " ")}
                                   </span>
                                 </td>
                                 {/* Asset */}
                                 <td className="px-4 py-2.5 max-w-[160px]">
-                                  <div className="font-mono text-xs text-blue-300 truncate" title={v.asset_value || v.affected_asset_value}>{v.asset_value || v.affected_asset_value}</div>
-                                  <div className="text-xs text-gray-500 capitalize">{v.asset_type || v.affected_asset_type}</div>
+                                  <div className="font-mono text-xs text-cyan-300 truncate" title={v.asset_value || v.affected_asset_value}>{v.asset_value || v.affected_asset_value}</div>
+                                  <div className="text-xs text-slate-500 capitalize">{v.asset_type || v.affected_asset_type}</div>
                                 </td>
                                 {/* CVE + CVSS + EPSS */}
                                 <td className="px-4 py-2.5">
                                   {v.cve_id ? (
                                     <a href={`https://nvd.nist.gov/vuln/detail/${v.cve_id}`} target="_blank" rel="noreferrer"
                                       onClick={(e) => e.stopPropagation()}
-                                      className="text-xs text-blue-400 hover:text-blue-300 font-mono block">{v.cve_id}</a>
+                                      className="text-xs text-primary hover:text-primary-light font-mono block">{v.cve_id}</a>
                                   ) : null}
                                   {v.cvss_score != null && (
-                                    <span className="text-xs text-gray-400">CVSS {v.cvss_score}</span>
+                                    <span className="text-xs text-slate-400">CVSS {v.cvss_score}</span>
                                   )}
                                   {v.epss_score != null && v.epss_score > 0 && (
-                                    <span className={`text-xs ml-1 ${v.epss_score > 0.5 ? "text-red-400" : v.epss_score > 0.1 ? "text-orange-400" : "text-gray-500"}`}>
+                                    <span className={`text-xs ml-1 ${v.epss_score > 0.5 ? "text-red-400" : v.epss_score > 0.1 ? "text-orange-400" : "text-slate-500"}`}>
                                       {(v.epss_score * 100).toFixed(1)}% EPSS
                                     </span>
                                   )}
                                 </td>
                                 {/* Detected */}
-                                <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmt(v.first_seen || v.detected_at || null)}</td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{fmt(v.first_seen || v.detected_at || null)}</td>
                                 {/* Arrow */}
-                                <td className="px-4 py-2.5 text-gray-600 group-hover:text-gray-300 transition-colors">›</td>
+                                <td className="px-4 py-2.5 text-slate-600 group-hover:text-slate-300 transition-colors">›</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1432,15 +1444,15 @@ export default function ASMPage() {
                         <div className="flex items-center justify-between">
                           <button disabled={vulnsOffset === 0}
                             onClick={() => selectedClient && fetchVulns(selectedClient.id, vulnSeverityFilter, vulnCategoryFilter, vulnSearch, Math.max(0, vulnsOffset - VULN_LIMIT))}
-                            className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">
+                            className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">
                             ← Prev
                           </button>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-slate-400">
                             {vulnsOffset + 1}–{Math.min(vulnsOffset + VULN_LIMIT, vulnsTotal)} of {vulnsTotal}
                           </span>
                           <button disabled={vulnsOffset + VULN_LIMIT >= vulnsTotal}
                             onClick={() => selectedClient && fetchVulns(selectedClient.id, vulnSeverityFilter, vulnCategoryFilter, vulnSearch, vulnsOffset + VULN_LIMIT)}
-                            className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">
+                            className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">
                             Next →
                           </button>
                         </div>
@@ -1455,11 +1467,11 @@ export default function ASMPage() {
                       <div className="flex-1 bg-black/60" />
                       {/* Drawer */}
                       <div
-                        className="w-full max-w-xl bg-gray-900 border-l border-gray-700 overflow-y-auto flex flex-col shadow-2xl"
+                        className="w-full max-w-xl bg-card-dark border-l border-[#1E2A3D] overflow-y-auto flex flex-col shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Drawer header */}
-                        <div className="flex items-start justify-between p-5 border-b border-gray-700 flex-shrink-0">
+                        <div className="flex items-start justify-between p-5 border-b border-[#1E2A3D] flex-shrink-0">
                           <div className="flex-1 min-w-0 pr-3">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
                               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${severityColor(selectedFinding.severity ?? "info")}`}>
@@ -1471,30 +1483,30 @@ export default function ASMPage() {
                               {selectedFinding.is_exploitable && (
                                 <span className="text-xs bg-orange-900/50 text-orange-300 border border-orange-700/50 px-2 py-0.5 rounded">⚡ Exploitable</span>
                               )}
-                              <span className="text-xs bg-gray-700 text-gray-300 border border-gray-600 px-2 py-0.5 rounded capitalize">
+                              <span className="text-xs bg-white/10 text-slate-300 border border-[#1E2A3D] px-2 py-0.5 rounded capitalize">
                                 {(selectedFinding.category ?? "unknown").replace(/_/g, " ")}
                               </span>
                             </div>
                             <h2 className="text-base font-bold text-white leading-snug">{selectedFinding.title}</h2>
                           </div>
                           <button onClick={() => setSelectedFinding(null)}
-                            className="flex-shrink-0 text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
+                            className="flex-shrink-0 text-slate-500 hover:text-white transition-colors text-lg leading-none">✕</button>
                         </div>
 
                         {/* Drawer body */}
                         <div className="flex-1 p-5 space-y-5 overflow-y-auto">
 
                           {/* Affected asset */}
-                          <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
-                            <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">Affected Asset</div>
-                            <div className="font-mono text-sm text-blue-300 break-all">{selectedFinding.asset_value || selectedFinding.affected_asset_value || "—"}</div>
-                            <div className="text-xs text-gray-500 capitalize mt-0.5">{selectedFinding.asset_type || selectedFinding.affected_asset_type}</div>
+                          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-3">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Affected Asset</div>
+                            <div className="font-mono text-sm text-cyan-300 break-all">{selectedFinding.asset_value || selectedFinding.affected_asset_value || "—"}</div>
+                            <div className="text-xs text-slate-500 capitalize mt-0.5">{selectedFinding.asset_type || selectedFinding.affected_asset_type}</div>
                           </div>
 
                           {/* Description */}
                           <div>
-                            <div className="text-xs text-gray-400 uppercase tracking-wider mb-1.5">Description</div>
-                            <p className="text-sm text-gray-300 leading-relaxed">{selectedFinding.description || "No description available."}</p>
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1.5">Description</div>
+                            <p className="text-sm text-slate-300 leading-relaxed">{selectedFinding.description || "No description available."}</p>
                           </div>
 
                           {/* CVE / Scoring */}
@@ -1502,23 +1514,23 @@ export default function ASMPage() {
                             <div className="grid grid-cols-3 gap-3">
                               {selectedFinding.cve_id && (
                                 <a href={`https://nvd.nist.gov/vuln/detail/${selectedFinding.cve_id}`} target="_blank" rel="noreferrer"
-                                  className="bg-blue-900/20 border border-blue-700/40 rounded-lg p-3 text-center hover:bg-blue-900/30 transition-colors">
-                                  <div className="text-sm font-bold text-blue-300 font-mono">{selectedFinding.cve_id}</div>
-                                  <div className="text-xs text-gray-400 mt-0.5">NVD ↗</div>
+                                  className="bg-cyan-900/20 border border-cyan-700/40 rounded-[14px] p-3 text-center hover:bg-cyan-900/30 transition-colors">
+                                  <div className="text-sm font-bold text-cyan-300 font-mono">{selectedFinding.cve_id}</div>
+                                  <div className="text-xs text-slate-400 mt-0.5">NVD ↗</div>
                                 </a>
                               )}
                               {selectedFinding.cvss_score != null && (
                                 <div className={`rounded-lg p-3 text-center border ${selectedFinding.cvss_score >= 9 ? "bg-red-900/20 border-red-700/40" : selectedFinding.cvss_score >= 7 ? "bg-orange-900/20 border-orange-700/40" : "bg-yellow-900/20 border-yellow-700/40"}`}>
                                   <div className={`text-xl font-bold ${selectedFinding.cvss_score >= 9 ? "text-red-300" : selectedFinding.cvss_score >= 7 ? "text-orange-300" : "text-yellow-300"}`}>{selectedFinding.cvss_score}</div>
-                                  <div className="text-xs text-gray-400">CVSS Score</div>
+                                  <div className="text-xs text-slate-400">CVSS Score</div>
                                 </div>
                               )}
                               {selectedFinding.epss_score != null && selectedFinding.epss_score > 0 && (
-                                <div className={`rounded-lg p-3 text-center border ${selectedFinding.epss_score > 0.5 ? "bg-red-900/20 border-red-700/40" : selectedFinding.epss_score > 0.1 ? "bg-orange-900/20 border-orange-700/40" : "bg-gray-700/50 border-gray-600"}`}>
-                                  <div className={`text-xl font-bold ${selectedFinding.epss_score > 0.5 ? "text-red-300" : selectedFinding.epss_score > 0.1 ? "text-orange-300" : "text-gray-300"}`}>
+                                <div className={`rounded-lg p-3 text-center border ${selectedFinding.epss_score > 0.5 ? "bg-red-900/20 border-red-700/40" : selectedFinding.epss_score > 0.1 ? "bg-orange-900/20 border-orange-700/40" : "bg-white/5 border-[#1E2A3D]"}`}>
+                                  <div className={`text-xl font-bold ${selectedFinding.epss_score > 0.5 ? "text-red-300" : selectedFinding.epss_score > 0.1 ? "text-orange-300" : "text-slate-300"}`}>
                                     {(selectedFinding.epss_score * 100).toFixed(1)}%
                                   </div>
-                                  <div className="text-xs text-gray-400">EPSS (exploit probability)</div>
+                                  <div className="text-xs text-slate-400">EPSS (exploit probability)</div>
                                 </div>
                               )}
                             </div>
@@ -1540,9 +1552,9 @@ export default function ASMPage() {
                               { label: "First Seen", value: fmt(selectedFinding.first_seen || selectedFinding.detected_at || null) },
                               { label: "Last Seen", value: fmt(selectedFinding.last_seen || selectedFinding.detected_at || null) },
                             ].map(({ label, value }) => value ? (
-                              <div key={label} className="bg-gray-800 rounded p-2">
-                                <div className="text-gray-500">{label}</div>
-                                <div className="text-gray-200 font-medium mt-0.5 capitalize">{value}</div>
+                              <div key={label} className="bg-white/5 rounded p-2">
+                                <div className="text-slate-500">{label}</div>
+                                <div className="text-slate-200 font-medium mt-0.5 capitalize">{value}</div>
                               </div>
                             ) : null)}
                           </div>
@@ -1550,12 +1562,12 @@ export default function ASMPage() {
                           {/* References */}
                           {selectedFinding.references && Array.isArray(selectedFinding.references) && selectedFinding.references.length > 0 && (
                             <div>
-                              <div className="text-xs text-gray-400 uppercase tracking-wider mb-1.5">References</div>
+                              <div className="text-xs text-slate-400 uppercase tracking-wider mb-1.5">References</div>
                               <ul className="space-y-1">
                                 {(selectedFinding.references as string[]).map((ref, i) => (
                                   <li key={i}>
                                     <a href={ref} target="_blank" rel="noreferrer"
-                                      className="text-xs text-blue-400 hover:text-blue-300 break-all">{ref}</a>
+                                      className="text-xs text-primary hover:text-primary-light break-all">{ref}</a>
                                   </li>
                                 ))}
                               </ul>
@@ -1564,8 +1576,8 @@ export default function ASMPage() {
                         </div>
 
                         {/* Drawer footer — status actions */}
-                        <div className="flex-shrink-0 p-4 border-t border-gray-700 flex gap-2 flex-wrap">
-                          <span className="text-xs text-gray-500 self-center mr-1">Mark as:</span>
+                        <div className="flex-shrink-0 p-4 border-t border-[#1E2A3D] flex gap-2 flex-wrap">
+                          <span className="text-xs text-slate-500 self-center mr-1">Mark as:</span>
                           {(["open","accepted","remediated"] as const).map((s) => (
                             <button key={s}
                               onClick={async () => {
@@ -1576,15 +1588,15 @@ export default function ASMPage() {
                               }}
                               className={`text-xs px-3 py-1.5 rounded border transition-colors capitalize ${
                                 selectedFinding.status === s
-                                  ? "bg-blue-600 border-blue-500 text-white"
-                                  : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"
+                                  ? "bg-primary border-primary text-body-dark"
+                                  : "bg-white/5 border-[#1E2A3D] text-slate-300 hover:bg-white/10"
                               }`}
                             >
                               {s}
                             </button>
                           ))}
                           <button onClick={() => setSelectedFinding(null)}
-                            className="ml-auto text-xs px-3 py-1.5 rounded border border-gray-600 text-gray-400 hover:text-white hover:border-gray-500 transition-colors">
+                            className="ml-auto text-xs px-3 py-1.5 rounded border border-[#1E2A3D] text-slate-400 hover:text-white hover:border-[#1E2A3D] transition-colors">
                             Close
                           </button>
                         </div>
@@ -1600,24 +1612,28 @@ export default function ASMPage() {
                   <div className="flex gap-2 items-center flex-wrap">
                     <select value={changesDays}
                       onChange={(e) => setChangesDays(Number(e.target.value))}
-                      className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                      className="bg-card-light border border-[#1E2A3D] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
                       <option value={7}>Last 7 days</option>
                       <option value={30}>Last 30 days</option>
                       <option value={90}>Last 90 days</option>
                     </select>
                     <button onClick={() => selectedClient && fetchChanges(selectedClient.id, changesDays)}
-                      className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1.5">↻ Refresh</button>
-                    <span className="text-xs text-gray-400 ml-auto">{changes.length} events</span>
+                      className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-3 py-1.5">↻ Refresh</button>
+                    <span className="text-xs text-slate-400 ml-auto">{changes.length} events</span>
                   </div>
 
                   {loadingTab ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-sm py-8"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/><span>Loading…</span></div>
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8"><div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/><span>Loading…</span></div>
                   ) : changes.length === 0 ? (
-                    <div className="text-gray-500 text-sm py-8 text-center">No changes recorded in this period.</div>
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-10 text-center">
+                      <div className="text-3xl mb-2 opacity-60">📋</div>
+                      <div className="text-sm text-slate-300 font-medium">No changes recorded</div>
+                      <div className="text-xs text-slate-500 mt-1">Asset changes detected between scans will appear here.</div>
+                    </div>
                   ) : (
-                    <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                       <table className="w-full text-sm">
-                        <thead className="bg-gray-700/50 text-xs text-gray-400 uppercase">
+                        <thead className="bg-white/5 text-xs text-slate-400 uppercase">
                           <tr>
                             <th className="px-4 py-3 text-left">Asset</th>
                             <th className="px-4 py-3 text-left">Change</th>
@@ -1626,22 +1642,22 @@ export default function ASMPage() {
                             <th className="px-4 py-3 text-left">Detected</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-700/50">
+                        <tbody className="divide-y divide-white/5">
                           {changes.map((c) => (
-                            <tr key={c.id} className="hover:bg-gray-700/30">
-                              <td className="px-4 py-2.5 font-mono text-xs text-blue-300 max-w-xs truncate">{c.asset_value}</td>
+                            <tr key={c.id} className="hover:bg-white/5">
+                              <td className="px-4 py-2.5 font-mono text-xs text-cyan-300 max-w-xs truncate">{c.asset_value}</td>
                               <td className="px-4 py-2.5">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${
                                   c.change_type === "new" ? "bg-green-900/50 text-green-300" :
                                   c.change_type === "removed" ? "bg-red-900/50 text-red-300" :
                                   (c.change_type ?? "").includes("open") ? "bg-orange-900/50 text-orange-300" :
-                                  "bg-gray-700 text-gray-300"}`}>
+                                  "bg-white/10 text-slate-300"}`}>
                                    {(c.change_type ?? "unknown").replace(/_/g, " ")}
                                 </span>
                               </td>
-                              <td className="px-4 py-2.5 text-xs text-gray-500 font-mono truncate max-w-xs">{c.old_value ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-xs text-gray-300 font-mono truncate max-w-xs">{c.new_value ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtTs(c.detected_at)}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500 font-mono truncate max-w-xs">{c.old_value ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-300 font-mono truncate max-w-xs">{c.new_value ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{fmtTs(c.detected_at)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1655,35 +1671,36 @@ export default function ASMPage() {
               {tab === "darkweb" && (
                 <div className="space-y-4 max-w-5xl">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400">Correlated against:</span>
+                    <span className="text-xs text-slate-400">Correlated against:</span>
                     {(darkweb?.terms ?? []).slice(0, 12).map((t) => (
-                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-200 border border-purple-700/50">{t}</span>
+                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-cyan-900/30 text-cyan-200 border border-cyan-700/40">{t}</span>
                     ))}
                     {!darkweb?.watchlist_id && (
-                      <span className="text-xs text-gray-500 italic">no linked watchlist — using client name + domains only</span>
+                      <span className="text-xs text-slate-500 italic">no linked watchlist — using client name + domains only</span>
                     )}
                     <button onClick={() => selectedClient && fetchDarkweb(selectedClient.id)}
-                      className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1.5 ml-auto">↻ Refresh</button>
+                      className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-3 py-1.5 ml-auto">↻ Refresh</button>
                   </div>
 
                   {loadingTab ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-sm py-8"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/><span>Searching dark-web sources…</span></div>
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8"><div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/><span>Searching dark-web sources…</span></div>
                   ) : (!darkweb || (darkweb.posts.length === 0 && darkweb.ioc_hits.length === 0)) ? (
-                    <div className="text-gray-500 text-sm py-8 text-center border border-gray-700 rounded-lg bg-gray-800/40">
-                      No dark-web mentions or threat-intel hits matched this client&apos;s terms yet.
-                      <div className="text-xs text-gray-600 mt-1">Dark-web crawls run on the watchlist schedule; results appear here once a crawl matches.</div>
+                    <div className="text-center border border-[#1E2A3D] rounded-[14px] bg-card-dark p-10">
+                      <div className="text-3xl mb-2 opacity-60">🕳️</div>
+                      <div className="text-sm text-slate-300 font-medium">No dark-web mentions yet</div>
+                      <div className="text-xs text-slate-500 mt-1">Nothing matched this client&apos;s terms. Crawls run on the watchlist schedule; matches appear here.</div>
                     </div>
                   ) : (
                     <>
                       {/* Crawled dark-web posts — full content */}
                       {darkweb.posts.length > 0 && (
                         <div className="space-y-3">
-                          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                             Dark-Web Crawl Results
-                            <span className="bg-gray-700 text-gray-300 text-xs rounded-full px-2 py-0.5">{darkweb.total_posts}</span>
+                            <span className="bg-white/10 text-slate-300 text-xs rounded-full px-2 py-0.5">{darkweb.total_posts}</span>
                           </h3>
                           {darkweb.posts.map((p) => (
-                            <div key={p._id ?? p.url} className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-2">
+                            <div key={p._id ?? p.url} className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4 space-y-2">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="font-medium text-white text-sm">{p.title || "(untitled)"}</div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -1692,38 +1709,38 @@ export default function ASMPage() {
                                       p.severity === "critical" ? "bg-red-900/60 text-red-200" :
                                       p.severity === "high" ? "bg-orange-900/60 text-orange-200" :
                                       p.severity === "medium" ? "bg-yellow-900/50 text-yellow-200" :
-                                      "bg-gray-700 text-gray-300"}`}>{p.severity}</span>
+                                      "bg-white/10 text-slate-300"}`}>{p.severity}</span>
                                   )}
-                                  <span className="text-xs text-gray-500 whitespace-nowrap">{fmtTs(p.discovered_at ?? null)}</span>
+                                  <span className="text-xs text-slate-500 whitespace-nowrap">{fmtTs(p.discovered_at ?? null)}</span>
                                 </div>
                               </div>
                               {p.body_text && (
-                                <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">{p.body_text}</p>
+                                <p className="text-sm text-slate-300 whitespace-pre-wrap break-words">{p.body_text}</p>
                               )}
                               {p.url && (
-                                <div className="text-xs font-mono text-blue-300 break-all bg-gray-900/60 rounded px-2 py-1.5">{p.url}</div>
+                                <div className="text-xs font-mono text-cyan-300 break-all bg-body-dark/60 rounded px-2 py-1.5">{p.url}</div>
                               )}
                               {(p.onion_links?.length || p.emails_found?.length || p.domains_found?.length || p.ips_found?.length) ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
                                   {(p.onion_links ?? []).length > 0 && (
-                                    <div><span className="text-gray-500">Onion links: </span><span className="font-mono text-purple-300 break-all">{(p.onion_links ?? []).join(", ")}</span></div>
+                                    <div><span className="text-slate-500">Onion links: </span><span className="font-mono text-cyan-300 break-all">{(p.onion_links ?? []).join(", ")}</span></div>
                                   )}
                                   {(p.emails_found ?? []).length > 0 && (
-                                    <div><span className="text-gray-500">Emails: </span><span className="font-mono text-red-300 break-all">{(p.emails_found ?? []).join(", ")}</span></div>
+                                    <div><span className="text-slate-500">Emails: </span><span className="font-mono text-red-300 break-all">{(p.emails_found ?? []).join(", ")}</span></div>
                                   )}
                                   {(p.domains_found ?? []).length > 0 && (
-                                    <div><span className="text-gray-500">Domains: </span><span className="font-mono text-gray-300 break-all">{(p.domains_found ?? []).join(", ")}</span></div>
+                                    <div><span className="text-slate-500">Domains: </span><span className="font-mono text-slate-300 break-all">{(p.domains_found ?? []).join(", ")}</span></div>
                                   )}
                                   {(p.ips_found ?? []).length > 0 && (
-                                    <div><span className="text-gray-500">IPs: </span><span className="font-mono text-gray-300 break-all">{(p.ips_found ?? []).join(", ")}</span></div>
+                                    <div><span className="text-slate-500">IPs: </span><span className="font-mono text-slate-300 break-all">{(p.ips_found ?? []).join(", ")}</span></div>
                                   )}
                                 </div>
                               ) : null}
                               <div className="flex items-center gap-2 flex-wrap pt-1">
-                                {p.source && <span className="text-xs px-2 py-0.5 rounded bg-gray-700/70 text-gray-300">{p.source}</span>}
-                                {p.crawl_query && <span className="text-xs text-gray-500">matched query: <span className="text-gray-400">{p.crawl_query}</span></span>}
+                                {p.source && <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-slate-300">{p.source}</span>}
+                                {p.crawl_query && <span className="text-xs text-slate-500">matched query: <span className="text-slate-400">{p.crawl_query}</span></span>}
                                 {(p.tags ?? []).map((tg) => (
-                                  <span key={tg} className="text-xs px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-300">{tg}</span>
+                                  <span key={tg} className="text-xs px-1.5 py-0.5 rounded bg-cyan-900/25 text-cyan-300">{tg}</span>
                                 ))}
                               </div>
                             </div>
@@ -1734,13 +1751,13 @@ export default function ASMPage() {
                       {/* Threat-intel indicators referencing the client's domains */}
                       {darkweb.ioc_hits.length > 0 && (
                         <div className="space-y-2">
-                          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                             Threat-Intel Indicators
-                            <span className="bg-gray-700 text-gray-300 text-xs rounded-full px-2 py-0.5">{darkweb.total_ioc_hits}</span>
+                            <span className="bg-white/10 text-slate-300 text-xs rounded-full px-2 py-0.5">{darkweb.total_ioc_hits}</span>
                           </h3>
-                          <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                             <table className="w-full text-sm">
-                              <thead className="bg-gray-700/50 text-xs text-gray-400 uppercase">
+                              <thead className="bg-white/5 text-xs text-slate-400 uppercase">
                                 <tr>
                                   <th className="px-4 py-3 text-left">Indicator</th>
                                   <th className="px-4 py-3 text-left">Type</th>
@@ -1749,14 +1766,14 @@ export default function ASMPage() {
                                   <th className="px-4 py-3 text-left">Last Seen</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-gray-700/50">
+                              <tbody className="divide-y divide-white/5">
                                 {darkweb.ioc_hits.map((h) => (
-                                  <tr key={h._id ?? h.indicator} className="hover:bg-gray-700/30">
-                                    <td className="px-4 py-2.5 font-mono text-xs text-blue-300 break-all max-w-md">{h.indicator}</td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-400">{h.indicator_type ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-300">{h.threat_type ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-400">{h.source ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtTs(h.last_seen ?? null)}</td>
+                                  <tr key={h._id ?? h.indicator} className="hover:bg-white/5">
+                                    <td className="px-4 py-2.5 font-mono text-xs text-cyan-300 break-all max-w-md">{h.indicator}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-400">{h.indicator_type ?? "—"}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-300">{h.threat_type ?? "—"}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-400">{h.source ?? "—"}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{fmtTs(h.last_seen ?? null)}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1773,8 +1790,8 @@ export default function ASMPage() {
               {tab === "security" && (
                 <div className="space-y-5 max-w-3xl">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-200 mb-1">Security Posture Check</h3>
-                    <p className="text-xs text-gray-400 mb-3">
+                    <h3 className="text-sm font-semibold text-slate-200 mb-1">Security Posture Check</h3>
+                    <p className="text-xs text-slate-400 mb-3">
                       Checks email security (SPF/DKIM/DMARC), DNS takeover risk, SSL/TLS quality, and HTTP security headers.
                     </p>
                     <div className="flex gap-2">
@@ -1783,12 +1800,12 @@ export default function ASMPage() {
                         onChange={(e) => setSecCheckDomain(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") runSecurityCheck(); }}
                         placeholder="Enter domain e.g. safaricom.co.ke"
-                        className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                        className="flex-1 bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary"
                       />
                       <button
                         onClick={runSecurityCheck}
                         disabled={loadingSecCheck || !secCheckDomain.trim()}
-                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex-shrink-0"
+                        className="bg-primary hover:bg-primary-hover disabled:opacity-40 text-body-dark text-sm font-medium px-4 py-2 rounded-lg transition-colors flex-shrink-0"
                       >
                         {loadingSecCheck ? "Checking…" : "Run Check"}
                       </button>
@@ -1796,8 +1813,8 @@ export default function ASMPage() {
                   </div>
 
                   {loadingSecCheck && (
-                    <div className="flex items-center gap-2 text-blue-400 text-sm">
-                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
+                    <div className="flex items-center gap-2 text-primary text-sm">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
                       Checking security posture for <strong>{secCheckDomain}</strong>…
                     </div>
                   )}
@@ -1805,24 +1822,24 @@ export default function ASMPage() {
                   {secPosture && (
                     <div className="space-y-4">
                       {/* Score card */}
-                      <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 flex items-center gap-6">
+                      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-5 flex items-center gap-6">
                         <div className="text-center">
                           <div className={`text-5xl font-black ${gradeColor(secPosture.grade)}`}>{secPosture.grade}</div>
-                          <div className="text-xs text-gray-400 mt-1">Grade</div>
+                          <div className="text-xs text-slate-400 mt-1">Grade</div>
                         </div>
                         <div className="flex-1">
                           <div className="flex items-end gap-2 mb-1">
                             <span className="text-3xl font-bold text-white">{secPosture.security_score}</span>
-                            <span className="text-gray-400 text-sm mb-1">/100</span>
+                            <span className="text-slate-400 text-sm mb-1">/100</span>
                           </div>
-                          <div className="w-full bg-gray-700 rounded-full h-2">
+                          <div className="w-full bg-white/10 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full ${riskBg(100 - secPosture.security_score)}`}
                               style={{ width: `${secPosture.security_score}%` }}
                             />
                           </div>
-                          <div className="mt-2 text-xs text-gray-400">
-                            {secPosture.total_findings} findings for <span className="font-mono text-blue-300">{secPosture.domain}</span>
+                          <div className="mt-2 text-xs text-slate-400">
+                            {secPosture.total_findings} findings for <span className="font-mono text-cyan-300">{secPosture.domain}</span>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs text-right">
@@ -1830,8 +1847,8 @@ export default function ASMPage() {
                             <div key={sev}>
                               <span className={`font-bold ${
                                 sev === "critical" ? "text-red-400" : sev === "high" ? "text-orange-400" :
-                                sev === "medium" ? "text-yellow-400" : "text-blue-400"}`}>{count}</span>
-                              <span className="text-gray-500 ml-1">{sev}</span>
+                                sev === "medium" ? "text-yellow-400" : "text-slate-300"}`}>{count}</span>
+                              <span className="text-slate-500 ml-1">{sev}</span>
                             </div>
                           ))}
                         </div>
@@ -1845,18 +1862,18 @@ export default function ASMPage() {
                       ) : (
                         <div className="space-y-2">
                           {secPosture.findings.map((f, i) => (
-                            <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+                            <div key={i} className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
                               <div className="flex items-start gap-3">
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${severityColor(f.severity)}`}>
                                   {f.severity.toUpperCase()}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-500 capitalize">{f.category.replace(/_/g, " ")}</span>
+                                    <span className="text-xs text-slate-500 capitalize">{f.category.replace(/_/g, " ")}</span>
                                   </div>
                                   <h4 className="text-sm font-semibold text-white mt-0.5">{f.title}</h4>
-                                  <p className="text-xs text-gray-400 mt-1">{f.description}</p>
-                                  <div className="mt-2 bg-blue-900/20 border border-blue-700/30 rounded p-2 text-xs text-blue-300">
+                                  <p className="text-xs text-slate-400 mt-1">{f.description}</p>
+                                  <div className="mt-2 bg-primary/10 border border-primary/30 rounded p-2 text-xs text-primary-light">
                                     <span className="font-medium">Fix: </span>{f.remediation}
                                   </div>
                                 </div>
@@ -1867,7 +1884,7 @@ export default function ASMPage() {
                       )}
 
                       {/* Checks performed */}
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-slate-500">
                         Checks performed: {secPosture.checks_performed.join(", ")}
                       </div>
                     </div>
@@ -1879,48 +1896,50 @@ export default function ASMPage() {
               {tab === "groups" && (
                 <div className="space-y-4 max-w-3xl">
                   <div className="flex items-start justify-between gap-4">
-                    <p className="text-sm text-gray-400">
+                    <p className="text-sm text-slate-400">
                       Define what to scan. Add domain seeds, IP ranges, or ASNs. Each group runs independently.
                     </p>
                     <button onClick={() => setShowNewGroup(true)}
-                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium py-1.5 px-4 rounded-lg flex-shrink-0">
+                      className="bg-primary hover:bg-primary-hover text-body-dark text-xs font-medium py-1.5 px-4 rounded-lg flex-shrink-0">
                       + Add Group
                     </button>
                   </div>
 
                   {groups.length === 0 ? (
-                    <div className="border border-dashed border-gray-600 rounded-lg p-8 text-center">
-                      <p className="text-gray-500 text-sm">No discovery groups yet.</p>
-                      <button onClick={() => setShowNewGroup(true)} className="mt-2 text-blue-400 hover:text-blue-300 text-sm">
+                    <div className="border border-dashed border-[#1E2A3D] rounded-[14px] p-10 text-center">
+                      <div className="text-3xl mb-2 opacity-60">🎯</div>
+                      <p className="text-sm text-slate-300 font-medium">No discovery groups yet</p>
+                      <p className="text-xs text-slate-500 mt-1">Define what to scan — domains, IP ranges, or ASNs.</p>
+                      <button onClick={() => setShowNewGroup(true)} className="mt-3 text-primary hover:text-primary-light text-sm font-medium">
                         Create your first group →
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {groups.map((g) => (
-                        <div key={g.id} className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+                        <div key={g.id} className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <h4 className="text-sm font-semibold text-white">{g.name}</h4>
                                 <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  g.is_active ? "bg-green-900/50 text-green-300" : "bg-gray-700 text-gray-400"}`}>
+                                  g.is_active ? "bg-green-900/50 text-green-300" : "bg-white/10 text-slate-400"}`}>
                                   {g.is_active ? "Active" : "Paused"}
                                 </span>
                               </div>
-                              {g.description && <p className="text-xs text-gray-400 mt-1">{g.description}</p>}
+                              {g.description && <p className="text-xs text-slate-400 mt-1">{g.description}</p>}
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {(g.seeds ?? []).length === 0
                                   ? <span className="text-xs text-yellow-500">⚠ No seeds — add seeds to enable scanning</span>
                                   : (g.seeds ?? []).map((s, i) => (
-                                      <span key={i} className="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 px-2 py-0.5 rounded font-mono">
-                                        {s.type !== "domain" && <span className="text-blue-500 mr-1">[{s.type}]</span>}
+                                      <span key={i} className="text-xs bg-cyan-900/30 text-cyan-300 border border-cyan-800/40 px-2 py-0.5 rounded font-mono">
+                                        {s.type !== "domain" && <span className="text-cyan-500 mr-1">[{s.type}]</span>}
                                         {s.value}
                                       </span>
                                     ))
                                 }
                               </div>
-                              <div className="mt-2 flex gap-x-4 gap-y-1 flex-wrap text-xs text-gray-500">
+                              <div className="mt-2 flex gap-x-4 gap-y-1 flex-wrap text-xs text-slate-500">
                                 {g.include_subdomains && <span>✓ Subdomains</span>}
                                 {g.include_ports && <span>✓ Ports</span>}
                                 {g.include_ssl && <span>✓ SSL</span>}
@@ -1930,7 +1949,7 @@ export default function ASMPage() {
                                 {g.include_ti_enrich && <span>✓ TI Enrichment</span>}
                                 {g.include_nuclei && <span className="text-orange-400">✓ Nuclei</span>}
                               </div>
-                              <div className="mt-1 text-xs text-gray-500">
+                              <div className="mt-1 text-xs text-slate-500">
                                 {g.assets_discovered} assets · {g.findings_count} findings
                                 {g.last_run_at && ` · Last run: ${fmt(g.last_run_at)}`}
                               </div>
@@ -1938,11 +1957,11 @@ export default function ASMPage() {
                             <div className="flex gap-2 flex-shrink-0">
                               <button
                                 onClick={() => saveGroup(g, { is_active: !g.is_active })}
-                                className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2 py-1">
+                                className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-2 py-1">
                                 {g.is_active ? "Pause" : "Resume"}
                               </button>
                               <button onClick={() => setShowEditGroup(g)}
-                                className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2 py-1">
+                                className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-2 py-1">
                                 Edit
                               </button>
                               <button onClick={() => deleteGroup(g.id)}
@@ -1968,70 +1987,70 @@ export default function ASMPage() {
       {/* New Client */}
       {showNewClient && (
         <Modal onClose={() => setShowNewClient(false)} maxWidth="max-w-xl">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-2xl">
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 shadow-2xl">
             <h2 className="text-base font-bold text-white mb-1">Add New Client</h2>
-            <p className="text-xs text-gray-400 mb-4">Each client gets an isolated monitoring space with its own asset inventory, findings, and scan schedule.</p>
+            <p className="text-xs text-slate-400 mb-4">Each client gets an isolated monitoring space with its own asset inventory, findings, and scan schedule.</p>
             <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
 
               {/* Identity */}
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-1">Identity</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider pt-1">Identity</div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Organization Name *</label>
+                <label className="block text-xs text-slate-400 mb-1">Organization Name *</label>
                 <input autoFocus type="text" value={ncName} onChange={(e) => setNcName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") createClient(); }}
                   placeholder="e.g. Safaricom PLC"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Industry</label>
+                  <label className="block text-xs text-slate-400 mb-1">Industry</label>
                   <input type="text" value={ncIndustry} onChange={(e) => setNcIndustry(e.target.value)}
                     placeholder="Telecom / Banking / Fintech"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Country</label>
+                  <label className="block text-xs text-slate-400 mb-1">Country</label>
                   <input type="text" value={ncCountry} onChange={(e) => setNcCountry(e.target.value.toUpperCase())}
                     placeholder="KE" maxLength={5}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Asset Owner</label>
+                  <label className="block text-xs text-slate-400 mb-1">Asset Owner</label>
                   <input type="text" value={ncOwner} onChange={(e) => setNcOwner(e.target.value)}
                     placeholder="CISO / IT Manager name"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Business Unit</label>
+                  <label className="block text-xs text-slate-400 mb-1">Business Unit</label>
                   <input type="text" value={ncBU} onChange={(e) => setNcBU(e.target.value)}
                     placeholder="e.g. Core Banking, Mobile"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Alert Contact Email</label>
+                <label className="block text-xs text-slate-400 mb-1">Alert Contact Email</label>
                 <input type="email" value={ncEmail} onChange={(e) => setNcEmail(e.target.value)}
                   placeholder="security@client.com"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
               </div>
 
               {/* Scan schedule */}
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2">Scan Schedule</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider pt-2">Scan Schedule</div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">
+                <label className="block text-xs text-slate-400 mb-1">
                   Automatic scan frequency
-                  <span className="text-gray-500 ml-1">— scanner runs whenever the interval elapses</span>
+                  <span className="text-slate-500 ml-1">— scanner runs whenever the interval elapses</span>
                 </label>
                 <select value={ncInterval} onChange={(e) => setNcInterval(Number(e.target.value))}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary">
                   {SCHEDULE_OPTIONS.map((s) => (
                     <option key={s.minutes} value={s.minutes}>{s.label}</option>
                   ))}
                 </select>
                 {ncInterval > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     First scan runs immediately after client is created and seeds are added. You can also trigger scans manually at any time.
                   </p>
                 )}
@@ -2039,16 +2058,16 @@ export default function ASMPage() {
 
               {/* Notes */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Notes</label>
+                <label className="block text-xs text-slate-400 mb-1">Notes</label>
                 <textarea value={ncDesc} onChange={(e) => setNcDesc(e.target.value)} rows={2} placeholder="Optional context…"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary resize-none" />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowNewClient(false)}
-                className="flex-1 border border-gray-600 text-gray-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
+                className="flex-1 border border-[#1E2A3D] text-slate-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
               <button onClick={createClient} disabled={!ncName.trim()}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-lg px-4 py-2 text-sm">Create Client</button>
+                className="flex-1 bg-primary hover:bg-primary-hover disabled:opacity-40 text-body-dark font-medium rounded-lg px-4 py-2 text-sm">Create Client</button>
             </div>
           </div>
         </Modal>
@@ -2057,63 +2076,63 @@ export default function ASMPage() {
       {/* Edit Client */}
       {showEditClient && selectedClient && (
         <Modal onClose={() => setShowEditClient(false)} maxWidth="max-w-xl">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-2xl">
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 shadow-2xl">
             <h2 className="text-base font-bold text-white mb-4">Edit Client: {selectedClient.name}</h2>
             <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                <label className="block text-xs text-slate-400 mb-1">Name *</label>
                 <input type="text" value={ecName} onChange={(e) => setEcName(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Industry</label>
+                  <label className="block text-xs text-slate-400 mb-1">Industry</label>
                   <input type="text" value={ecIndustry} onChange={(e) => setEcIndustry(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Country</label>
+                  <label className="block text-xs text-slate-400 mb-1">Country</label>
                   <input type="text" value={ecCountry} onChange={(e) => setEcCountry(e.target.value.toUpperCase())} maxLength={5}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Asset Owner</label>
+                  <label className="block text-xs text-slate-400 mb-1">Asset Owner</label>
                   <input type="text" value={ecOwner} onChange={(e) => setEcOwner(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Business Unit</label>
+                  <label className="block text-xs text-slate-400 mb-1">Business Unit</label>
                   <input type="text" value={ecBU} onChange={(e) => setEcBU(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                    className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Alert Contact Email</label>
+                <label className="block text-xs text-slate-400 mb-1">Alert Contact Email</label>
                 <input type="email" value={ecEmail} onChange={(e) => setEcEmail(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Scan Frequency</label>
+                <label className="block text-xs text-slate-400 mb-1">Scan Frequency</label>
                 <select value={ecInterval} onChange={(e) => setEcInterval(Number(e.target.value))}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary">
                   {SCHEDULE_OPTIONS.map((s) => (
                     <option key={s.minutes} value={s.minutes}>{s.label}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Notes</label>
+                <label className="block text-xs text-slate-400 mb-1">Notes</label>
                 <textarea value={ecDesc} onChange={(e) => setEcDesc(e.target.value)} rows={2}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 resize-none" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary resize-none" />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowEditClient(false)}
-                className="flex-1 border border-gray-600 text-gray-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
+                className="flex-1 border border-[#1E2A3D] text-slate-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
               <button onClick={saveClient} disabled={!ecName.trim()}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-lg px-4 py-2 text-sm">Save Changes</button>
+                className="flex-1 bg-primary hover:bg-primary-hover disabled:opacity-40 text-body-dark font-medium rounded-lg px-4 py-2 text-sm">Save Changes</button>
             </div>
           </div>
         </Modal>
@@ -2122,28 +2141,28 @@ export default function ASMPage() {
       {/* New Group */}
       {showNewGroup && selectedClient && (
         <Modal onClose={() => setShowNewGroup(false)} maxWidth="max-w-2xl">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-2xl">
+          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 shadow-2xl">
             <h2 className="text-base font-bold text-white mb-1">Add Discovery Group</h2>
-            <p className="text-xs text-gray-400 mb-4">for <strong className="text-white">{selectedClient.name}</strong></p>
+            <p className="text-xs text-slate-400 mb-4">for <strong className="text-white">{selectedClient.name}</strong></p>
             <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Group Name *</label>
+                <label className="block text-xs text-slate-400 mb-1">Group Name *</label>
                 <input autoFocus type="text" value={ngName} onChange={(e) => setNgName(e.target.value)}
                   placeholder="e.g. Primary Domains, Cloud Edge, Acquired Company"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+                  className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
               </div>
 
               {/* Structured seed list */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs text-gray-400">
-                    Monitoring Targets <span className="text-gray-500">— what to track for this group</span>
+                  <label className="block text-xs text-slate-400">
+                    Monitoring Targets <span className="text-slate-500">— what to track for this group</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setNgSeeds((p) => [...p, { type: "domain", value: "" }])}
-                    className="text-xs text-blue-400 hover:text-blue-300"
+                    className="text-xs text-primary hover:text-primary-light"
                   >
                     + Add target
                   </button>
@@ -2155,7 +2174,7 @@ export default function ASMPage() {
                       <select
                         value={seed.type}
                         onChange={(e) => setNgSeeds((p) => p.map((s, i) => i === idx ? { ...s, type: e.target.value } : s))}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 flex-shrink-0 w-36"
+                        className="bg-card-light border border-[#1E2A3D] rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-primary flex-shrink-0 w-36"
                       >
                         {SEED_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>{t.label}</option>
@@ -2167,9 +2186,9 @@ export default function ASMPage() {
                           value={seed.value}
                           onChange={(e) => setNgSeeds((p) => p.map((s, i) => i === idx ? { ...s, value: e.target.value } : s))}
                           placeholder={SEED_TYPES.find((t) => t.value === seed.type)?.placeholder ?? ""}
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                          className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-primary"
                         />
-                        <p className="text-xs text-gray-600 mt-0.5">
+                        <p className="text-xs text-slate-600 mt-0.5">
                           {SEED_TYPES.find((t) => t.value === seed.type)?.hint}
                         </p>
                       </div>
@@ -2177,7 +2196,7 @@ export default function ASMPage() {
                         <button
                           type="button"
                           onClick={() => setNgSeeds((p) => p.filter((_, i) => i !== idx))}
-                          className="text-gray-600 hover:text-red-400 text-lg leading-none pt-1.5 flex-shrink-0"
+                          className="text-slate-600 hover:text-red-400 text-lg leading-none pt-1.5 flex-shrink-0"
                         >
                           ×
                         </button>
@@ -2185,14 +2204,14 @@ export default function ASMPage() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-slate-500 mt-2">
                   {ngSeeds.filter((s) => s.value.trim()).length} of {ngSeeds.length} targets filled in
                 </p>
               </div>
 
               {/* Scan modules */}
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Scan Modules</label>
+                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Scan Modules</label>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {([
                     { label: "Subdomain Discovery",  hint: "crt.sh + SecurityTrails + Shodan",   val: ngSubdomains, set: setNgSubdomains },
@@ -2205,10 +2224,10 @@ export default function ASMPage() {
                   ] as const).map(({ label, hint, val, set }) => (
                     <label key={label} className="flex items-start gap-2 cursor-pointer py-0.5">
                       <input type="checkbox" checked={val} onChange={(e) => (set as (v: boolean) => void)(e.target.checked)}
-                        className="mt-0.5 rounded border-gray-500 accent-blue-500 flex-shrink-0" />
+                        className="mt-0.5 rounded border-[#1E2A3D] accent-primary flex-shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-200">{label}</div>
-                        <div className="text-xs text-gray-600">{hint}</div>
+                        <div className="text-xs text-slate-200">{label}</div>
+                        <div className="text-xs text-slate-600">{hint}</div>
                       </div>
                     </label>
                   ))}
@@ -2218,9 +2237,9 @@ export default function ASMPage() {
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowNewGroup(false)}
-                className="flex-1 border border-gray-600 text-gray-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
+                className="flex-1 border border-[#1E2A3D] text-slate-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
               <button onClick={createGroup} disabled={!ngName.trim() || ngSeeds.every((s) => !s.value.trim())}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-lg px-4 py-2 text-sm">
+                className="flex-1 bg-primary hover:bg-primary-hover disabled:opacity-40 text-body-dark font-medium rounded-lg px-4 py-2 text-sm">
                 Create Group
               </button>
             </div>
@@ -2242,13 +2261,13 @@ export default function ASMPage() {
       {/* Delete Confirm */}
       {showDeleteConfirm && selectedClient && (
         <Modal onClose={() => setShowDeleteConfirm(false)} maxWidth="max-w-sm">
-          <div className="bg-gray-800 border border-red-800/50 rounded-xl p-6 shadow-2xl">
+          <div className="bg-card-dark border border-red-800/50 rounded-[14px] p-6 shadow-2xl">
             <h2 className="text-base font-bold text-white mb-2">Delete Client</h2>
-            <p className="text-sm text-gray-300 mb-1">Delete <strong>{selectedClient.name}</strong>?</p>
+            <p className="text-sm text-slate-300 mb-1">Delete <strong>{selectedClient.name}</strong>?</p>
             <p className="text-xs text-red-400">This removes the client record. Elasticsearch scan data is not purged automatically.</p>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 border border-gray-600 text-gray-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
+                className="flex-1 border border-[#1E2A3D] text-slate-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
               <button onClick={deleteClient}
                 className="flex-1 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg px-4 py-2 text-sm">Delete</button>
             </div>
@@ -2301,26 +2320,26 @@ function EditGroupModal({
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-2xl">
+    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6 shadow-2xl">
       <h2 className="text-base font-bold text-white mb-4">Edit Group: {group.name}</h2>
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Name *</label>
+          <label className="block text-xs text-slate-400 mb-1">Name *</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+            className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary" />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Description</label>
+          <label className="block text-xs text-slate-400 mb-1">Description</label>
           <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Optional notes…"
-            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+            className="w-full bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-primary" />
         </div>
 
         {/* Structured seeds */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs text-gray-400">Monitoring Targets</label>
+            <label className="block text-xs text-slate-400">Monitoring Targets</label>
             <button type="button" onClick={() => setSeeds((p) => [...p, { type: "domain", value: "" }])}
-              className="text-xs text-blue-400 hover:text-blue-300">+ Add target</button>
+              className="text-xs text-primary hover:text-primary-light">+ Add target</button>
           </div>
           <div className="space-y-2">
             {seeds.map((seed, idx) => (
@@ -2328,7 +2347,7 @@ function EditGroupModal({
                 <select
                   value={seed.type}
                   onChange={(e) => setSeeds((p) => p.map((s, i) => i === idx ? { ...s, type: e.target.value } : s))}
-                  className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 flex-shrink-0 w-36"
+                  className="bg-card-light border border-[#1E2A3D] rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-primary flex-shrink-0 w-36"
                 >
                   {SEED_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
@@ -2339,11 +2358,11 @@ function EditGroupModal({
                   value={seed.value}
                   onChange={(e) => setSeeds((p) => p.map((s, i) => i === idx ? { ...s, value: e.target.value } : s))}
                   placeholder={SEED_TYPES.find((t) => t.value === seed.type)?.placeholder ?? ""}
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  className="flex-1 bg-card-light border border-[#1E2A3D] rounded px-3 py-2 text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-primary"
                 />
                 {seeds.length > 1 && (
                   <button type="button" onClick={() => setSeeds((p) => p.filter((_, i) => i !== idx))}
-                    className="text-gray-600 hover:text-red-400 text-lg leading-none pt-1.5 flex-shrink-0">×</button>
+                    className="text-slate-600 hover:text-red-400 text-lg leading-none pt-1.5 flex-shrink-0">×</button>
                 )}
               </div>
             ))}
@@ -2352,7 +2371,7 @@ function EditGroupModal({
 
         {/* Modules */}
         <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Scan Modules</label>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Scan Modules</label>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             {([
               { label: "Subdomain Discovery",   val: subdomains, set: setSubdomains },
@@ -2365,8 +2384,8 @@ function EditGroupModal({
             ] as const).map(({ label, val, set }) => (
               <label key={label} className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={val} onChange={(e) => (set as (v: boolean) => void)(e.target.checked)}
-                  className="rounded border-gray-500 accent-blue-500" />
-                <span className="text-xs text-gray-300">{label}</span>
+                  className="rounded border-[#1E2A3D] accent-primary" />
+                <span className="text-xs text-slate-300">{label}</span>
               </label>
             ))}
           </div>
@@ -2374,9 +2393,9 @@ function EditGroupModal({
       </div>
       <div className="flex gap-3 mt-5">
         <button onClick={onClose}
-          className="flex-1 border border-gray-600 text-gray-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
+          className="flex-1 border border-[#1E2A3D] text-slate-300 hover:text-white rounded-lg px-4 py-2 text-sm">Cancel</button>
         <button onClick={save} disabled={!name.trim()}
-          className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-lg px-4 py-2 text-sm">Save Changes</button>
+          className="flex-1 bg-primary hover:bg-primary-hover disabled:opacity-40 text-body-dark font-medium rounded-lg px-4 py-2 text-sm">Save Changes</button>
       </div>
     </div>
   );

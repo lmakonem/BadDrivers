@@ -207,12 +207,12 @@ export default function PortalLayout({
       case "medium":
         return "bg-yellow-500";
       case "info":
-        return "bg-blue-500";
+        return "bg-slate-500";
     }
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-ebony-950 flex flex-col">
+    <div className="h-screen overflow-hidden flex flex-col">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -223,17 +223,17 @@ export default function PortalLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card-dark border-r border-white/10 transform transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card-dark border-r border-[#1E2A3D] transform transition-transform duration-300 lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
+        <div className="flex items-center justify-between h-16 px-4 border-b border-[#1E2A3D]">
           <Link href="/portal" className="flex items-center" aria-label="JichoSec">
             <JichoLogo size={44} wordClassName="text-white" />
           </Link>
           <button
-            className="lg:hidden text-gray-400 hover:text-white"
+            className="lg:hidden text-slate-400 hover:text-white"
             onClick={() => setSidebarOpen(false)}
           >
             <CloseIcon />
@@ -249,10 +249,10 @@ export default function PortalLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-[14px] transition-all duration-200 ${
                   isActive
                     ? "bg-primary/10 text-primary border border-primary/20"
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <item.icon />
@@ -261,7 +261,7 @@ export default function PortalLayout({
             ) : (
               <div
                 key={item.href}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 cursor-not-allowed"
+                className="flex items-center gap-3 px-4 py-3 rounded-[14px] text-slate-600 cursor-not-allowed"
                 title={`Requires ${item.tier} plan`}
               >
                 <item.icon />
@@ -277,7 +277,7 @@ export default function PortalLayout({
               href="/admin"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-200 mt-4 border border-amber-500/20"
+              className="flex items-center gap-3 px-4 py-3 rounded-[14px] text-slate-400 hover:text-primary hover:bg-primary/10 transition-all duration-200 mt-4 border border-[#1E2A3D]"
             >
               <AdminIcon />
               <span className="font-medium">Admin Panel</span>
@@ -286,10 +286,10 @@ export default function PortalLayout({
         </nav>
 
         {/* Bottom section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#1E2A3D]">
           <Link
             href="/portal/settings"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200"
+            className="flex items-center gap-3 px-4 py-3 rounded-[14px] text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200"
           >
             <SettingsIcon />
             <span className="font-medium">Settings</span>
@@ -297,31 +297,31 @@ export default function PortalLayout({
           
           {/* Subscription badge */}
           {user?.is_admin ? (
-            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-500/5 border border-amber-500/20">
+            <div className="mt-4 p-4 rounded-[14px] bg-card-dark border border-[#1E2A3D]">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Admin</span>
+                <span className="text-xs font-semibold text-primary uppercase tracking-wider">Admin</span>
               </div>
-              <p className="text-xs text-gray-400">Full access to all features</p>
+              <p className="text-xs text-slate-400">Full access to all features</p>
             </div>
           ) : user?.tier === "free" ? (
-            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-gray-500/20 to-gray-500/5 border border-gray-500/20">
+            <div className="mt-4 p-4 rounded-[14px] bg-card-dark border border-[#1E2A3D]">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Free Plan</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Free Plan</span>
               </div>
-              <p className="text-xs text-gray-400">Upgrade to unlock premium features</p>
+              <p className="text-xs text-slate-400">Upgrade to unlock premium features</p>
               <Link
                 href="/pricing"
-                className="mt-3 w-full py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors block text-center"
+                className="mt-3 w-full py-2 rounded-[10px] bg-primary hover:bg-primary-hover text-body-dark text-sm font-medium transition-colors block text-center"
               >
                 Upgrade Plan
               </Link>
             </div>
           ) : (
-            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/20 to-primary/5 border border-primary/20">
+            <div className="mt-4 p-4 rounded-[14px] bg-card-dark border border-[#1E2A3D]">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-primary uppercase tracking-wider">{user?.tier} Plan</span>
+                <span className="text-xs font-semibold text-primary uppercase tracking-wider capitalize">{user?.tier} Plan</span>
               </div>
-              <p className="text-xs text-gray-400">All premium features unlocked</p>
+              <p className="text-xs text-slate-400">All premium features unlocked</p>
             </div>
           )}
         </div>
@@ -330,11 +330,11 @@ export default function PortalLayout({
       {/* Main content */}
       <div className="lg:ml-64 flex flex-col" style={{ height: "100vh" }}>
         {/* Header */}
-        <header className="flex-shrink-0 z-30 h-16 bg-card-dark/80 backdrop-blur-md border-b border-white/10">
+        <header className="flex-shrink-0 z-30 h-16 bg-card-dark/80 backdrop-blur-md border-b border-[#1E2A3D]">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             {/* Mobile menu button */}
             <button
-              className="lg:hidden text-gray-400 hover:text-white"
+              className="lg:hidden text-slate-400 hover:text-white"
               onClick={() => setSidebarOpen(true)}
             >
               <MenuIcon />
@@ -353,10 +353,10 @@ export default function PortalLayout({
                      }
                    }}
                    placeholder="Search IOCs, emails, domains, IPs..."
-                   className="w-full px-4 py-2 pl-10 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+                   className="w-full px-4 py-2 pl-10 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/50 transition-all"
                  />
                 <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -376,12 +376,12 @@ export default function PortalLayout({
               {/* Notifications */}
               <div className="relative">
                 <button
-                  className="relative p-2 text-gray-400 hover:text-white transition-colors"
+                  className="relative p-2 text-slate-400 hover:text-white transition-colors"
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
                 >
                   <BellIcon />
                   {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-white text-xs rounded-full flex items-center justify-center">
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-primary text-body-dark text-xs rounded-full flex items-center justify-center">
                       {unreadCount}
                     </span>
                   )}
@@ -394,11 +394,11 @@ export default function PortalLayout({
                       className="fixed inset-0 z-40"
                       onClick={() => setNotificationsOpen(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-80 bg-card-dark border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
-                      <div className="p-4 border-b border-white/10">
+                    <div className="absolute right-0 mt-2 w-80 bg-card-dark border border-[#1E2A3D] rounded-[14px] shadow-xl z-50 overflow-hidden">
+                      <div className="p-4 border-b border-[#1E2A3D]">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-white">Notifications</h3>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-slate-400">
                             {unreadCount} unread
                           </span>
                         </div>
@@ -406,8 +406,8 @@ export default function PortalLayout({
                       <div className="max-h-96 overflow-y-auto">
                         {notifications.length === 0 ? (
                           <div className="p-6 text-center">
-                            <p className="text-sm text-gray-400">No new notifications</p>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-sm text-slate-400">No new notifications</p>
+                            <p className="text-xs text-slate-500 mt-1">
                               You&apos;re all caught up.
                             </p>
                           </div>
@@ -415,7 +415,7 @@ export default function PortalLayout({
                           notifications.map((notification) => (
                             <div
                               key={notification.id}
-                              className={`p-4 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer ${
+                              className={`p-4 border-b border-[#1E2A3D]/60 hover:bg-white/5 transition-colors cursor-pointer ${
                                 !notification.read ? "bg-white/[0.02]" : ""
                               }`}
                             >
@@ -429,10 +429,10 @@ export default function PortalLayout({
                                   <p className="text-sm font-medium text-white">
                                     {notification.title}
                                   </p>
-                                  <p className="text-xs text-gray-400 mt-1">
+                                  <p className="text-xs text-slate-400 mt-1">
                                     {notification.message}
                                   </p>
-                                  <p className="text-xs text-gray-500 mt-2">
+                                  <p className="text-xs text-slate-500 mt-2">
                                     {notification.time}
                                   </p>
                                 </div>
@@ -441,7 +441,7 @@ export default function PortalLayout({
                           ))
                         )}
                       </div>
-                      <div className="p-3 border-t border-white/10">
+                      <div className="p-3 border-t border-[#1E2A3D]">
                         <Link
                           href="/portal/alerts"
                           className="block text-center text-sm text-primary hover:text-primary-light transition-colors"
@@ -455,17 +455,17 @@ export default function PortalLayout({
               </div>
 
               {/* User menu */}
-              <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+              <div className="flex items-center gap-3 pl-4 border-l border-[#1E2A3D]">
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-medium text-white">{displayName}</p>
-                  <p className="text-xs text-gray-400">{displayOrg}</p>
+                  <p className="text-xs text-slate-400 capitalize">{displayOrg}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">{initials}</span>
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+                  <span className="text-body-dark font-semibold text-sm">{initials}</span>
                 </div>
                 <button
                   onClick={logout}
-                  className="ml-2 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                  className="ml-2 p-2 rounded-[10px] text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                   title="Sign out"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -477,8 +477,10 @@ export default function PortalLayout({
           </div>
         </header>
 
-        {/* Page content — flex-1, position:relative so ASM page can use position:absolute inset-0 */}
-        <main className="flex-1 overflow-y-auto relative" style={{ minHeight: 0 }}>{children}</main>
+        {/* Page content — flex-1, position:relative so ASM page can use position:absolute inset-0.
+            Translucent navy veil lets the fixed .site-bg datacenter photo show through the
+            content gutters (landing parity) while keeping cards crisp and readable. */}
+        <main className="flex-1 overflow-y-auto relative bg-body-dark/70" style={{ minHeight: 0 }}>{children}</main>
       </div>
     </div>
   );

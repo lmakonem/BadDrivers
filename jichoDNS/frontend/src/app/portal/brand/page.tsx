@@ -107,15 +107,15 @@ const sevBadge = (s: string) => ({
   critical: "text-red-300 bg-red-900/40 border-red-700/50",
   high:     "text-orange-300 bg-orange-900/40 border-orange-700/50",
   medium:   "text-yellow-300 bg-yellow-900/40 border-yellow-700/50",
-  low:      "text-blue-300 bg-blue-900/40 border-blue-700/50",
-}[s] ?? "text-gray-300 bg-gray-700/40 border-gray-600");
+  low:      "text-slate-300 bg-slate-700/40 border-slate-600",
+}[s] ?? "text-slate-300 bg-slate-700/40 border-slate-600");
 
 const sevDot = (s: string) => ({
   critical: "bg-red-400",
   high:     "bg-orange-400",
   medium:   "bg-yellow-400",
-  low:      "bg-blue-400",
-}[s] ?? "bg-gray-400");
+  low:      "bg-slate-400",
+}[s] ?? "bg-slate-400");
 
 const ALERT_TYPE_LABEL: Record<string, string> = {
   typosquat_detected:   "Typosquat",
@@ -354,10 +354,10 @@ export default function BrandPage() {
       </td>
       <td className="px-4 py-2.5 max-w-xs">
         <div className="text-sm text-white truncate font-medium">{a.title}</div>
-        {a.domain && <div className="text-xs text-blue-400 font-mono truncate mt-0.5">{a.domain}</div>}
+        {a.domain && <div className="text-xs text-cyan-400 font-mono truncate mt-0.5">{a.domain}</div>}
       </td>
       <td className="px-4 py-2.5 hidden md:table-cell">
-        <span className="text-xs text-gray-400 flex items-center gap-1 whitespace-nowrap">
+        <span className="text-xs text-slate-400 flex items-center gap-1 whitespace-nowrap">
           {ALERT_TYPE_ICON[a.alert_type] ?? "⚠"} {ALERT_TYPE_LABEL[a.alert_type] ?? a.alert_type}
         </span>
       </td>
@@ -368,20 +368,20 @@ export default function BrandPage() {
               <div className={`h-1.5 rounded-full ${a.similarity >= 80 ? "bg-red-400" : "bg-orange-400"}`}
                 style={{ width: `${a.similarity}%` }} />
             </div>
-            <span className="text-xs text-gray-400">{a.similarity}%</span>
+            <span className="text-xs text-slate-400">{a.similarity}%</span>
           </div>
-        ) : <span className="text-gray-600 text-xs">—</span>}
+        ) : <span className="text-slate-600 text-xs">—</span>}
       </td>
-      <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">{timeAgo(a.detected_at)}</td>
-      <td className="px-4 py-2.5 text-gray-600 group-hover:text-gray-300 text-sm transition-colors">›</td>
+      <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap hidden sm:table-cell">{timeAgo(a.detected_at)}</td>
+      <td className="px-4 py-2.5 text-slate-600 group-hover:text-slate-300 text-sm transition-colors">›</td>
     </tr>
   );
 
   const AlertTable = ({ alerts, showEmpty = "No alerts in this category" }: { alerts: BrandAlert[]; showEmpty?: string }) => (
-    <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+    <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528] sticky top-0 z-10">
+          <tr className="text-left text-xs text-slate-400 border-b border-[#1E2A3D] bg-[#0d1528] sticky top-0 z-10">
             <th className="px-4 py-2.5 font-medium">Severity</th>
             <th className="px-4 py-2.5 font-medium">Finding</th>
             <th className="px-4 py-2.5 font-medium hidden md:table-cell">Type</th>
@@ -392,7 +392,7 @@ export default function BrandPage() {
         </thead>
         <tbody className="divide-y divide-white/5">
           {alerts.length === 0 ? (
-            <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-500">{showEmpty}</td></tr>
+            <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-500">{showEmpty}</td></tr>
           ) : (
             alerts.sort((a, b) => (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4))
               .map(a => <AlertRow key={a.id} a={a} />)
@@ -405,16 +405,16 @@ export default function BrandPage() {
   // ── Layout ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex bg-gray-900 text-white" style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+    <div className="flex bg-body-dark text-white" style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
 
       {/* ── LEFT SIDEBAR: client list ── */}
-      <div className="flex-shrink-0 flex flex-col bg-gray-800 border-r border-gray-700"
+      <div className="flex-shrink-0 flex flex-col bg-card-dark border-r border-[#1E2A3D]"
         style={{ width: "17rem", height: "100%", overflow: "hidden" }}>
 
         {/* Sidebar header */}
-        <div className="flex-shrink-0 p-3 border-b border-gray-700 space-y-2">
+        <div className="flex-shrink-0 p-3 border-b border-[#1E2A3D] space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Brand Monitors</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Brand Monitors</span>
             <button onClick={() => setShowAdd(true)}
               className="text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-2 py-1 rounded transition-colors flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -426,11 +426,11 @@ export default function BrandPage() {
           <input
             type="text" value={monSearch} onChange={e => setMonSearch(e.target.value)}
             placeholder="Search brands…"
-            className="w-full bg-gray-700 border border-gray-600 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary/50"
+            className="w-full bg-card-light border border-[#1E2A3D] rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary/50"
           />
           {/* Summary pills */}
           <div className="flex gap-1.5 flex-wrap">
-            <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">{sortedMons.length} brands</span>
+            <span className="text-xs bg-white/10 text-slate-300 px-2 py-0.5 rounded">{sortedMons.length} brands</span>
             {stats && stats.critical_alerts > 0 && (
               <span className="text-xs bg-red-900/50 text-red-300 border border-red-700/40 px-2 py-0.5 rounded">{stats.critical_alerts} critical</span>
             )}
@@ -444,15 +444,21 @@ export default function BrandPage() {
               <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : sortedMons.length === 0 ? (
-            <div className="py-10 text-center text-xs text-gray-500">No brands yet</div>
+            <div className="px-4 py-10 text-center">
+              <div className="text-2xl mb-2 opacity-60">🛡️</div>
+              <p className="text-xs text-slate-300 font-medium">No brands yet</p>
+              <button onClick={() => setShowAdd(true)} className="mt-2 text-xs text-primary hover:text-primary-light font-medium">
+                Add your first brand →
+              </button>
+            </div>
           ) : (
             sortedMons.map(m => {
               const isSelected = selectedMonitor?.id === m.id;
               const clientCritical = allAlerts.filter(a => a.brand_id === m.id && a.severity === "critical").length;
               return (
                 <button key={m.id} onClick={() => setSelectedMonitor(m)}
-                  className={`w-full text-left px-3 py-2.5 border-b border-gray-700/50 transition-colors hover:bg-gray-700/40 ${
-                    isSelected ? "bg-gray-700/70 border-l-2 border-l-primary" : ""
+                  className={`w-full text-left px-3 py-2.5 border-b border-[#1E2A3D]/60 transition-colors hover:bg-white/5 ${
+                    isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
                   }`}>
                   {/* Row 1: name + critical badge */}
                   <div className="flex items-center justify-between gap-1">
@@ -464,22 +470,22 @@ export default function BrandPage() {
                     )}
                   </div>
                   {/* Row 2: country + industry */}
-                  <div className="text-xs text-gray-500 mt-0.5">
+                  <div className="text-xs text-slate-500 mt-0.5">
                     {[m.country_code, m.industry].filter(Boolean).join(" · ")}
                   </div>
                   {/* Row 3: threat bar */}
                   <div className="flex items-center gap-2 mt-1.5">
-                    <div className="flex-1 bg-gray-700 rounded-full h-1">
+                    <div className="flex-1 bg-white/10 rounded-full h-1">
                       <div className={`h-1 rounded-full ${m.typosquat_count > 20 ? "bg-red-500" : m.typosquat_count > 5 ? "bg-orange-500" : "bg-yellow-500"}`}
                         style={{ width: `${Math.max((m.typosquat_count / maxThreat) * 100, m.typosquat_count > 0 ? 6 : 0)}%` }} />
                     </div>
-                    <span className={`text-xs flex-shrink-0 ${m.typosquat_count > 20 ? "text-red-400" : m.typosquat_count > 5 ? "text-orange-400" : m.typosquat_count > 0 ? "text-yellow-400" : "text-gray-600"}`}>
+                    <span className={`text-xs flex-shrink-0 ${m.typosquat_count > 20 ? "text-red-400" : m.typosquat_count > 5 ? "text-orange-400" : m.typosquat_count > 0 ? "text-yellow-400" : "text-slate-600"}`}>
                       {m.typosquat_count}
                     </span>
                   </div>
                   {/* Row 4: domains */}
                   {m.domains?.length > 0 && (
-                    <div className="text-xs text-gray-600 font-mono truncate mt-0.5">
+                    <div className="text-xs text-slate-600 font-mono truncate mt-0.5">
                       {m.domains[0]}
                     </div>
                   )}
@@ -491,17 +497,17 @@ export default function BrandPage() {
 
         {/* Sidebar footer: global stats */}
         {stats && (
-          <div className="flex-shrink-0 border-t border-gray-700 p-3 space-y-1">
+          <div className="flex-shrink-0 border-t border-[#1E2A3D] p-3 space-y-1">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Total alerts</span>
-              <span className="text-gray-300 font-mono">{(stats.total_alerts).toLocaleString()}</span>
+              <span className="text-slate-500">Total alerts</span>
+              <span className="text-slate-300 font-mono">{(stats.total_alerts).toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Typosquats</span>
+              <span className="text-slate-500">Typosquats</span>
               <span className="text-yellow-400 font-mono">{stats.total_typosquats.toLocaleString()}</span>
             </div>
             <button onClick={() => { fetchAll(); if (selectedMonitor) fetchClientAlerts(selectedMonitor, 0); }}
-              className="w-full text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded py-1.5 mt-1 transition-colors flex items-center justify-center gap-1">
+              className="w-full text-xs bg-white/5 hover:bg-white/10 text-slate-300 border border-[#1E2A3D] rounded py-1.5 mt-1 transition-colors flex items-center justify-center gap-1">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
@@ -515,23 +521,33 @@ export default function BrandPage() {
       <div className="flex flex-col" style={{ flex: 1, height: "100%", overflow: "hidden" }}>
 
         {!selectedMonitor ? (
-          <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-            Select a brand from the list
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-sm px-6">
+              <div className="text-5xl mb-3 opacity-60">🛡️</div>
+              <h2 className="text-lg font-display font-semibold text-white mb-1">Brand Protection</h2>
+              <p className="text-sm text-slate-400 mb-5">
+                Select a brand from the list to review typosquats, lookalike certificates, credential leaks, and threat-intel hits.
+              </p>
+              <button onClick={() => setShowAdd(true)}
+                className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-body-dark text-sm font-semibold py-2 px-5 rounded-[10px] transition-colors">
+                Add Brand Monitor
+              </button>
+            </div>
           </div>
         ) : (
           <>
             {/* Client header */}
-            <div className="flex-shrink-0 bg-gray-800/60 border-b border-gray-700 px-6 py-4">
+            <div className="flex-shrink-0 bg-card-dark/60 border-b border-[#1E2A3D] px-6 py-4">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{industryIcon(selectedMonitor.industry)}</span>
                   <div>
                     <h1 className="text-lg font-bold text-white leading-tight">{selectedMonitor.brand_name}</h1>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-xs text-gray-400">{selectedMonitor.country_code}</span>
-                      {selectedMonitor.industry && <span className="text-xs text-gray-500">· {selectedMonitor.industry}</span>}
-                      <span className="text-xs text-gray-600">· Last scan {timeAgo(selectedMonitor.last_scan_at)}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${selectedMonitor.active ? "text-green-300 bg-green-900/20 border-green-700/30" : "text-gray-400 bg-gray-700/30 border-gray-600"}`}>
+                      <span className="text-xs text-slate-400">{selectedMonitor.country_code}</span>
+                      {selectedMonitor.industry && <span className="text-xs text-slate-500">· {selectedMonitor.industry}</span>}
+                      <span className="text-xs text-slate-600">· Last scan {timeAgo(selectedMonitor.last_scan_at)}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${selectedMonitor.active ? "text-green-300 bg-green-900/20 border-green-700/30" : "text-slate-400 bg-white/5 border-[#1E2A3D]"}`}>
                         {selectedMonitor.active ? "Active" : "Paused"}
                       </span>
                     </div>
@@ -540,7 +556,7 @@ export default function BrandPage() {
                       {(selectedMonitor.domains ?? []).slice(0,4).map(d => (
                         <a key={d} href={`https://${d}`} target="_blank" rel="noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="text-xs font-mono text-blue-400 hover:text-blue-300 bg-blue-900/10 border border-blue-700/20 px-1.5 py-0.5 rounded transition-colors">
+                          className="text-xs font-mono text-cyan-400 hover:text-cyan-300 bg-cyan-900/10 border border-cyan-700/20 px-1.5 py-0.5 rounded transition-colors">
                           {d} ↗
                         </a>
                       ))}
@@ -565,7 +581,7 @@ export default function BrandPage() {
               </div>
 
               {/* Client sub-tabs */}
-              <div className="flex gap-1 mt-4 border-b border-gray-700 overflow-x-auto">
+              <div className="flex gap-1 mt-4 border-b border-[#1E2A3D] overflow-x-auto">
                 {([
                   ["overview",    `Overview (${clientAlertsTotal})`],
                   ["typosquats",  `Typosquats (${typosquatAlerts.length})`],
@@ -575,7 +591,7 @@ export default function BrandPage() {
                 ] as [typeof clientTab, string][]).map(([t, label]) => (
                   <button key={t} onClick={() => setClientTab(t)}
                     className={`px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0 ${
-                      clientTab === t ? "border-primary text-primary" : "border-transparent text-gray-400 hover:text-white"
+                      clientTab === t ? "border-primary text-primary" : "border-transparent text-slate-400 hover:text-white"
                     }`}>
                     {label}
                   </button>
@@ -587,7 +603,7 @@ export default function BrandPage() {
             <div className="p-6 space-y-5" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
 
               {loadingClient ? (
-                <div className="flex items-center gap-2 text-gray-400 text-sm py-12">
+                <div className="flex items-center gap-2 text-slate-400 text-sm py-12">
                   <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   Loading brand intelligence…
                 </div>
@@ -599,25 +615,25 @@ export default function BrandPage() {
                     <div className="space-y-5">
                       {/* Alert type breakdown */}
                       {Object.keys(byType).length > 0 ? (
-                        <div className="bg-card-dark border border-white/10 rounded-xl p-5">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Threat Breakdown</h3>
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-5">
+                          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Threat Breakdown</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                             {(["critical","high","medium","low"] as const).map(s => {
                               const cnt = bySev[s] ?? 0;
                               return (
                                 <button key={s}
                                   onClick={() => { setSevFilter(s); fetchClientAlerts(selectedMonitor, 0, s, "all"); }}
-                                  className={`rounded-xl p-3 text-left border transition-all hover:opacity-80 ${
+                                  className={`rounded-[14px] p-3 text-left border transition-all hover:opacity-80 ${
                                     s === "critical" ? "bg-red-900/15 border-red-700/30" :
                                     s === "high"     ? "bg-orange-900/15 border-orange-700/30" :
                                     s === "medium"   ? "bg-yellow-900/15 border-yellow-700/30" :
-                                                       "bg-blue-900/15 border-blue-700/30"
+                                                       "bg-slate-700/25 border-slate-600/50"
                                   }`}>
-                                  <div className={`text-2xl font-bold ${s === "critical" ? "text-red-300" : s === "high" ? "text-orange-300" : s === "medium" ? "text-yellow-300" : "text-blue-300"}`}>
+                                  <div className={`text-2xl font-bold ${s === "critical" ? "text-red-300" : s === "high" ? "text-orange-300" : s === "medium" ? "text-yellow-300" : "text-slate-300"}`}>
                                     {cnt}
                                   </div>
-                                  <div className="text-xs text-gray-400 capitalize mt-0.5">{s}</div>
-                                  <div className="text-xs text-gray-600 mt-0.5">click to filter</div>
+                                  <div className="text-xs text-slate-400 capitalize mt-0.5">{s}</div>
+                                  <div className="text-xs text-slate-600 mt-0.5">click to filter</div>
                                 </button>
                               );
                             })}
@@ -630,37 +646,37 @@ export default function BrandPage() {
                                   onClick={() => { setTypeFilter(type); fetchClientAlerts(selectedMonitor, 0, "all", type); setClientTab("overview"); }}
                                   className="w-full flex items-center gap-3 text-left hover:opacity-80 transition-opacity group">
                                   <span className="w-8 text-center text-sm">{ALERT_TYPE_ICON[type] ?? "⚠"}</span>
-                                  <span className="text-xs text-gray-400 w-36 flex-shrink-0 truncate">
+                                  <span className="text-xs text-slate-400 w-36 flex-shrink-0 truncate">
                                     {ALERT_TYPE_LABEL[type] ?? type}
                                   </span>
                                   <div className="flex-1 bg-white/5 rounded-full h-2">
                                     <div className="h-2 bg-primary rounded-full transition-all"
                                       style={{ width: `${(count/total*100).toFixed(1)}%` }} />
                                   </div>
-                                  <span className="text-xs text-gray-300 w-8 text-right flex-shrink-0">{count}</span>
-                                  <span className="text-xs text-gray-600 group-hover:text-primary transition-colors">→</span>
+                                  <span className="text-xs text-slate-300 w-8 text-right flex-shrink-0">{count}</span>
+                                  <span className="text-xs text-slate-600 group-hover:text-primary transition-colors">→</span>
                                 </button>
                               );
                             })}
                           </div>
                         </div>
                       ) : (
-                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-8 text-center">
                           <div className="text-3xl mb-2">✓</div>
-                          <div className="text-sm text-gray-300 font-medium">No threats detected</div>
-                          <div className="text-xs text-gray-500 mt-1">This brand has no active brand protection alerts</div>
+                          <div className="text-sm text-slate-300 font-medium">No threats detected</div>
+                          <div className="text-xs text-slate-500 mt-1">This brand has no active brand protection alerts</div>
                         </div>
                       )}
 
                       {/* Keywords being monitored */}
-                      <div className="bg-card-dark border border-white/10 rounded-xl p-4">
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Monitored Keywords</h3>
+                      <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-4">
+                        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Monitored Keywords</h3>
                         <div className="flex flex-wrap gap-1.5">
                           {(selectedMonitor.keywords ?? []).map(k => (
                             <span key={k} className="text-xs bg-primary/10 text-primary/80 border border-primary/20 px-2 py-0.5 rounded">{k}</span>
                           ))}
                           {(!selectedMonitor.keywords || selectedMonitor.keywords.length === 0) && (
-                            <span className="text-xs text-gray-500">No keywords configured</span>
+                            <span className="text-xs text-slate-500">No keywords configured</span>
                           )}
                         </div>
                       </div>
@@ -669,17 +685,17 @@ export default function BrandPage() {
                       {clientAlerts.length > 0 && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">All Findings ({clientAlertsTotal})</h3>
+                            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Findings ({clientAlertsTotal})</h3>
                             <div className="flex gap-2">
                               <select value={sevFilter}
                                 onChange={e => { setSevFilter(e.target.value); fetchClientAlerts(selectedMonitor, 0, e.target.value, typeFilter); }}
-                                className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                className="bg-card-light border border-[#1E2A3D] rounded px-2 py-1 text-xs text-white focus:outline-none">
                                 <option value="all">All severities</option>
                                 {["critical","high","medium","low"].map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                               <select value={typeFilter}
                                 onChange={e => { setTypeFilter(e.target.value); fetchClientAlerts(selectedMonitor, 0, sevFilter, e.target.value); }}
-                                className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                className="bg-card-light border border-[#1E2A3D] rounded px-2 py-1 text-xs text-white focus:outline-none">
                                 <option value="all">All types</option>
                                 {Object.entries(ALERT_TYPE_LABEL).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                               </select>
@@ -690,13 +706,13 @@ export default function BrandPage() {
                             <div className="flex items-center justify-between mt-3">
                               <button disabled={clientAlertPage === 0}
                                 onClick={() => fetchClientAlerts(selectedMonitor, clientAlertPage - 1, sevFilter, typeFilter)}
-                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">← Prev</button>
-                              <span className="text-xs text-gray-400">
+                                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">← Prev</button>
+                              <span className="text-xs text-slate-400">
                                 {clientAlertPage * CLIENT_LIMIT + 1}–{Math.min((clientAlertPage+1)*CLIENT_LIMIT, clientAlertsTotal)} of {clientAlertsTotal}
                               </span>
                               <button disabled={(clientAlertPage+1)*CLIENT_LIMIT >= clientAlertsTotal}
                                 onClick={() => fetchClientAlerts(selectedMonitor, clientAlertPage + 1, sevFilter, typeFilter)}
-                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">Next →</button>
+                                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">Next →</button>
                             </div>
                           )}
                         </div>
@@ -707,7 +723,7 @@ export default function BrandPage() {
                   {/* ── Typosquats tab ── */}
                   {clientTab === "typosquats" && (
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-400">
+                      <p className="text-sm text-slate-400">
                         Registered domains detected impersonating <strong className="text-white">{selectedMonitor.brand_name}</strong> via typosquatting, domain squatting, or TLD abuse.
                       </p>
                       <AlertTable alerts={typosquatAlerts} showEmpty="No typosquat or domain squatting detected" />
@@ -717,7 +733,7 @@ export default function BrandPage() {
                   {/* ── Cert watch tab ── */}
                   {clientTab === "certs" && (
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-400">
+                      <p className="text-sm text-slate-400">
                         SSL certificates issued for lookalike domains found in certificate transparency logs.
                       </p>
                       <AlertTable alerts={certAlerts} showEmpty="No suspicious SSL certificates detected in CT logs" />
@@ -728,53 +744,53 @@ export default function BrandPage() {
                   {clientTab === "credentials" && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-slate-400">
                           Leaked credentials matching <strong className="text-white">{selectedMonitor.brand_name}</strong> domains in platform breach databases.
                         </p>
                         {credData && (
                           <button onClick={() => fetchCredentials(selectedMonitor.id, 0, credSev)}
-                            className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
+                            className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
                         )}
                       </div>
 
                       {loadingCred ? (
-                        <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
+                        <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
                           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                           Searching breach databases…
                         </div>
                       ) : !credData ? null : credData.total === 0 ? (
-                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-8 text-center">
                           <div className="text-3xl mb-2">✓</div>
-                          <div className="text-sm text-gray-300 font-medium">No credential leaks found</div>
-                          <div className="text-xs text-gray-500 mt-1">Domains checked: {credData.domains_checked.join(", ")}</div>
+                          <div className="text-sm text-slate-300 font-medium">No credential leaks found</div>
+                          <div className="text-xs text-slate-500 mt-1">Domains checked: {credData.domains_checked.join(", ")}</div>
                         </div>
                       ) : (
                         <>
                           {/* Stats bar */}
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-3 text-center">
+                            <div className="bg-red-900/20 border border-red-700/30 rounded-[14px] p-3 text-center">
                               <div className="text-2xl font-bold text-red-300">{credData.total.toLocaleString()}</div>
-                              <div className="text-xs text-gray-400 mt-0.5">Total Records</div>
+                              <div className="text-xs text-slate-400 mt-0.5">Total Records</div>
                             </div>
-                            <div className={`${credData.plaintext_count > 0 ? "bg-red-900/30 border-red-600/50" : "bg-gray-700/30 border-gray-600"} border rounded-xl p-3 text-center`}>
-                              <div className={`text-2xl font-bold ${credData.plaintext_count > 0 ? "text-red-200" : "text-gray-400"}`}>{credData.plaintext_count.toLocaleString()}</div>
-                              <div className="text-xs text-gray-400 mt-0.5">Plaintext Passwords</div>
+                            <div className={`${credData.plaintext_count > 0 ? "bg-red-900/30 border-red-600/50" : "bg-white/5 border-[#1E2A3D]"} border rounded-[14px] p-3 text-center`}>
+                              <div className={`text-2xl font-bold ${credData.plaintext_count > 0 ? "text-red-200" : "text-slate-400"}`}>{credData.plaintext_count.toLocaleString()}</div>
+                              <div className="text-xs text-slate-400 mt-0.5">Plaintext Passwords</div>
                             </div>
-                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
-                              <div className="text-xs text-gray-400 mb-1.5">By Source</div>
+                            <div className="bg-white/5 border border-[#1E2A3D] rounded-[14px] p-3">
+                              <div className="text-xs text-slate-400 mb-1.5">By Source</div>
                               {Object.entries(credData.by_source).slice(0,3).map(([src, cnt]) => (
                                 <div key={src} className="flex justify-between text-xs">
-                                  <span className="text-gray-300 truncate max-w-[120px]" title={src}>{src}</span>
-                                  <span className="text-gray-400 ml-1 flex-shrink-0">{cnt.toLocaleString()}</span>
+                                  <span className="text-slate-300 truncate max-w-[120px]" title={src}>{src}</span>
+                                  <span className="text-slate-400 ml-1 flex-shrink-0">{cnt.toLocaleString()}</span>
                                 </div>
                               ))}
                             </div>
-                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
-                              <div className="text-xs text-gray-400 mb-1.5">By Password Type</div>
+                            <div className="bg-white/5 border border-[#1E2A3D] rounded-[14px] p-3">
+                              <div className="text-xs text-slate-400 mb-1.5">By Password Type</div>
                               {Object.entries(credData.by_type).slice(0,4).map(([type, cnt]) => (
                                 <div key={type} className="flex justify-between text-xs">
-                                  <span className={`${type === "plaintext" ? "text-red-300" : "text-gray-300"}`}>{type}</span>
-                                  <span className="text-gray-400">{cnt.toLocaleString()}</span>
+                                  <span className={`${type === "plaintext" ? "text-red-300" : "text-slate-300"}`}>{type}</span>
+                                  <span className="text-slate-400">{cnt.toLocaleString()}</span>
                                 </div>
                               ))}
                             </div>
@@ -784,20 +800,20 @@ export default function BrandPage() {
                           <div className="flex gap-2 items-center">
                             <select value={credSev}
                               onChange={e => { setCredSev(e.target.value); fetchCredentials(selectedMonitor.id, 0, e.target.value); }}
-                              className="bg-gray-700 border border-gray-600 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none">
+                              className="bg-card-light border border-[#1E2A3D] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none">
                               <option value="all">All severities</option>
                               {["critical","high","medium","low"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
-                            <span className="text-xs text-gray-500 ml-auto">
+                            <span className="text-xs text-slate-500 ml-auto">
                               {credPage * CRED_LIMIT + 1}–{Math.min((credPage+1)*CRED_LIMIT, credData.total)} of {credData.total.toLocaleString()} records
                             </span>
                           </div>
 
                           {/* Records table */}
-                          <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+                          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                             <table className="w-full text-sm">
                               <thead className="sticky top-0 z-10">
-                                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528]">
+                                <tr className="text-left text-xs text-slate-400 border-b border-[#1E2A3D] bg-[#0d1528]">
                                   <th className="px-4 py-2.5 font-medium">Email / Username</th>
                                   <th className="px-4 py-2.5 font-medium">Domain</th>
                                   <th className="px-4 py-2.5 font-medium">Password Type</th>
@@ -810,21 +826,21 @@ export default function BrandPage() {
                                 {credData.records.map((r, i) => (
                                   <tr key={i} className="hover:bg-white/[0.02]">
                                     <td className="px-4 py-2.5">
-                                      <div className="text-xs font-mono text-blue-300 truncate max-w-[200px]" title={r.email}>{r.email}</div>
+                                      <div className="text-xs font-mono text-cyan-300 truncate max-w-[200px]" title={r.email}>{r.email}</div>
                                       {r.username && r.username !== r.email?.split("@")[0] && (
-                                        <div className="text-xs text-gray-500">{r.username}</div>
+                                        <div className="text-xs text-slate-500">{r.username}</div>
                                       )}
                                     </td>
-                                    <td className="px-4 py-2.5 text-xs font-mono text-gray-300">{r.domain}</td>
+                                    <td className="px-4 py-2.5 text-xs font-mono text-slate-300">{r.domain}</td>
                                     <td className="px-4 py-2.5">
                                       <span className={`text-xs px-1.5 py-0.5 rounded border ${
                                         r.password_type === "plaintext" ? "bg-red-900/40 text-red-300 border-red-700/40" :
                                         r.password_type === "md5"       ? "bg-orange-900/40 text-orange-300 border-orange-700/40" :
-                                        "bg-gray-700/40 text-gray-300 border-gray-600"
+                                        "bg-white/5 text-slate-300 border-[#1E2A3D]"
                                       }`}>{r.password_type}{r.password_length ? ` (${r.password_length})` : ""}</span>
                                     </td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[160px] truncate" title={r.source_name}>{r.source_name}</td>
-                                    <td className="px-4 py-2.5 text-xs text-gray-500">{r.breach_date ? new Date(r.breach_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[160px] truncate" title={r.source_name}>{r.source_name}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-500">{r.breach_date ? new Date(r.breach_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
                                     <td className="px-4 py-2.5">
                                       <span className={`text-xs px-1.5 py-0.5 rounded border ${sevBadge(r.severity)}`}>{r.severity?.toUpperCase()}</span>
                                     </td>
@@ -839,11 +855,11 @@ export default function BrandPage() {
                             <div className="flex items-center justify-between">
                               <button disabled={credPage === 0}
                                 onClick={() => fetchCredentials(selectedMonitor.id, credPage - 1, credSev)}
-                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">← Prev</button>
-                              <span className="text-xs text-gray-400">{credPage * CRED_LIMIT + 1}–{Math.min((credPage+1)*CRED_LIMIT, credData.total)} of {credData.total.toLocaleString()}</span>
+                                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">← Prev</button>
+                              <span className="text-xs text-slate-400">{credPage * CRED_LIMIT + 1}–{Math.min((credPage+1)*CRED_LIMIT, credData.total)} of {credData.total.toLocaleString()}</span>
                               <button disabled={(credPage+1)*CRED_LIMIT >= credData.total}
                                 onClick={() => fetchCredentials(selectedMonitor.id, credPage + 1, credSev)}
-                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-gray-600 rounded">Next →</button>
+                                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 border border-[#1E2A3D] rounded">Next →</button>
                             </div>
                           )}
                         </>
@@ -855,59 +871,59 @@ export default function BrandPage() {
                   {clientTab === "intel" && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-slate-400">
                           Live IOC feed matches for <strong className="text-white">{selectedMonitor.brand_name}</strong> domains and brand keywords.
                         </p>
                         {intelData && (
                           <button onClick={() => fetchIntel(selectedMonitor.id)}
-                            className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
+                            className="text-xs text-slate-400 hover:text-white border border-[#1E2A3D] rounded px-2.5 py-1 transition-colors">↻ Refresh</button>
                         )}
                       </div>
 
                       {loadingIntel ? (
-                        <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
+                        <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
                           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                           Querying threat intelligence feed…
                         </div>
                       ) : !intelData ? null : intelData.total === 0 ? (
-                        <div className="bg-card-dark border border-white/10 rounded-xl p-8 text-center">
+                        <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-8 text-center">
                           <div className="text-3xl mb-2">✓</div>
-                          <div className="text-sm text-gray-300 font-medium">No threat intelligence hits</div>
-                          <div className="text-xs text-gray-500 mt-1">Brand keywords searched: {intelData.bases_searched.join(", ") || "none"}</div>
+                          <div className="text-sm text-slate-300 font-medium">No threat intelligence hits</div>
+                          <div className="text-xs text-slate-500 mt-1">Brand keywords searched: {intelData.bases_searched.join(", ") || "none"}</div>
                         </div>
                       ) : (
                         <>
                           {/* Stats */}
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <div className="bg-orange-900/20 border border-orange-700/30 rounded-xl p-3 text-center">
+                            <div className="bg-orange-900/20 border border-orange-700/30 rounded-[14px] p-3 text-center">
                               <div className="text-2xl font-bold text-orange-300">{intelData.total.toLocaleString()}</div>
-                              <div className="text-xs text-gray-400 mt-0.5">Total IOC Hits</div>
+                              <div className="text-xs text-slate-400 mt-0.5">Total IOC Hits</div>
                             </div>
-                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
-                              <div className="text-xs text-gray-400 mb-1.5">By Threat Type</div>
+                            <div className="bg-white/5 border border-[#1E2A3D] rounded-[14px] p-3">
+                              <div className="text-xs text-slate-400 mb-1.5">By Threat Type</div>
                               {Object.entries(intelData.by_threat_type).slice(0,4).map(([t, cnt]) => (
                                 <div key={t} className="flex justify-between text-xs">
-                                  <span className="text-gray-300 capitalize">{t}</span>
-                                  <span className="text-gray-400">{cnt}</span>
+                                  <span className="text-slate-300 capitalize">{t}</span>
+                                  <span className="text-slate-400">{cnt}</span>
                                 </div>
                               ))}
                             </div>
-                            <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-3">
-                              <div className="text-xs text-gray-400 mb-1.5">By IOC Type</div>
+                            <div className="bg-white/5 border border-[#1E2A3D] rounded-[14px] p-3">
+                              <div className="text-xs text-slate-400 mb-1.5">By IOC Type</div>
                               {Object.entries(intelData.by_ioc_type).slice(0,4).map(([t, cnt]) => (
                                 <div key={t} className="flex justify-between text-xs">
-                                  <span className="text-gray-300 capitalize">{t}</span>
-                                  <span className="text-gray-400">{cnt}</span>
+                                  <span className="text-slate-300 capitalize">{t}</span>
+                                  <span className="text-slate-400">{cnt}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
                           {/* IOC records table */}
-                          <div className="bg-card-dark border border-white/10 rounded-xl overflow-hidden">
+                          <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
                             <table className="w-full text-sm">
                               <thead className="sticky top-0 z-10">
-                                <tr className="text-left text-xs text-gray-400 border-b border-white/10 bg-[#0d1528]">
+                                <tr className="text-left text-xs text-slate-400 border-b border-[#1E2A3D] bg-[#0d1528]">
                                   <th className="px-4 py-2.5 font-medium">Indicator</th>
                                   <th className="px-4 py-2.5 font-medium">Type</th>
                                   <th className="px-4 py-2.5 font-medium">Threat</th>
@@ -921,27 +937,27 @@ export default function BrandPage() {
                                   return (
                                     <tr key={i} className="hover:bg-white/[0.02]">
                                       <td className="px-4 py-2.5">
-                                        <div className="text-xs font-mono text-blue-300 truncate max-w-[250px]" title={r.indicator}>{r.indicator}</div>
+                                        <div className="text-xs font-mono text-cyan-300 truncate max-w-[250px]" title={r.indicator}>{r.indicator}</div>
                                       </td>
                                       <td className="px-4 py-2.5">
-                                        <span className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">{r.indicator_type}</span>
+                                        <span className="text-xs bg-white/10 text-slate-300 px-1.5 py-0.5 rounded">{r.indicator_type}</span>
                                       </td>
                                       <td className="px-4 py-2.5">
                                         <span className={`text-xs px-1.5 py-0.5 rounded border ${
                                           r.threat_type === "c2" ? "bg-red-900/40 text-red-300 border-red-700/40" :
                                           r.threat_type === "phishing" ? "bg-orange-900/40 text-orange-300 border-orange-700/40" :
-                                          r.threat_type === "malware" ? "bg-purple-900/40 text-purple-300 border-purple-700/40" :
-                                          "bg-gray-700/40 text-gray-300 border-gray-600"
+                                          r.threat_type === "malware" ? "bg-cyan-900/40 text-cyan-300 border-cyan-700/40" :
+                                          "bg-white/5 text-slate-300 border-[#1E2A3D]"
                                         } capitalize`}>{r.threat_type}</span>
                                       </td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-400">{r.source}</td>
+                                      <td className="px-4 py-2.5 text-xs text-slate-400">{r.source}</td>
                                       <td className="px-4 py-2.5">
                                         <div className="flex items-center gap-1.5">
                                           <div className="w-10 bg-white/10 rounded-full h-1.5">
                                             <div className={`h-1.5 rounded-full ${risk >= 80 ? "bg-red-400" : risk >= 60 ? "bg-orange-400" : "bg-yellow-400"}`}
                                               style={{ width: `${risk}%` }} />
                                           </div>
-                                          <span className="text-xs text-gray-400">{Math.round(risk)}</span>
+                                          <span className="text-xs text-slate-400">{Math.round(risk)}</span>
                                         </div>
                                       </td>
                                     </tr>
@@ -965,17 +981,17 @@ export default function BrandPage() {
       {selectedAlert && (
         <div className="fixed inset-0 z-50 flex" onClick={() => setSelectedAlert(null)}>
           <div className="flex-1 bg-black/50" />
-          <div className="w-full max-w-md bg-[#0d1528] border-l border-white/10 overflow-y-auto flex flex-col shadow-2xl"
+          <div className="w-full max-w-md bg-[#0d1528] border-l border-[#1E2A3D] overflow-y-auto flex flex-col shadow-2xl"
             onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex-shrink-0 p-5 border-b border-white/10">
+            <div className="flex-shrink-0 p-5 border-b border-[#1E2A3D]">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1.5">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${sevBadge(selectedAlert.severity)}`}>
                       {selectedAlert.severity.toUpperCase()}
                     </span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
                       {ALERT_TYPE_ICON[selectedAlert.alert_type] ?? "⚠"} {ALERT_TYPE_LABEL[selectedAlert.alert_type] ?? selectedAlert.alert_type}
                     </span>
                     {selectedAlert.acknowledged && (
@@ -985,7 +1001,7 @@ export default function BrandPage() {
                   <h2 className="text-sm font-bold text-white leading-snug">{selectedAlert.title}</h2>
                 </div>
                 <button onClick={() => setSelectedAlert(null)}
-                  className="flex-shrink-0 text-gray-500 hover:text-white text-xl leading-none mt-0.5">✕</button>
+                  className="flex-shrink-0 text-slate-500 hover:text-white text-xl leading-none mt-0.5">✕</button>
               </div>
             </div>
 
@@ -993,16 +1009,16 @@ export default function BrandPage() {
             <div className="flex-1 p-5 space-y-4">
               {/* Domain */}
               {selectedAlert.domain && (
-                <div className="bg-white/5 rounded-xl p-3.5">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">Domain / Indicator</div>
-                  <div className="font-mono text-sm text-blue-300 break-all">{selectedAlert.domain}</div>
+                <div className="bg-white/5 rounded-[14px] p-3.5">
+                  <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Domain / Indicator</div>
+                  <div className="font-mono text-sm text-cyan-300 break-all">{selectedAlert.domain}</div>
                   <div className="flex gap-2 mt-2">
                     <a href={`https://${selectedAlert.domain}`} target="_blank" rel="noreferrer"
-                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">Visit ↗</a>
+                      className="text-xs text-slate-500 hover:text-primary transition-colors border border-[#1E2A3D] hover:border-primary/40 px-2 py-1 rounded">Visit ↗</a>
                     <a href={`https://who.is/whois/${selectedAlert.domain}`} target="_blank" rel="noreferrer"
-                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">WHOIS ↗</a>
+                      className="text-xs text-slate-500 hover:text-primary transition-colors border border-[#1E2A3D] hover:border-primary/40 px-2 py-1 rounded">WHOIS ↗</a>
                     <a href={`https://urlscan.io/search/#domain:${selectedAlert.domain}`} target="_blank" rel="noreferrer"
-                      className="text-xs text-gray-500 hover:text-primary transition-colors border border-gray-700 hover:border-primary/40 px-2 py-1 rounded">Scan ↗</a>
+                      className="text-xs text-slate-500 hover:text-primary transition-colors border border-[#1E2A3D] hover:border-primary/40 px-2 py-1 rounded">Scan ↗</a>
                   </div>
                 </div>
               )}
@@ -1010,7 +1026,7 @@ export default function BrandPage() {
               {/* Similarity */}
               {selectedAlert.similarity != null && selectedAlert.similarity > 0 && (
                 <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-1.5">Brand Similarity</div>
+                  <div className="text-xs text-slate-400 uppercase tracking-wider mb-1.5">Brand Similarity</div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 bg-white/5 rounded-full h-2.5">
                       <div className={`h-2.5 rounded-full ${selectedAlert.similarity >= 80 ? "bg-red-500" : selectedAlert.similarity >= 60 ? "bg-orange-500" : "bg-yellow-500"}`}
@@ -1026,15 +1042,15 @@ export default function BrandPage() {
               {/* Evidence details */}
               {selectedAlert.details && Object.keys(selectedAlert.details).length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Evidence</div>
+                  <div className="text-xs text-slate-400 uppercase tracking-wider mb-2">Evidence</div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {Object.entries(selectedAlert.details)
                       .filter(([,v]) => v !== null && v !== undefined && v !== "" && !Array.isArray(v) && typeof v !== "object")
                       .slice(0,8)
                       .map(([k, v]) => (
                         <div key={k} className="bg-white/5 rounded p-2">
-                          <div className="text-xs text-gray-500 capitalize">{k.replace(/_/g, " ")}</div>
-                          <div className="text-xs text-gray-200 font-mono mt-0.5 truncate" title={String(v)}>{String(v).slice(0,50)}</div>
+                          <div className="text-xs text-slate-500 capitalize">{k.replace(/_/g, " ")}</div>
+                          <div className="text-xs text-slate-200 font-mono mt-0.5 truncate" title={String(v)}>{String(v).slice(0,50)}</div>
                         </div>
                       ))}
                   </div>
@@ -1044,19 +1060,19 @@ export default function BrandPage() {
               {/* Detected */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/5 rounded p-2.5">
-                  <div className="text-xs text-gray-500">Detected</div>
-                  <div className="text-xs text-gray-200 mt-0.5">{fmtDate(selectedAlert.detected_at)}</div>
+                  <div className="text-xs text-slate-500">Detected</div>
+                  <div className="text-xs text-slate-200 mt-0.5">{fmtDate(selectedAlert.detected_at)}</div>
                 </div>
                 <div className="bg-white/5 rounded p-2.5">
-                  <div className="text-xs text-gray-500">Brand</div>
-                  <div className="text-xs text-gray-200 mt-0.5 truncate">{selectedAlert.brand_name ?? selectedMonitor?.brand_name ?? "—"}</div>
+                  <div className="text-xs text-slate-500">Brand</div>
+                  <div className="text-xs text-slate-200 mt-0.5 truncate">{selectedAlert.brand_name ?? selectedMonitor?.brand_name ?? "—"}</div>
                 </div>
               </div>
 
               {/* Recommended actions */}
-              <div className="bg-orange-900/10 border border-orange-700/20 rounded-xl p-4">
+              <div className="bg-orange-900/10 border border-orange-700/20 rounded-[14px] p-4">
                 <div className="text-xs font-semibold text-orange-300 uppercase tracking-wider mb-2">Recommended Actions</div>
-                <ul className="space-y-1.5 text-xs text-gray-300">
+                <ul className="space-y-1.5 text-xs text-slate-300">
                   {(selectedAlert.alert_type === "typosquat_detected" || selectedAlert.alert_type === "domain_registered") && (<>
                     <li>• Submit takedown to registrar via ICANN UDRP process</li>
                     <li>• File abuse report with hosting provider</li>
@@ -1090,7 +1106,7 @@ export default function BrandPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 p-4 border-t border-white/10 flex gap-2 flex-wrap">
+            <div className="flex-shrink-0 p-4 border-t border-[#1E2A3D] flex gap-2 flex-wrap">
               {!selectedAlert.acknowledged && (
                 <button onClick={() => acknowledgeAlert(selectedAlert.id)}
                   className="flex-1 px-4 py-2 bg-green-900/20 hover:bg-green-900/30 text-green-400 border border-green-700/30 rounded-lg text-xs font-medium transition-colors">
@@ -1098,11 +1114,11 @@ export default function BrandPage() {
                 </button>
               )}
               <a href={`https://www.virustotal.com/gui/domain/${selectedAlert.domain}`} target="_blank" rel="noreferrer"
-                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-lg text-xs transition-colors">
+                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-[#1E2A3D] rounded-lg text-xs transition-colors">
                 VT ↗
               </a>
               <button onClick={() => setSelectedAlert(null)}
-                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 rounded-lg text-xs transition-colors">
+                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-400 border border-[#1E2A3D] rounded-lg text-xs transition-colors">
                 Close
               </button>
             </div>
@@ -1113,37 +1129,37 @@ export default function BrandPage() {
       {/* ── Add Monitor Modal ── */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-[#0d1528] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+          <div className="bg-[#0d1528] border border-[#1E2A3D] rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="p-5 border-b border-[#1E2A3D] flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Add Brand Monitor</h3>
-              <button onClick={() => setShowAdd(false)} className="text-gray-500 hover:text-white text-lg">✕</button>
+              <button onClick={() => setShowAdd(false)} className="text-slate-500 hover:text-white text-lg">✕</button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Brand Name *</label>
+                <label className="block text-xs text-slate-400 mb-1.5">Brand Name *</label>
                 <input type="text" value={addForm.name} onChange={e => setAddForm(f => ({...f, name: e.target.value}))}
                   placeholder="e.g. Equity Bank Kenya"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+                  className="w-full bg-white/5 border border-[#1E2A3D] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-primary/50" />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Primary Domain *</label>
+                <label className="block text-xs text-slate-400 mb-1.5">Primary Domain *</label>
                 <input type="text" value={addForm.domain} onChange={e => setAddForm(f => ({...f, domain: e.target.value}))}
                   placeholder="e.g. equitybank.co.ke"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+                  className="w-full bg-white/5 border border-[#1E2A3D] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-primary/50" />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Keywords (comma-separated)</label>
+                <label className="block text-xs text-slate-400 mb-1.5">Keywords (comma-separated)</label>
                 <input type="text" value={addForm.keywords} onChange={e => setAddForm(f => ({...f, keywords: e.target.value}))}
                   placeholder="e.g. equity, equitybank, eazzy"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50" />
+                  className="w-full bg-white/5 border border-[#1E2A3D] rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-primary/50" />
               </div>
             </div>
-            <div className="p-5 border-t border-white/10 flex gap-3 justify-end">
+            <div className="p-5 border-t border-[#1E2A3D] flex gap-3 justify-end">
               <button onClick={() => setShowAdd(false)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-lg text-sm transition-colors">Cancel</button>
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-[#1E2A3D] rounded-lg text-sm transition-colors">Cancel</button>
               <button onClick={handleAddMonitor} disabled={adding || !addForm.name || !addForm.domain}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                {adding && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-body-dark rounded-[10px] text-sm font-semibold transition-colors flex items-center gap-2">
+                {adding && <div className="w-3.5 h-3.5 border-2 border-body-dark border-t-transparent rounded-full animate-spin" />}
                 {adding ? "Adding…" : "Add Monitor"}
               </button>
             </div>
