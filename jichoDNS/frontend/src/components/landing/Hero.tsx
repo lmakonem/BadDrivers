@@ -38,15 +38,15 @@ const TYPE_BG: Record<string, string> = {
 // No orbiting chips, no dashed scanner rings — flat, spacious, opsec-style.
 function HeroEye() {
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[360px] lg:max-w-[440px]">
-      {/* one soft radial glow */}
+    <div className="relative mx-auto aspect-square w-full max-w-[440px] lg:max-w-[560px]">
+      {/* one soft radial glow — oversized so the right column reads as composed, not empty */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 rounded-full"
-        style={{ background: "radial-gradient(circle at center, rgba(74,222,128,0.14), rgba(74,222,128,0.04) 46%, transparent 70%)" }}
+        className="absolute -inset-[14%] rounded-full"
+        style={{ background: "radial-gradient(circle at center, rgba(74,222,128,0.17), rgba(74,222,128,0.05) 46%, transparent 70%)" }}
       />
       <div className="absolute inset-0 grid place-items-center">
-        <JichoMark size={300} className="drop-shadow-[0_0_50px_rgba(74,222,128,0.22)]" />
+        <JichoMark size={430} className="w-[86%] h-auto drop-shadow-[0_0_60px_rgba(74,222,128,0.28)]" />
       </div>
     </div>
   );
@@ -150,8 +150,8 @@ export function Hero() {
           Split: copy left, calm eye right. Lots of negative space.
          ════════════════════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden">
-        <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-32 lg:pt-40 pb-20 lg:pb-28">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] items-center gap-12 lg:gap-14">
+        <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-28 lg:pt-32 pb-12 lg:pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] items-center gap-8 lg:gap-10">
 
             {/* LEFT — copy */}
             <div className="text-center lg:text-left min-w-0">
@@ -164,7 +164,7 @@ export function Hero() {
                 before it <span className="text-primary">sees you.</span>
               </h1>
 
-              <p className="mt-6 text-[1.0625rem] lg:text-lg leading-relaxed text-slate-400 max-w-[56ch] mx-auto lg:mx-0">
+              <p className="mt-6 text-[1.0625rem] lg:text-lg leading-relaxed text-slate-400 max-w-[50ch] mx-auto lg:mx-0 text-pretty">
                 JichoSec unifies{" "}
                 <span className="text-white/90 font-medium">DNS threat feeds, dark-web monitoring, brand protection, and attack-surface visibility</span>{" "}
                 into one watchful view for your SOC.
@@ -195,7 +195,7 @@ export function Hero() {
           Live threat map + console. All WebSocket/console logic preserved.
          ════════════════════════════════════════════════════════════════════ */}
       <section id="live" className="relative">
-        <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pb-[clamp(4rem,8vw,7.5rem)]">
+        <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pt-4 lg:pt-8 pb-[clamp(4rem,8vw,7.5rem)]">
 
           {/* section head — green uppercase label + big Space Grotesk title */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-10 lg:mb-12">

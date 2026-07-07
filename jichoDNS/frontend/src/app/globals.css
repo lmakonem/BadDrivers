@@ -63,6 +63,10 @@ h1, h2, h3, h4, .font-display {
 }
 h3 { letter-spacing: -0.01em; }
 
+/* Kill orphans/widows: balance headings, avoid single-word last lines in body copy */
+h1, h2, h3, h4 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
 /* ── Opsec section heads: small green eyebrow + Space Grotesk title ──
    Left-aligned by default; each .section-title is preceded by a small
    uppercase, letter-spaced green .section-label. */
