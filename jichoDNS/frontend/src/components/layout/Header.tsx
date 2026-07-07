@@ -14,31 +14,31 @@ export function Header() {
         {/* Logo and Nav */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center" aria-label="JichoSec home">
-            <JichoLogo size={32} wordClassName="text-white" />
+            <JichoLogo size={42} wordClassName="text-white" />
           </Link>
 
           <nav className="hidden md:flex items-center gap-6">
             <Link
               href="/"
-              className="text-white/70 hover:text-secondary transition-colors"
+              className="text-white/70 hover:text-primary transition-colors"
             >
               Map
             </Link>
             <Link
               href="/indicators"
-              className="text-white/70 hover:text-secondary transition-colors"
+              className="text-white/70 hover:text-primary transition-colors"
             >
               Indicators
             </Link>
             <Link
               href="/analysis"
-              className="text-white/70 hover:text-secondary transition-colors"
+              className="text-white/70 hover:text-primary transition-colors"
             >
               Analysis
             </Link>
             <Link
               href="/api-docs"
-              className="text-white/70 hover:text-secondary transition-colors"
+              className="text-white/70 hover:text-primary transition-colors"
             >
               API
             </Link>
@@ -48,7 +48,7 @@ export function Header() {
         {/* Search and Actions */}
         <div className="flex items-center gap-4">
           {/* Search */}
-          <div className="hidden sm:flex items-center bg-white/5 rounded-lg px-3 py-2 border border-white/10 focus-within:border-secondary/60 transition-colors">
+          <div className="hidden sm:flex items-center bg-white/5 rounded-lg px-3 py-2 border border-white/10 focus-within:border-primary/60 transition-colors">
             <Search className="w-4 h-4 text-white/40" />
             <input
               type="text"

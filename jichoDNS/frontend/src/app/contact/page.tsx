@@ -119,7 +119,7 @@ export default function ContactPage() {
         <div className="relative z-10 max-w-[1680px] mx-auto px-8">
           <div className="max-w-4xl mx-auto text-center">
             <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
-              <JichoMark size={18} />
+              <JichoMark size={24} />
               Contact Us
             </span>
             <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-6">
@@ -171,7 +171,7 @@ export default function ContactPage() {
                       value={formData.name}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
                       placeholder="John Doe"
                     />
                   </div>
@@ -186,7 +186,7 @@ export default function ContactPage() {
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
                       placeholder="john@company.com"
                     />
                   </div>
@@ -203,7 +203,7 @@ export default function ContactPage() {
                       name="company"
                       value={formData.company}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
                       placeholder="Your Company"
                     />
                   </div>
@@ -217,7 +217,7 @@ export default function ContactPage() {
                       value={formData.subject}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white focus:outline-none focus:border-secondary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="">Select a subject</option>
                       {subjects.map((subject) => (
@@ -240,7 +240,7 @@ export default function ContactPage() {
                     onChange={handleChange}
                     required
                     rows={6}
-                    className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors resize-none"
+                    className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors resize-none"
                     placeholder="Tell us how we can help..."
                   />
                 </div>
@@ -269,7 +269,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Sales Inquiries</p>
-                      <a href="mailto:sales@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
+                      <a href="mailto:sales@jichosec.com" className="text-primary hover:text-primary-hover transition-colors">
                         sales@jichosec.com
                       </a>
                     </div>
@@ -284,7 +284,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Technical Support</p>
-                      <a href="mailto:support@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
+                      <a href="mailto:support@jichosec.com" className="text-primary hover:text-primary-hover transition-colors">
                         support@jichosec.com
                       </a>
                     </div>
@@ -298,7 +298,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">General Inquiries</p>
-                      <a href="tel:+254201234567" className="text-secondary hover:text-secondary-hover transition-colors">
+                      <a href="tel:+254201234567" className="text-primary hover:text-primary-hover transition-colors">
                         +254 20 123 4567
                       </a>
                     </div>
@@ -312,7 +312,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Security Issues</p>
-                      <a href="mailto:security@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
+                      <a href="mailto:security@jichosec.com" className="text-primary hover:text-primary-hover transition-colors">
                         security@jichosec.com
                       </a>
                     </div>
@@ -347,7 +347,7 @@ export default function ContactPage() {
                   <div className="absolute inset-0 circuit-grid opacity-70" />
                   <div className="absolute inset-0 glow-cyan" />
                   <div className="relative z-10 text-center">
-                    <JichoMark size={44} className="mx-auto mb-3" />
+                    <JichoMark size={60} className="mx-auto mb-3" />
                     <p className="text-white/50">Interactive Map</p>
                     <p className="text-white/30 text-sm">Nairobi &middot; Lagos &middot; Johannesburg</p>
                   </div>
@@ -403,7 +403,7 @@ export default function ContactPage() {
                       <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                       </svg>
-                      <a href={`mailto:${office.email}`} className="text-secondary hover:text-secondary-hover transition-colors">
+                      <a href={`mailto:${office.email}`} className="text-primary hover:text-primary-hover transition-colors">
                         {office.email}
                       </a>
                     </p>

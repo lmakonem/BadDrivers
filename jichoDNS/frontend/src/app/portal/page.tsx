@@ -457,7 +457,7 @@ export default function PortalDashboard() {
                 {stats?.totalIOCs.toLocaleString()}
               </p>
             </div>
-            <div className="p-3 bg-secondary/10 text-secondary rounded-xl">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <DatabaseIcon />
             </div>
           </div>
@@ -548,7 +548,7 @@ export default function PortalDashboard() {
                 {stats?.assetsMonitored.toLocaleString()}
               </p>
             </div>
-            <div className="p-3 bg-secondary/10 text-secondary rounded-xl">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <ServerIcon />
             </div>
           </div>

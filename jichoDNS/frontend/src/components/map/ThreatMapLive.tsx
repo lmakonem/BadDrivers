@@ -169,7 +169,7 @@ export function ThreatMapLive() {
       <div className="absolute top-0 left-0 right-0 z-[500] bg-gradient-to-b from-gray-950 via-gray-950/80 to-transparent p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <JichoMark size={40} />
+            <JichoMark size={56} />
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="font-display text-2xl font-bold text-white">Jicho Threat Map</h1>

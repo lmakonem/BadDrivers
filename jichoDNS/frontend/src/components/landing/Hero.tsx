@@ -42,27 +42,27 @@ const TONE: Record<Tone, { text: string; tile: string; border: string; bar: stri
 // ── the eye scanner (hero right column) ──────────────────────────────────────
 function EyeScanner() {
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[340px] sm:max-w-[440px]">
+    <div className="relative mx-auto aspect-square w-full max-w-[400px] sm:max-w-[520px]">
       {/* ambient halo */}
       <div className="absolute inset-0 rounded-full"
-        style={{ background: "radial-gradient(circle, rgba(245,182,44,0.16), rgba(56,225,208,0.06) 45%, transparent 70%)" }} />
+        style={{ background: "radial-gradient(circle, rgba(74,222,128,0.16), rgba(56,189,248,0.06) 45%, transparent 70%)" }} />
       {/* ring frame */}
       <svg viewBox="0 0 440 440" className="absolute inset-0 w-full h-full" fill="none" aria-hidden="true">
         <circle cx="220" cy="220" r="200" stroke="rgba(159,176,201,0.12)" strokeWidth="1" />
-        <circle cx="220" cy="220" r="200" stroke="#38e1d0" strokeWidth="1" strokeDasharray="3 10" opacity="0.35" className="jm-sweep" />
+        <circle cx="220" cy="220" r="200" stroke="#38BDF8" strokeWidth="1" strokeDasharray="3 10" opacity="0.35" className="jm-sweep" />
         <circle cx="220" cy="220" r="152" stroke="rgba(159,176,201,0.10)" strokeWidth="1" />
         {/* connector traces to the orbit chips */}
-        <g stroke="#38e1d0" strokeWidth="1" opacity="0.3">
+        <g stroke="#38BDF8" strokeWidth="1" opacity="0.3">
           <path className="circuit-trace" d="M220 68 L220 40" /><path className="circuit-trace" d="M372 220 L400 220" />
           <path className="circuit-trace" d="M220 372 L220 400" /><path className="circuit-trace" d="M68 220 L40 220" />
         </g>
-        <g fill="#f5b62c" opacity="0.8">
+        <g fill="#4ADE80" opacity="0.8">
           <circle cx="220" cy="40" r="2" /><circle cx="400" cy="220" r="2" /><circle cx="220" cy="400" r="2" /><circle cx="40" cy="220" r="2" />
         </g>
       </svg>
       {/* the mark */}
       <div className="absolute inset-0 grid place-items-center">
-        <JichoMark size={230} className="drop-shadow-[0_0_40px_rgba(245,182,44,0.28)]" />
+        <JichoMark size={270} className="drop-shadow-[0_0_40px_rgba(74,222,128,0.28)]" />
       </div>
       {/* orbit chips — what the eye watches */}
       <OrbitChip className="top-0 left-1/2 -translate-x-1/2 -translate-y-1/2" label="DNS threat feeds" tone="gold" />
@@ -317,7 +317,7 @@ export function Hero() {
                         <span className="text-white/45">{e.country}</span>
                         <span className="text-white/25">·</span>
                         <span className="text-white/35 truncate max-w-[60px]">{e.source}</span>
-                        <span className="ml-auto shrink-0 text-[10px] font-bold" style={{color: e.risk>=90?"#ef4444":e.risk>=75?"#f97316":"#f5b62c"}}>{e.risk}</span>
+                        <span className="ml-auto shrink-0 text-[10px] font-bold" style={{color: e.risk>=90?"#ef4444":e.risk>=75?"#f97316":"#4ADE80"}}>{e.risk}</span>
                       </div>
                       <p className="text-white/65 truncate">{e.indicator}</p>
                     </div>

@@ -230,7 +230,7 @@ export default function PortalLayout({
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
           <Link href="/portal" className="flex items-center" aria-label="JichoSec">
-            <JichoLogo size={30} wordClassName="text-white" />
+            <JichoLogo size={44} wordClassName="text-white" />
           </Link>
           <button
             className="lg:hidden text-gray-400 hover:text-white"

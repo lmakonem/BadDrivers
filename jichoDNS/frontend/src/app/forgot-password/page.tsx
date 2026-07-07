@@ -20,12 +20,12 @@ function BrandPanel() {
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round">
+        <g stroke="#38BDF8" strokeWidth="1.2" strokeLinecap="round">
           <path className="circuit-trace" d="M0 132 H96 L128 100 H236" />
           <path className="circuit-trace" d="M40 176 V148 L76 112 H168 L192 88 H320" />
           <path className="circuit-trace" d="M300 176 V144 L340 104 H480" />
         </g>
-        <g fill="#f5b62c">
+        <g fill="#4ADE80">
           <circle cx="236" cy="100" r="1.6" />
           <circle cx="320" cy="88" r="1.6" />
           <circle cx="168" cy="112" r="1.6" />
@@ -33,12 +33,12 @@ function BrandPanel() {
       </svg>
 
       <Link href="/" className="relative z-10">
-        <JichoLogo size={34} />
+        <JichoLogo size={46} />
       </Link>
 
       <div className="relative z-10 flex flex-col items-center text-center">
-        <JichoMark size={148} />
-        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-cyan/80">
+        <JichoMark size={210} />
+        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">
           Account recovery
         </span>
         <h1 className="font-display mt-3 text-4xl font-bold text-white">
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8 flex justify-center">
             <Link href="/">
-              <JichoLogo size={30} />
+              <JichoLogo size={40} />
             </Link>
           </div>
 
@@ -95,7 +95,7 @@ export default function ForgotPasswordPage() {
               </p>
               <p className="text-white/40 text-sm mb-6">
                 Email delivery is being set up. If you don&apos;t receive an email,
-                please contact <a href="mailto:support@defendanddetect.com" className="text-cyan hover:underline">support@defendanddetect.com</a> for
+                please contact <a href="mailto:support@defendanddetect.com" className="text-primary hover:underline">support@defendanddetect.com</a> for
                 assistance.
               </p>
               <Link href="/login" className="btn-primary">
@@ -117,7 +117,7 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                     placeholder="you@company.com"
                   />
                 </div>
@@ -132,7 +132,7 @@ export default function ForgotPasswordPage() {
 
               <p className="mt-8 text-center text-white/50">
                 Remember your password?{" "}
-                <Link href="/login" className="text-cyan hover:underline font-medium">
+                <Link href="/login" className="text-primary hover:underline font-medium">
                   Sign in
                 </Link>
               </p>

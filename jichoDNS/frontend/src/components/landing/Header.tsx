@@ -192,14 +192,14 @@ export function Header() {
         <div className="max-w-[1680px] mx-auto px-8 h-[68px] flex items-center justify-between">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-            <JichoMark size={38} className="transition-transform group-hover:scale-105" />
+          <Link href="/" className="flex items-center gap-3 shrink-0 group">
+            <JichoMark size={52} className="transition-transform group-hover:scale-105" />
             <div className="flex flex-col justify-center">
               <div className="flex items-baseline gap-0.5 leading-none font-display">
-                <span className="text-[22px] font-bold text-white tracking-tight">jicho</span>
-                <span className="text-[22px] font-bold text-primary tracking-tight">Sec</span>
+                <span className="text-[30px] font-bold text-white tracking-tight">jicho</span>
+                <span className="text-[30px] font-bold text-primary tracking-tight">Sec</span>
               </div>
-              <span className="text-[9px] font-semibold text-white/40 tracking-[0.2em] uppercase mt-1">
+              <span className="text-[10px] font-semibold text-white/40 tracking-[0.2em] uppercase mt-1">
                 Africa&apos;s Watchful Eye
               </span>
             </div>

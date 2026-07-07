@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Sora, Inter } from "next/font/google";
+import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const sora = Sora({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-sora",
-  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-display",
+  weight: ["500", "700"],
   display: "swap",
 });
 const inter = Inter({
@@ -41,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${sora.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100 overflow-x-hidden`}
+        className={`${spaceGrotesk.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100 overflow-x-hidden`}
       >
         <Providers>{children}</Providers>
       </body>

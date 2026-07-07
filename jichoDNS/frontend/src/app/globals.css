@@ -2,25 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fonts are loaded via next/font (Sora + Inter + Geist Mono) in layout.tsx —
-   no render-blocking external @import. */
+/* Fonts are loaded via next/font (Space Grotesk + Inter + Geist Mono) in
+   layout.tsx — no render-blocking external @import. */
 
 :root {
-  /* JichoSec — signal-gold on navy ink, network-cyan accent */
-  --background: #080b14;
-  --foreground: #eef2fb;
-  --ink: #080b14;
-  --ink-2: #0c1120;
-  --surface: #111827;
-  --surface-2: #161f33;
-  --primary: #f5b62c;
-  --primary-hover: #e0a41f;
-  --primary-light: #ffcf5e;
-  --cyan: #38e1d0;
-  --card-bg: #111827;
-  --card-bg-light: #161f33;
-  --text-muted: #9fb0c9;
-  --border-color: rgba(159, 176, 201, 0.12);
+  /* opsecfusion — signal-green on near-black navy, cyan accent (sparing) */
+  --background: #0A0E17;
+  --foreground: #E8EDF4;
+  --ink: #0A0E17;
+  --ink-2: #0D131F;
+  --surface: #111927;
+  --surface-2: #0D131F;
+  --primary: #4ADE80;
+  --primary-hover: #36C46B;
+  --primary-light: #86EFAC;
+  --cyan: #38BDF8;
+  --card-bg: #111927;
+  --card-bg-light: #0D131F;
+  --text: #E8EDF4;
+  --text-muted: #94A3B8;
+  --heading: #FFFFFF;
+  --border-color: #1E2A3D;
 }
 
 html { scroll-behavior: smooth; }
@@ -29,36 +31,46 @@ body {
   color: var(--foreground);
   background: var(--ink);
   font-family: var(--font-inter), system-ui, sans-serif;
+  line-height: 1.7;
 }
 
-/* Headings default to the display face */
+/* Headings default to the display face (Space Grotesk) */
 h1, h2, h3, h4, .font-display {
-  font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
   letter-spacing: -0.02em;
+  color: var(--heading);
 }
+h3 { letter-spacing: -0.01em; }
 
-/* ── Buttons ─────────────────────────────────────────────── */
+/* ── Buttons (Space Grotesk 500) ─────────────────────────── */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all duration-200;
-  color: #231a02;
-  background: linear-gradient(180deg, var(--primary-light), var(--primary));
-  box-shadow: 0 8px 28px -10px rgba(245, 182, 44, 0.55);
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 transition-all duration-200;
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  font-weight: 500;
+  border-radius: 10px;
+  color: #0A0E17;
+  background: var(--primary);
+  box-shadow: 0 8px 28px -12px rgba(74, 222, 128, 0.5);
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 34px -10px rgba(245, 182, 44, 0.7); }
+.btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 12px 34px -12px rgba(74, 222, 128, 0.6); }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent text-white font-semibold rounded-xl border transition-all duration-200;
-  border-color: rgba(159, 176, 201, 0.2);
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border transition-all duration-200;
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  font-weight: 500;
+  border-radius: 10px;
+  color: var(--text);
+  border-color: #1E2A3D;
 }
-.btn-secondary:hover { border-color: var(--cyan); color: var(--cyan); }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card-dark { @apply bg-card-dark border border-white/10 rounded-2xl; }
 .card-light { @apply bg-card-light border border-white/10 rounded-2xl; }
 
-/* Gradient text — gold to cyan */
+/* Gradient text — green to cyan */
 .gradient-text {
-  background: linear-gradient(100deg, var(--primary-light), var(--cyan));
+  background: linear-gradient(100deg, var(--primary), var(--cyan));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .gradient-gold {
@@ -74,30 +86,33 @@ h1, h2, h3, h4, .font-display {
 @keyframes jm-pulse { 0%, 100% { opacity: 0.18; transform: scale(0.97); } 50% { opacity: 0.5; transform: scale(1.03); } }
 
 /* ── Circuit-board decorative motif ──────────────────────── */
-.circuit-grid { background-image: var(--tw-circuit, linear-gradient(rgba(56,225,208,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(56,225,208,0.05) 1px, transparent 1px)); background-size: 44px 44px; }
+.circuit-grid { background-image: var(--tw-circuit, linear-gradient(rgba(74,222,128,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.05) 1px, transparent 1px)); background-size: 44px 44px; }
 .circuit-trace { stroke-dasharray: 4 4; animation: circuit-flow 3s linear infinite; }
 @keyframes circuit-flow { to { stroke-dashoffset: -24; } }
 
 /* Ambient glows for section backgrounds */
-.glow-gold { background: radial-gradient(600px 340px at 20% 0%, rgba(245,182,44,0.09), transparent 60%); }
-.glow-cyan { background: radial-gradient(560px 320px at 82% 10%, rgba(56,225,208,0.08), transparent 60%); }
+.glow-gold { background: radial-gradient(600px 340px at 20% 0%, rgba(74,222,128,0.09), transparent 60%); }
+.glow-cyan { background: radial-gradient(560px 320px at 82% 10%, rgba(56,189,248,0.08), transparent 60%); }
 
 /* ── Mapbox / Leaflet dark overrides ─────────────────────── */
 .mapboxgl-popup-content, .leaflet-popup-content-wrapper {
-  background: #111827 !important; color: #eef2fb !important; border-radius: 12px !important;
-  padding: 12px !important; border: 1px solid rgba(159,176,201,0.14) !important;
+  background: #111927 !important; color: #E8EDF4 !important; border-radius: 12px !important;
+  padding: 12px !important; border: 1px solid #1E2A3D !important;
 }
-.mapboxgl-popup-tip { border-top-color: #111827 !important; }
-.mapboxgl-ctrl-group, .mapboxgl-ctrl-group button { background: #111827 !important; }
+.mapboxgl-popup-tip { border-top-color: #111927 !important; }
+.mapboxgl-ctrl-group, .mapboxgl-ctrl-group button { background: #111927 !important; }
 .mapboxgl-ctrl-group { border-radius: 8px !important; }
-.mapboxgl-ctrl-group button:hover { background-color: #161f33 !important; }
+.mapboxgl-ctrl-group button:hover { background-color: #152032 !important; }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
-::-webkit-scrollbar-track { background: #0c1120; }
-::-webkit-scrollbar-thumb { background: #22304d; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #2e3f63; }
-::selection { background: rgba(245, 182, 44, 0.28); }
+::-webkit-scrollbar-track { background: #0D131F; }
+::-webkit-scrollbar-thumb { background: #1E2A3D; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2b3a52; }
+::selection { background: #4ADE80; color: #0A0E17; }
+
+/* Focus ring — 2px green outline */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* ── Animations kept from before ─────────────────────────── */
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }

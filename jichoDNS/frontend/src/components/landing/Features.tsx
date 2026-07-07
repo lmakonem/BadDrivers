@@ -151,12 +151,12 @@ export function Features() {
         fill="none"
         aria-hidden="true"
       >
-        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round" className="circuit-trace">
+        <g stroke="#38BDF8" strokeWidth="1.2" strokeLinecap="round" className="circuit-trace">
           <path d="M8 22 H96 L118 44 H196" />
           <path d="M8 66 H64 L86 88 H160 L182 110 H252" />
           <path d="M44 140 H128 L150 118 H222" />
         </g>
-        <g fill="#f5b62c">
+        <g fill="#4ADE80">
           <circle cx="96" cy="22" r="2" /><circle cx="196" cy="44" r="2" />
           <circle cx="160" cy="88" r="2" /><circle cx="222" cy="118" r="2" />
           <circle cx="128" cy="140" r="2" />

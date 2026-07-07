@@ -117,7 +117,7 @@ export function Footer() {
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center mb-6" aria-label="JichoSec home">
-              <JichoLogo size={40} wordClassName="text-white" />
+              <JichoLogo size={52} wordClassName="text-white" />
             </Link>
             <p className="text-white/50 mb-6 max-w-sm">
               Cyber threat intelligence for organizations across Africa. Real-time

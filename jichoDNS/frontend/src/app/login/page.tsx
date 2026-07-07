@@ -30,12 +30,12 @@ function BrandPanel({
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round">
+        <g stroke="#38BDF8" strokeWidth="1.2" strokeLinecap="round">
           <path className="circuit-trace" d="M0 132 H96 L128 100 H236" />
           <path className="circuit-trace" d="M40 176 V148 L76 112 H168 L192 88 H320" />
           <path className="circuit-trace" d="M300 176 V144 L340 104 H480" />
         </g>
-        <g fill="#f5b62c">
+        <g fill="#4ADE80">
           <circle cx="236" cy="100" r="1.6" />
           <circle cx="320" cy="88" r="1.6" />
           <circle cx="168" cy="112" r="1.6" />
@@ -43,12 +43,12 @@ function BrandPanel({
       </svg>
 
       <Link href="/" className="relative z-10">
-        <JichoLogo size={34} />
+        <JichoLogo size={46} />
       </Link>
 
       <div className="relative z-10 flex flex-col items-center text-center">
-        <JichoMark size={148} />
-        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-cyan/80">
+        <JichoMark size={210} />
+        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">
           {eyebrow}
         </span>
         <h1 className="font-display mt-3 text-4xl font-bold text-white">{headline}</h1>
@@ -111,7 +111,7 @@ function LoginForm() {
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8">
             <Link href="/">
-              <JichoLogo size={30} />
+              <JichoLogo size={40} />
             </Link>
           </div>
 
@@ -129,7 +129,7 @@ function LoginForm() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="you@company.com"
               />
             </div>
@@ -137,7 +137,7 @@ function LoginForm() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-white/70">Password</label>
-                <Link href="/forgot-password" className="text-sm text-cyan hover:underline">
+                <Link href="/forgot-password" className="text-sm text-primary hover:underline">
                   Forgot?
                 </Link>
               </div>
@@ -148,7 +148,7 @@ function LoginForm() {
                 onChange={handleChange}
                 required
                 minLength={8}
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="Enter your password"
               />
             </div>
@@ -170,7 +170,7 @@ function LoginForm() {
 
           <p className="mt-8 text-center text-white/50">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-cyan hover:underline font-medium">
+            <Link href="/signup" className="text-primary hover:underline font-medium">
               Sign up free
             </Link>
           </p>

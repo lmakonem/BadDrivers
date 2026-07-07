@@ -27,12 +27,12 @@ function BrandPanel() {
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round">
+        <g stroke="#38BDF8" strokeWidth="1.2" strokeLinecap="round">
           <path className="circuit-trace" d="M0 132 H96 L128 100 H236" />
           <path className="circuit-trace" d="M40 176 V148 L76 112 H168 L192 88 H320" />
           <path className="circuit-trace" d="M300 176 V144 L340 104 H480" />
         </g>
-        <g fill="#f5b62c">
+        <g fill="#4ADE80">
           <circle cx="236" cy="100" r="1.6" />
           <circle cx="320" cy="88" r="1.6" />
           <circle cx="168" cy="112" r="1.6" />
@@ -40,12 +40,12 @@ function BrandPanel() {
       </svg>
 
       <Link href="/" className="relative z-10">
-        <JichoLogo size={34} />
+        <JichoLogo size={46} />
       </Link>
 
       <div className="relative z-10 flex flex-col items-center text-center">
-        <JichoMark size={140} />
-        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-cyan/80">
+        <JichoMark size={200} />
+        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">
           Get started
         </span>
         <h1 className="font-display mt-3 text-4xl font-bold text-white">
@@ -147,7 +147,7 @@ function SignupForm() {
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8">
             <Link href="/">
-              <JichoLogo size={30} />
+              <JichoLogo size={40} />
             </Link>
           </div>
 
@@ -166,7 +166,7 @@ function SignupForm() {
                   value={formData.first_name}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                   placeholder="John"
                 />
               </div>
@@ -178,7 +178,7 @@ function SignupForm() {
                   value={formData.last_name}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                   placeholder="Doe"
                 />
               </div>
@@ -192,7 +192,7 @@ function SignupForm() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="john@company.com"
               />
             </div>
@@ -205,7 +205,7 @@ function SignupForm() {
                 value={formData.company}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="Company name"
               />
             </div>
@@ -218,7 +218,7 @@ function SignupForm() {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="Min 8 characters"
               />
             </div>
@@ -231,7 +231,7 @@ function SignupForm() {
                 value={formData.confirm_password}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                 placeholder="Confirm your password"
               />
             </div>
@@ -252,15 +252,15 @@ function SignupForm() {
 
             <p className="text-xs text-white/40 text-center">
               By creating an account, you agree to our{" "}
-              <Link href="/terms" className="text-cyan hover:underline">Terms</Link>
+              <Link href="/terms" className="text-primary hover:underline">Terms</Link>
               {" "}and{" "}
-              <Link href="/privacy" className="text-cyan hover:underline">Privacy Policy</Link>.
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
             </p>
           </form>
 
           <p className="mt-8 text-center text-white/50">
             Already have an account?{" "}
-            <Link href="/login" className="text-cyan hover:underline font-medium">
+            <Link href="/login" className="text-primary hover:underline font-medium">
               Sign in
             </Link>
           </p>
