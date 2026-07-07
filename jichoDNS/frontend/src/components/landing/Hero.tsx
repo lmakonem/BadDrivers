@@ -39,21 +39,6 @@ const TONE: Record<Tone, { text: string; tile: string; border: string; bar: stri
   gold: { text: "text-primary", tile: "bg-primary/10", border: "hover:border-primary/40", bar: "bg-primary" },
   cyan: { text: "text-secondary", tile: "bg-secondary/10", border: "hover:border-secondary/40", bar: "bg-secondary" },
 };
-const MODULES: { id: string; href: string; label: string; sublabel: string; tone: Tone; icon: React.ReactNode }[] = [
-  { id: "threat-intelligence", href: "/portal", label: "Threat Intelligence", sublabel: "IOC feeds & analysis", tone: "gold",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { id: "dark-web", href: "/portal/darkweb", label: "Dark Web Monitor", sublabel: "Leaks & breaches", tone: "cyan",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="currentColor" strokeWidth="1.8"/><path d="M2 12h20" stroke="currentColor" strokeWidth="1.8"/></svg> },
-  { id: "brand-protection", href: "/portal/brand", label: "Brand Protection", sublabel: "Typosquats & phishing", tone: "gold",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><path d="M12 3l9 4.5v5c0 4.5-3.9 8.7-9 10-5.1-1.3-9-5.5-9-10v-5L12 3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { id: "attack-surface", href: "/portal/asm", label: "Attack Surface", sublabel: "Asset discovery & CVEs", tone: "cyan",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { id: "ai-reports", href: "/portal/reports", label: "Threat Reports", sublabel: "AI-generated summaries", tone: "gold",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { id: "api-access", href: "/docs/api", label: "API & Integrations", sublabel: "SIEM · SOAR · MISP", tone: "cyan",
-    icon: <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"><polyline points="4 17 10 11 4 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><line x1="12" y1="19" x2="20" y2="19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg> },
-];
-
 // ── the eye scanner (hero right column) ──────────────────────────────────────
 function EyeScanner() {
   return (
@@ -249,27 +234,6 @@ export function Hero() {
           {/* RIGHT — the eye */}
           <div className="relative min-w-0">
             <EyeScanner />
-          </div>
-        </div>
-
-        {/* ════ MODULE ROW — one cohesive set ════ */}
-        <div className="pb-14">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/30 mb-3">Six modules · one platform</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {MODULES.map(m => {
-              const t = TONE[m.tone];
-              return (
-                <Link key={m.id} href={m.href}
-                  className={`group relative flex flex-col gap-3 p-4 rounded-2xl bg-card-dark border border-white/10 ${t.border} transition-all duration-300 hover:-translate-y-1 overflow-hidden`}>
-                  <span className={`absolute left-0 top-0 h-full w-[3px] ${t.bar} opacity-0 group-hover:opacity-100 transition-opacity`} />
-                  <span className={`grid place-items-center w-10 h-10 rounded-xl ${t.tile} ${t.text}`}>{m.icon}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-semibold text-white/90 leading-tight">{m.label}</span>
-                    <span className="block text-[11px] text-white/35 mt-0.5">{m.sublabel}</span>
-                  </span>
-                </Link>
-              );
-            })}
           </div>
         </div>
 

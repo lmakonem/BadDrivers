@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MODULE_ICONS } from "@/components/brand/ModuleIcons";
 
 // Two-tone accent system — gold (signal) + cyan (network), no rainbow.
 type Tone = "gold" | "cyan";
@@ -35,28 +36,22 @@ const modules: Array<{
   description: string;
   features: string[];
   stat: { value: string; label: string };
-  icon: React.ReactNode;
   tone: Tone;
 }> = [
   {
     id: "threat-intelligence",
     href: "/portal",
     title: "Threat Intelligence",
-    subtitle: "37,000+ IOCs · 15+ feeds · real-time",
-    description: "Aggregated IOC feeds covering malicious domains, IPs, URLs, and hashes — enriched with geolocation, malware family, and MITRE ATT&CK context.",
+    subtitle: "Live IOC feeds · real-time",
+    description:
+      "Aggregated indicator feeds covering malicious domains, IPs, URLs, and hashes — enriched with geolocation, malware family, and MITRE ATT&CK context.",
     features: [
       "Malware, C2, phishing & DGA classification",
-      "Malware family attribution (Mozi, AsyncRAT, Dridex…)",
-      "REST API for SIEM / SOAR integration",
-      "Africa-specific threat context & ASN mapping",
+      "GeoIP + ASN enrichment for African networks",
+      "Real-time WebSocket stream + REST API",
+      "Elasticsearch-backed IOC search",
     ],
-    stat: { value: "37K+", label: "Active IOCs" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <path d="M16 28s10-5 10-12.5V7.5L16 4 6 7.5v8c0 7.5 10 12.5 10 12.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 16l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
+    stat: { value: "12", label: "Live feeds" },
     tone: "gold",
   },
   {
@@ -64,108 +59,79 @@ const modules: Array<{
     href: "/portal/darkweb",
     title: "Dark Web Monitoring",
     subtitle: "Leaks · breaches · forum mentions",
-    description: "Continuous surveillance of paste sites, underground forums, and breach markets for leaked credentials and data targeting African organisations.",
+    description:
+      "Monitoring for leaked credentials and breach data affecting African organisations — searchable by domain and email, with ownership-scoped results.",
     features: [
-      "Credential leak detection by domain / email",
-      "Data breach intelligence & affected record counts",
-      "Dark web forum & Telegram channel tracking",
-      "Real-time alerts via webhook or email",
+      "Credential exposure lookup by domain / email",
+      "Breach dataset search",
+      "Dark-web crawl & watchlist alerts",
+      "Redacted, tenant-scoped results",
     ],
-    stat: { value: "200+", label: "Leaks tracked" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="16" r="12" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M16 4a18.4 18.4 0 0 1 4.8 12A18.4 18.4 0 0 1 16 28a18.4 18.4 0 0 1-4.8-12A18.4 18.4 0 0 1 16 4z" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M4 16h24" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M6.4 10h19.2M6.4 22h19.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      </svg>
-    ),
+    stat: { value: "24/7", label: "Monitoring" },
     tone: "cyan",
   },
   {
     id: "brand-protection",
     href: "/portal/brand",
     title: "Brand Protection",
-    subtitle: "Typosquats · phishing kits · impersonation",
-    description: "Detect and take down domains impersonating African brands — M-Pesa, Safaricom, banks, telcos — before customers become victims.",
+    subtitle: "Typosquats · lookalikes · CT logs",
+    description:
+      "Detect domains impersonating African brands — M-Pesa, Safaricom, banks, telcos — via typosquat generation and Certificate Transparency monitoring.",
     features: [
       "DNSTwist typosquat detection engine",
       "Certificate Transparency log monitoring",
-      "Phishing kit fingerprinting & lookalike scoring",
-      "One-click takedown request workflow",
+      "Live DNS resolution & risk scoring",
+      "Per-brand alert feed",
     ],
-    stat: { value: "39+", label: "Typosquats found" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <path d="M16 4l12 6v8c0 5.5-5 10-12 14-7-4-12-8.5-12-14V10l12-6z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M10 16l4 4 8-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
+    stat: { value: "DNS", label: "Typosquat scan" },
     tone: "gold",
   },
   {
     id: "attack-surface",
     href: "/portal/asm",
     title: "Attack Surface Management",
-    subtitle: "Assets · vulnerabilities · exposure",
-    description: "Continuously discover your external footprint — subdomains, open ports, SSL issues, shadow IT — and correlate with CVE intelligence.",
+    subtitle: "Assets · exposure · CVEs",
+    description:
+      "Continuously discover your external footprint — subdomains, open ports, SSL posture, tech stack — and correlate with CVE intelligence.",
     features: [
-      "Automated subdomain & asset enumeration",
-      "Open port & exposed service detection",
-      "CVE correlation with CVSS scoring",
-      "Asset change monitoring & alerts",
+      "Subdomain & asset discovery (crt.sh)",
+      "Active port & exposed-service scanning",
+      "SSL/TLS & HTTP security-header checks",
+      "EPSS + CISA KEV CVE correlation",
     ],
-    stat: { value: "120+", label: "Assets discovered" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <circle cx="14" cy="14" r="10" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M28 28l-5.5-5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-        <path d="M14 10v8M10 14h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
+    stat: { value: "CTEM", label: "Discovery" },
     tone: "cyan",
   },
   {
     id: "threat-reports",
     href: "/portal/reports",
-    title: "AI Threat Reports",
-    subtitle: "Vertex AI · Gemini · auto-generated",
-    description: "Generate executive briefings, incident summaries, and IOC analysis reports in seconds using Google Vertex AI grounded on your live threat data.",
+    title: "Threat Reports",
+    subtitle: "Automated · exportable",
+    description:
+      "Generate executive briefings, exposure assessments, and IOC analysis from your live threat data — rendered to clean, shareable HTML.",
     features: [
-      "One-click report generation (weekly / monthly / incident)",
+      "One-click report generation",
       "Executive summaries with risk scoring",
-      "IOC deep-dives with threat actor attribution",
-      "Interactive chat Q&A against threat data",
+      "IOC & external-exposure deep-dives",
+      "Owner-scoped, printable output",
     ],
-    stat: { value: "AI", label: "Powered" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <path d="M9 12h14M9 16h10M9 20h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-        <rect x="4" y="4" width="24" height="24" rx="3" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M20 4v4M28 12h-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
+    stat: { value: "Auto", label: "Reports" },
     tone: "gold",
   },
   {
     id: "api-access",
     href: "/docs/api",
     title: "REST API & Integrations",
-    subtitle: "SIEM · SOAR · MISP · Splunk · Sentinel",
-    description: "Full REST API with rate-limited tiers, API key management, and pre-built integrations for popular security platforms and SOAR playbooks.",
+    subtitle: "REST · WebSocket · MISP",
+    description:
+      "Programmatic access to indicators and analysis, plus MISP feed integration and real-time streaming for your SIEM and SOAR pipelines.",
     features: [
-      "OpenAPI 3.0 documented endpoints",
-      "Splunk, QRadar, Microsoft Sentinel add-ons",
-      "MISP feed & STIX/TAXII export",
-      "WebSocket real-time IOC streaming",
+      "REST endpoints for indicators & analysis",
+      "WebSocket real-time IOC stream",
+      "MISP event ingestion & correlation",
+      "JSON responses for SIEM / SOAR",
     ],
-    stat: { value: "REST", label: "API Ready" },
-    icon: (
-      <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-        <polyline points="6 18 12 12 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        <line x1="14" y1="18" x2="26" y2="18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
+    stat: { value: "REST", label: "API" },
     tone: "cyan",
   },
 ];
@@ -210,19 +176,20 @@ export function Features() {
           </h2>
           <p className="text-lg text-white/50 leading-relaxed">
             Threat intelligence, dark web monitoring, brand protection, attack surface
-            management, AI reports, and API access — built for African enterprises.
+            management, threat reports, and API access — built for African enterprises.
           </p>
         </div>
 
         {/* 3-column grid on large, 2-col on md, 1-col on mobile */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {modules.map((m) => {
             const t = tones[m.tone];
+            const Icon = MODULE_ICONS[m.id];
             return (
               <Link
                 key={m.id}
                 href={m.href}
-                className={`group relative flex flex-col p-6 rounded-2xl bg-card-dark border border-white/10 ${t.border} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/30`}
+                className={`group relative flex flex-col min-w-0 p-6 rounded-2xl bg-card-dark border border-white/10 ${t.border} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/30`}
               >
                 {/* hover gradient overlay */}
                 <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${t.glow} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
@@ -231,7 +198,7 @@ export function Features() {
                   {/* top row */}
                   <div className="flex items-start justify-between mb-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${t.iconBg} group-hover:scale-105 transition-transform`}>
-                      {m.icon}
+                      {Icon ? <Icon className="w-7 h-7" /> : null}
                     </div>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${t.badge}`}>
                       {m.stat.value} <span className="font-normal opacity-80">{m.stat.label}</span>
