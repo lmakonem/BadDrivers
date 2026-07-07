@@ -81,7 +81,10 @@ jobs:
     # deploys are performed manually (rsync + restart / image rebuild) or via an
     # explicit `workflow_dispatch` run once DEPLOY_HOST + SSH are re-pointed at
     # the current infra. This prevents merges from firing a broken/misdirected deploy.
-    if: success() && github.event_name == 'workflow_dispatch'
+    # Require BOTH: a manual dispatch AND the main branch. Manual-dispatch alone
+    # would let a deploy be triggered from any feature branch; the ref check keeps
+    # production deploys pinned to main.
+    if: success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     # Binds this job to the repo's Production environment. Add a MANUAL APPROVAL
     # gate in Settings > Environments > production > Required reviewers
     # (GitHub does not allow declaring reviewers in YAML). See ops action.
