@@ -42,6 +42,30 @@ h1, h2, h3, h4, .font-display {
 }
 h3 { letter-spacing: -0.01em; }
 
+/* ── Opsec section heads: small green eyebrow + Space Grotesk title ──
+   Left-aligned by default; each .section-title is preceded by a small
+   uppercase, letter-spaced green .section-label. */
+.section-label {
+  display: inline-block;
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin: 0 0 1rem;
+}
+.section-title {
+  font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(1.9rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  color: var(--heading);
+  text-align: left;
+  margin: 0;
+}
+
 /* ── Buttons (Space Grotesk 500) ─────────────────────────── */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-6 py-3 transition-all duration-200;
@@ -50,9 +74,8 @@ h3 { letter-spacing: -0.01em; }
   border-radius: 10px;
   color: #0A0E17;
   background: var(--primary);
-  box-shadow: 0 8px 28px -12px rgba(74, 222, 128, 0.5);
 }
-.btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 12px 34px -12px rgba(74, 222, 128, 0.6); }
+.btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 8px 24px -12px rgba(74, 222, 128, 0.35); }
 
 .btn-secondary {
   @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border transition-all duration-200;
@@ -68,13 +91,13 @@ h3 { letter-spacing: -0.01em; }
 .card-dark { @apply bg-card-dark border border-white/10 rounded-2xl; }
 .card-light { @apply bg-card-light border border-white/10 rounded-2xl; }
 
-/* Gradient text — green to cyan */
+/* Accent text — single green, no cyan rainbow (opsec restraint: one green word) */
 .gradient-text {
-  background: linear-gradient(100deg, var(--primary), var(--cyan));
+  background: linear-gradient(100deg, var(--primary), var(--primary-light));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .gradient-gold {
-  background: linear-gradient(100deg, var(--primary-light), var(--primary-hover));
+  background: linear-gradient(100deg, var(--primary-light), var(--primary));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
@@ -85,14 +108,18 @@ h3 { letter-spacing: -0.01em; }
 @keyframes jicho-sweep { to { transform: rotate(360deg); } }
 @keyframes jm-pulse { 0%, 100% { opacity: 0.18; transform: scale(0.97); } 50% { opacity: 0.5; transform: scale(1.03); } }
 
-/* ── Circuit-board decorative motif ──────────────────────── */
-.circuit-grid { background-image: var(--tw-circuit, linear-gradient(rgba(74,222,128,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.05) 1px, transparent 1px)); background-size: 44px 44px; }
+/* ── Circuit-board decorative motif — NEUTRALISED for opsec restraint ──
+   Class names are kept (components reference them) but the busy PCB grid is
+   now a no-op so sections read as flat near-black navy. */
+.circuit-grid { background-image: none; }
 .circuit-trace { stroke-dasharray: 4 4; animation: circuit-flow 3s linear infinite; }
 @keyframes circuit-flow { to { stroke-dashoffset: -24; } }
 
-/* Ambient glows for section backgrounds */
-.glow-gold { background: radial-gradient(600px 340px at 20% 0%, rgba(74,222,128,0.09), transparent 60%); }
-.glow-cyan { background: radial-gradient(560px 320px at 82% 10%, rgba(56,189,248,0.08), transparent 60%); }
+/* Ambient glow — a SINGLE very-subtle green radial, top-right (mirrors
+   opsecfusion's .of-hero::before). .glow-gold carries it; .glow-cyan is a
+   no-op so pages that stack both still show only one faint glow. */
+.glow-gold { background: radial-gradient(820px 600px at 88% -12%, rgba(74,222,128,0.06), transparent 60%); }
+.glow-cyan { background: none; }
 
 /* ── Mapbox / Leaflet dark overrides ─────────────────────── */
 .mapboxgl-popup-content, .leaflet-popup-content-wrapper {

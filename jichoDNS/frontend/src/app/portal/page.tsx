@@ -270,7 +270,7 @@ const ArrowRightIcon = () => (
 const quickActions: QuickAction[] = [
   {
     title: "Generate Report",
-    description: "Create AI-powered threat report",
+    description: "Create a threat report",
     href: "/portal/reports",
     icon: <DocumentIcon />,
     color: "from-blue-500/20 to-blue-600/10",

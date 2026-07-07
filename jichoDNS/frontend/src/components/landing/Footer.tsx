@@ -65,45 +65,25 @@ const socialLinks = [
 
 export function Footer() {
   return (
-    <footer className="relative bg-ebony-950 border-t border-white/10">
-      {/* Circuit-grid top border — a thin band of PCB grid fading into the ink */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-28 circuit-grid opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"
-      />
-
+    <footer className="bg-card-light border-t border-[#1E2A3D]">
       {/* CTA Section */}
-      <div className="relative max-w-[1680px] mx-auto px-8 py-16">
-        <div className="relative p-12 rounded-3xl bg-gradient-to-r from-primary/20 via-card-dark to-secondary/20 border border-white/10 overflow-hidden">
-          {/* Background Elements */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 rounded-full blur-[100px]" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/20 rounded-full blur-[80px]" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-20 pb-16">
+        <div className="p-10 lg:p-12 rounded-[14px] bg-gradient-to-b from-card-dark to-card-light border border-primary">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
             <div>
-              <h3 className="font-display text-3xl lg:text-4xl font-bold text-white mb-4">
-                Ready to Secure Your Organization?
+              <h3 className="font-display text-[clamp(1.6rem,3vw,2.25rem)] font-bold tracking-[-0.02em] text-white mb-4">
+                Ready to secure your organization?
               </h3>
-              <p className="text-xl text-white/60 max-w-2xl">
+              <p className="text-lg text-[#94A3B8] max-w-2xl">
                 Cyber threat intelligence built for organizations across Africa —
                 real-time visibility and actionable alerts. Start a free trial today.
               </p>
             </div>
             <div className="flex flex-wrap gap-4">
-              <Link
-                href="/signup"
-                className="px-8 py-4 bg-primary hover:bg-primary-hover text-ebony-950 font-semibold rounded-full transition-all shadow-lg shadow-primary/25 whitespace-nowrap"
-              >
+              <Link href="/signup" className="btn-primary whitespace-nowrap">
                 Start Free Trial
               </Link>
-              <Link
-                href="#demo"
-                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-full border border-white/10 hover:border-secondary/50 transition-all whitespace-nowrap"
-              >
+              <Link href="#demo" className="btn-secondary whitespace-nowrap">
                 Request Demo
               </Link>
             </div>
@@ -112,14 +92,14 @@ export function Footer() {
       </div>
 
       {/* Main Footer */}
-      <div className="relative max-w-[1680px] mx-auto px-8 py-16 border-t border-white/10">
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 py-16 border-t border-[#1E2A3D]">
         <div className="grid lg:grid-cols-6 gap-12">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center mb-6" aria-label="JichoSec home">
               <JichoLogo size={52} wordClassName="text-white" />
             </Link>
-            <p className="text-white/50 mb-6 max-w-sm">
+            <p className="text-[#94A3B8] mb-6 max-w-sm">
               Cyber threat intelligence for organizations across Africa. Real-time
               threat visibility and actionable security intelligence — the watchful
               eye over African cyberspace.
@@ -131,7 +111,7 @@ export function Footer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-secondary border border-transparent hover:border-secondary/30 transition-colors"
+                  className="w-10 h-10 rounded-[10px] bg-card-dark flex items-center justify-center text-[#94A3B8] hover:text-primary border border-[#1E2A3D] hover:border-primary transition-colors"
                   aria-label={social.name}
                 >
                   {social.icon}
@@ -143,7 +123,7 @@ export function Footer() {
           {/* Link Columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h4 className="font-display text-sm font-semibold text-white uppercase tracking-wider mb-4">
+              <h4 className="font-display text-[13px] font-medium text-white uppercase tracking-[0.14em] mb-4">
                 {category}
               </h4>
               <ul className="space-y-3">
@@ -151,7 +131,7 @@ export function Footer() {
                   <li key={link.name}>
                     <Link
                       href={link.href}
-                      className="text-white/50 hover:text-secondary transition-colors text-sm"
+                      className="text-[#94A3B8] hover:text-primary transition-colors text-sm"
                     >
                       {link.name}
                     </Link>
@@ -164,19 +144,19 @@ export function Footer() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="relative border-t border-white/10">
-        <div className="max-w-[1680px] mx-auto px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/40">
+      <div className="border-t border-[#1E2A3D]">
+        <div className="max-w-[1200px] mx-auto px-6 lg:px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-[#94A3B8]">
             © {new Date().getFullYear()} JichoSec. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-            <Link href="/privacy" className="text-sm text-white/40 hover:text-secondary transition-colors">
+            <Link href="/privacy" className="text-sm text-[#94A3B8] hover:text-primary transition-colors">
               Privacy
             </Link>
-            <Link href="/terms" className="text-sm text-white/40 hover:text-secondary transition-colors">
+            <Link href="/terms" className="text-sm text-[#94A3B8] hover:text-primary transition-colors">
               Terms
             </Link>
-            <Link href="/security" className="text-sm text-white/40 hover:text-secondary transition-colors">
+            <Link href="/security" className="text-sm text-[#94A3B8] hover:text-primary transition-colors">
               Security
             </Link>
           </div>

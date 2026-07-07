@@ -33,51 +33,21 @@ const TYPE_BG: Record<string, string> = {
   bruteforce: "bg-yellow-500/10 border-yellow-500/25",
 };
 
-// ── 6 modules — unified gold / cyan set ──────────────────────────────────────
-type Tone = "gold" | "cyan";
-const TONE: Record<Tone, { text: string; tile: string; border: string; bar: string }> = {
-  gold: { text: "text-primary", tile: "bg-primary/10", border: "hover:border-primary/40", bar: "bg-primary" },
-  cyan: { text: "text-secondary", tile: "bg-secondary/10", border: "hover:border-secondary/40", bar: "bg-secondary" },
-};
-// ── the eye scanner (hero right column) ──────────────────────────────────────
-function EyeScanner() {
+// ── the eye — calm brand art (hero right column) ─────────────────────────────
+// Restraint pass: the clean JichoMark over a single soft radial glow.
+// No orbiting chips, no dashed scanner rings — flat, spacious, opsec-style.
+function HeroEye() {
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[400px] sm:max-w-[520px]">
-      {/* ambient halo */}
-      <div className="absolute inset-0 rounded-full"
-        style={{ background: "radial-gradient(circle, rgba(74,222,128,0.16), rgba(56,189,248,0.06) 45%, transparent 70%)" }} />
-      {/* ring frame */}
-      <svg viewBox="0 0 440 440" className="absolute inset-0 w-full h-full" fill="none" aria-hidden="true">
-        <circle cx="220" cy="220" r="200" stroke="rgba(159,176,201,0.12)" strokeWidth="1" />
-        <circle cx="220" cy="220" r="200" stroke="#38BDF8" strokeWidth="1" strokeDasharray="3 10" opacity="0.35" className="jm-sweep" />
-        <circle cx="220" cy="220" r="152" stroke="rgba(159,176,201,0.10)" strokeWidth="1" />
-        {/* connector traces to the orbit chips */}
-        <g stroke="#38BDF8" strokeWidth="1" opacity="0.3">
-          <path className="circuit-trace" d="M220 68 L220 40" /><path className="circuit-trace" d="M372 220 L400 220" />
-          <path className="circuit-trace" d="M220 372 L220 400" /><path className="circuit-trace" d="M68 220 L40 220" />
-        </g>
-        <g fill="#4ADE80" opacity="0.8">
-          <circle cx="220" cy="40" r="2" /><circle cx="400" cy="220" r="2" /><circle cx="220" cy="400" r="2" /><circle cx="40" cy="220" r="2" />
-        </g>
-      </svg>
-      {/* the mark */}
+    <div className="relative mx-auto aspect-square w-full max-w-[360px] lg:max-w-[440px]">
+      {/* one soft radial glow */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 rounded-full"
+        style={{ background: "radial-gradient(circle at center, rgba(74,222,128,0.14), rgba(74,222,128,0.04) 46%, transparent 70%)" }}
+      />
       <div className="absolute inset-0 grid place-items-center">
-        <JichoMark size={270} className="drop-shadow-[0_0_40px_rgba(74,222,128,0.28)]" />
+        <JichoMark size={300} className="drop-shadow-[0_0_50px_rgba(74,222,128,0.22)]" />
       </div>
-      {/* orbit chips — what the eye watches */}
-      <OrbitChip className="top-0 left-1/2 -translate-x-1/2 -translate-y-1/2" label="DNS threat feeds" tone="gold" />
-      <OrbitChip className="top-1/2 right-0 -translate-y-1/2" label="Dark web" tone="cyan" />
-      <OrbitChip className="bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2" label="Attack surface" tone="cyan" />
-      <OrbitChip className="top-1/2 left-0 -translate-y-1/2" label="Brand abuse" tone="gold" />
-    </div>
-  );
-}
-function OrbitChip({ className, label, tone }: { className: string; label: string; tone: Tone }) {
-  const t = TONE[tone];
-  return (
-    <div className={`absolute ${className} whitespace-nowrap flex items-center gap-1.5 rounded-full border border-white/10 bg-ebony-900/85 backdrop-blur px-3 py-1.5 shadow-lg`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${t.bar}`} />
-      <span className="text-[11px] font-medium text-white/75">{label}</span>
     </div>
   );
 }
@@ -174,100 +144,99 @@ export function Hero() {
   const statusLabel = wsStatus === "live" ? "LIVE"         : wsStatus === "replay" ? "REPLAY"     : "AWAITING";
 
   return (
-    <section className="relative bg-body-dark overflow-hidden">
+    <>
+      {/* ════════════════════════════════════════════════════════════════════
+          HERO — flat near-black navy, one subtle radial glow top-right.
+          Split: copy left, calm eye right. Lots of negative space.
+         ════════════════════════════════════════════════════════════════════ */}
+      <section className="relative overflow-hidden bg-body-dark">
+        {/* the single, very subtle green glow (opsec .of-hero::before) */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute z-0 top-[-25%] right-[-10%] w-[min(820px,80vw)] h-[min(820px,80vw)]"
+          style={{ background: "radial-gradient(circle at center, rgba(74,222,128,0.09) 0%, rgba(74,222,128,0.05) 38%, transparent 70%)" }}
+        />
 
-      {/* branded ambient backdrop */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-[720px] circuit-grid opacity-50"
-          style={{ maskImage: "linear-gradient(180deg, rgba(0,0,0,0.7), transparent 80%)", WebkitMaskImage: "linear-gradient(180deg, rgba(0,0,0,0.7), transparent 80%)" }} />
-        <div className="absolute inset-0 glow-gold" />
-        <div className="absolute inset-0 glow-cyan" />
-      </div>
+        <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-32 lg:pt-40 pb-20 lg:pb-28">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] items-center gap-12 lg:gap-14">
 
-      <div className="relative z-10 max-w-[1320px] mx-auto px-6 lg:px-10">
+            {/* LEFT — copy */}
+            <div className="text-center lg:text-left min-w-0">
+              <span className="inline-block font-display text-[0.8rem] font-medium uppercase tracking-[0.16em] text-primary mb-5">
+                Africa-first threat intelligence
+              </span>
 
-        {/* ════ TOP HERO — text left, watchful-eye scanner right ════ */}
-        <div className="pt-28 lg:pt-32 pb-12 grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-6 items-center">
+              <h1 className="font-display font-bold text-white leading-[1.06] tracking-tight text-[clamp(2.4rem,4.6vw,3.6rem)]">
+                See the threat<br />
+                before it <span className="text-primary">sees you.</span>
+              </h1>
 
-          {/* LEFT — copy */}
-          <div className="text-center lg:text-left min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/60 mb-7">
-              <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
-              The watchful eye over African cyberspace
+              <p className="mt-6 text-[1.0625rem] lg:text-lg leading-relaxed text-slate-400 max-w-[56ch] mx-auto lg:mx-0">
+                JichoSec unifies{" "}
+                <span className="text-white/90 font-medium">DNS threat feeds, dark-web monitoring, brand protection, and attack-surface visibility</span>{" "}
+                into one watchful view for your SOC.
+              </p>
+
+              <div className="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                <Link href="/signup" className="btn-primary group">
+                  Start Free Trial
+                  <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </Link>
+                <Link href="#demo" className="btn-secondary group">
+                  See how it works
+                  <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                </Link>
+              </div>
             </div>
 
-            <h1 className="font-display text-[34px] sm:text-[48px] lg:text-[60px] font-bold leading-[1.05] tracking-tight mb-6">
-              <span className="text-white">See the threat</span><br />
-              <span className="gradient-gold">before it sees you.</span>
-            </h1>
-
-            <p className="text-base lg:text-[17px] text-white/55 max-w-xl mx-auto lg:mx-0 leading-relaxed mb-8">
-              Africa-first threat intelligence. JichoSec unifies{" "}
-              <span className="text-white/80 font-medium">DNS threat feeds, dark-web monitoring, brand protection, and attack-surface visibility</span>{" "}
-              into one watchful view for your SOC.
-            </p>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-9">
-              <Link href="/signup" className="btn-primary group">
-                Start Free Trial
-                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </Link>
-              <Link href="/portal" className="btn-secondary">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                Open Portal
-              </Link>
-              <Link href="#demo" className="group inline-flex items-center gap-1.5 px-3 py-3 text-sm font-medium text-white/55 hover:text-secondary transition-colors">
-                Request Demo
-                <svg className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </Link>
+            {/* RIGHT — the calm eye */}
+            <div className="relative min-w-0">
+              <HeroEye />
             </div>
-
-            {/* honest capability chips */}
-            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 font-mono text-[12px] text-white/40">
-              <span className="flex items-center gap-1.5"><span className="text-primary">▹</span> 12 live threat feeds</span>
-              <span className="flex items-center gap-1.5"><span className="text-secondary">▹</span> Real-time WebSocket stream</span>
-              <span className="flex items-center gap-1.5"><span className="text-primary">▹</span> REST API for SIEM / SOAR</span>
-            </div>
-          </div>
-
-          {/* RIGHT — the eye */}
-          <div className="relative min-w-0">
-            <EyeScanner />
           </div>
         </div>
+      </section>
 
-        {/* ════ PROOF — live threat map + console ════ */}
-        <div className="pb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-white/8" />
-            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-secondary" />
+      {/* ════════════════════════════════════════════════════════════════════
+          SEE IT LIVE — restrained section, flat bg (no grid, no glow).
+          Live threat map + console. All WebSocket/console logic preserved.
+         ════════════════════════════════════════════════════════════════════ */}
+      <section id="live" className="relative bg-body-dark">
+        <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pb-[clamp(4rem,8vw,7.5rem)]">
+
+          {/* section head — green uppercase label + big Space Grotesk title */}
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-10 lg:mb-12">
+            <div className="max-w-[760px]">
+              <span className="inline-block font-display text-[0.8rem] font-medium uppercase tracking-[0.16em] text-primary mb-4">
+                See it live
               </span>
-              <span className="text-[11px] text-white/55 font-medium">Live from Africa&apos;s networks — watch indicators resolve in real time</span>
+              <h2 className="font-display font-bold text-white leading-[1.12] tracking-tight text-[clamp(1.9rem,3.5vw,2.75rem)]">
+                Africa&apos;s threats, resolving in real time.
+              </h2>
             </div>
-            <div className="h-px flex-1 bg-white/8" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card-dark border border-[#1E2A3D]">
+              <span className={`w-1.5 h-1.5 rounded-full ${statusDot} animate-pulse`} />
+              <span className="text-[11px] font-mono tracking-wide text-slate-400">{statusLabel}</span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-stretch">
 
             {/* MAP */}
-            <div className="relative min-w-0 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60 bg-body-dark min-h-[460px] lg:min-h-[520px]">
+            <div className="relative min-w-0 rounded-[14px] overflow-hidden border border-[#1E2A3D] bg-body-dark min-h-[460px] lg:min-h-[520px]">
               <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-body-dark/95 to-transparent px-4 pt-3 pb-8 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/10 border border-secondary/20">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
                     <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75" />
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-secondary" />
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
                     </span>
-                    <span className="text-[11px] font-semibold text-secondary">LIVE</span>
+                    <span className="text-[11px] font-semibold text-primary">LIVE</span>
                   </div>
-                  <span className="text-white/35 text-xs">Aggregated threat feeds</span>
+                  <span className="text-slate-400 text-xs">Aggregated threat feeds</span>
                 </div>
                 <Link href="/map" target="_blank"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/15 text-white text-xs font-medium transition-colors border border-white/10">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/15 text-white text-xs font-medium transition-colors border border-[#1E2A3D]">
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
                   Fullscreen
                 </Link>
@@ -277,26 +246,26 @@ export function Hero() {
                 <RealThreatMap />
               </div>
 
-              <div className="absolute bottom-4 left-4 z-20 flex items-center gap-3 px-3 py-2 rounded-xl bg-body-dark/90 backdrop-blur border border-white/10">
+              <div className="absolute bottom-4 left-4 z-20 flex items-center gap-3 px-3 py-2 rounded-xl bg-body-dark/90 backdrop-blur border border-[#1E2A3D]">
                 {[["bg-primary","C2"],["bg-red-500","Malware"],["bg-orange-500","Phishing"],["bg-secondary","DDoS"]].map(([c,l]) => (
                   <div key={l} className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full ${c}`} />
-                    <span className="text-[11px] text-white/55">{l}</span>
+                    <span className="text-[11px] text-slate-400">{l}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* LIVE CONSOLE */}
-            <div className="flex flex-col min-w-0 rounded-2xl border border-white/10 bg-card-dark overflow-hidden shadow-2xl shadow-black/40">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-ebony-900/60 shrink-0">
+            <div className="flex flex-col min-w-0 rounded-[14px] border border-[#1E2A3D] bg-card-dark overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#1E2A3D] bg-ebony-900/60 shrink-0">
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                   <span className="text-sm font-semibold text-white">Threat Console</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/30 border border-white/10">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/30 border border-[#1E2A3D]">
                   <span className={`w-1.5 h-1.5 rounded-full ${statusDot} animate-pulse`} />
-                  <span className="text-[10px] font-mono text-white/50">{statusLabel}</span>
+                  <span className="text-[10px] font-mono text-slate-400">{statusLabel}</span>
                 </div>
               </div>
 
@@ -325,7 +294,7 @@ export function Hero() {
                 ))}
               </div>
 
-              <div className="border-t border-white/8 bg-ebony-900/60 px-4 py-2.5 flex items-center justify-between shrink-0">
+              <div className="border-t border-[#1E2A3D] bg-ebony-900/60 px-4 py-2.5 flex items-center justify-between shrink-0">
                 <span className="text-[10px] text-white/25 font-mono">{console_.length} events</span>
                 <Link href="/portal" className="text-[10px] text-primary hover:text-primary-light font-medium transition-colors">
                   View full portal →
@@ -334,7 +303,7 @@ export function Hero() {
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
