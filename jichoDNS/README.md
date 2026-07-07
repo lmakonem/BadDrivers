@@ -24,20 +24,20 @@
 
 ---
 
-JichoDNS provides real-time DNS threat intelligence for African networks, combining RIPE Atlas measurements, multi-source threat feeds, and ML-powered classification to detect C2 infrastructure, data exfiltration, and phishing campaigns targeting the continent.
+JichoDNS provides real-time DNS threat intelligence for African networks, aggregating multi-source threat feeds and DNS heuristics (entropy/DGA scoring) to surface C2 infrastructure, data exfiltration, and phishing indicators targeting the continent. (RIPE Atlas active measurements and ML classification are on the roadmap — see [docs/REMEDIATION_BACKLOG.md](docs/REMEDIATION_BACKLOG.md).)
 
 > "Jicho" means "eye" in Swahili - JichoDNS is the watchful eye over Africa's DNS landscape.
 
 ## Key Features
 
-- **Interactive Africa Threat Map** - Choropleth visualization of C2/Exfil/Phishing risk by country and ASN
+- **Interactive Africa Threat Map** - Live attack-arc replay of malicious DNS indicators across African geographies (a per-country/ASN choropleth risk layer is *planned*, not yet implemented)
 - **Newly Observed Domains (NOD)** - Track domains less than 20 hours old with risk scoring
-- **Multi-Source Intelligence** - Aggregates 15+ threat feeds (Abuse.ch, PhishTank, OTX, etc.)
-- **RIPE Atlas Integration** - Active DNS measurements from African vantage points
-- **ML Classification** - Vertex AI-powered C2/Exfil/Phishing detection
+- **Multi-Source Intelligence** - Aggregates a dozen threat-feed importers: URLhaus, ThreatFox, Feodo Tracker, SSL Blacklist (+JA3), MalwareBazaar, OpenPhish, PhishTank, AbuseIPDB, AlienVault OTX, crt.sh, and DNSTwist
+- **RIPE Atlas Integration** *(planned)* - Active DNS measurements from African vantage points are not yet built; `/api/v1/atlas/*` currently returns HTTP 501
+- **Threat Reporting** - Deterministic HTML reports built from Elasticsearch aggregations, with STIX/MISP export (no ML/LLM; Vertex AI classification is *planned*)
 - **Typosquatting Detection** - DNSTwist integration for African brand monitoring
-- **Infrastructure Correlation** - Shodan integration for hosting intelligence
-- **Paid API Access** - REST API for SOC/SIEM integration with STIX/MISP export
+- **Infrastructure Correlation** *(planned)* - Shodan-based hosting intelligence is not yet wired in
+- **API Access (JWT)** - REST API for SOC/SIEM integration with STIX/MISP export (per-key issuance and usage metering are *planned*; auth is JWT-only today)
 
 ## Architecture Overview
 
@@ -75,14 +75,14 @@ JichoDNS provides real-time DNS threat intelligence for African networks, combin
 └─────────────────────┘          └─────────────────────┘
 ```
 
+> **Note:** the diagram shows the *target* architecture. RIPE Atlas, Shodan, ML/Vertex scoring, and the paid-API layer are on the roadmap and not yet implemented — see [docs/REMEDIATION_BACKLOG.md](docs/REMEDIATION_BACKLOG.md).
+
 ## Quick Start
 
 ### Prerequisites
 
 - Docker & Docker Compose
-- RIPE Atlas API key
-- Shodan API key (Membership)
-- Google Cloud account (Vertex AI)
+- *(Optional, for planned integrations only)* RIPE Atlas API key, Shodan API key, Google Cloud/Vertex AI credentials — none are required to run the platform today
 
 ### Development Setup
 
@@ -110,7 +110,7 @@ open http://localhost:3000
 ### Environment Variables
 
 ```bash
-# Required
+# Planned integrations (not required today — these features are not yet implemented)
 RIPE_ATLAS_API_KEY=your_ripe_atlas_key
 SHODAN_API_KEY=your_shodan_key
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
@@ -144,8 +144,10 @@ ABUSEIPDB_API_KEY=your_abuseipdb_key
 |------|-------|-----------|----------|
 | **Public** | Free | - | View map, basic stats |
 | **Registered** | Free | 100/day | Dashboard, lookups, watchlists |
-| **Professional** | $49/mo | 10K/mo | Full API, exports, webhooks |
-| **Enterprise** | $299/mo | Unlimited | Bulk, custom feeds, support |
+| **Professional** | $299/mo | 50K/mo | Full API, exports, webhooks |
+| **Enterprise** | Custom (contact sales) | Unlimited | Bulk, custom feeds, support |
+
+> API access is JWT-authenticated today; per-key issuance and usage metering are *planned* (see [docs/REMEDIATION_BACKLOG.md](docs/REMEDIATION_BACKLOG.md)). Payments are processed via Stripe only.
 
 ## Tech Stack
 
@@ -156,9 +158,9 @@ ABUSEIPDB_API_KEY=your_abuseipdb_key
 | Maps | Mapbox GL JS |
 | Database | PostgreSQL 15, ClickHouse |
 | Queue | Celery, Redis |
-| ML | Vertex AI (HuggingFace models) |
-| Auth | JWT, API Keys |
-| Payments | Stripe, Paystack |
+| ML | Planned (reports are deterministic ES-aggregation templates today) |
+| Auth | JWT (API-key issuance/metering planned) |
+| Payments | Stripe (Paystack planned) |
 
 ## Use Cases
 

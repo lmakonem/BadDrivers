@@ -31,19 +31,6 @@ const TYPE_BG: Record<string, string> = {
   phishing: "bg-orange-500/15 border-orange-500/30", ddos: "bg-blue-500/15 border-blue-500/30",
   bruteforce: "bg-yellow-500/15 border-yellow-500/30",
 };
-const DEMO_INDICATORS = [
-  { type:"malware",   indicator:"185.220.101.47",          country:"RU", risk:92 },
-  { type:"c2",        indicator:"asyncrat-c2.duckdns.org", country:"CN", risk:97 },
-  { type:"phishing",  indicator:"safaricom-verify.net",    country:"KE", risk:88 },
-  { type:"malware",   indicator:"6a2c8e3f1d9b.xyz",        country:"DE", risk:78 },
-  { type:"c2",        indicator:"192.168.200.45",           country:"UA", risk:95 },
-  { type:"phishing",  indicator:"mpesa-agent-login.com",   country:"NG", risk:91 },
-  { type:"malware",   indicator:"emotet-drop.tk",          country:"PK", risk:84 },
-  { type:"c2",        indicator:"cobalt-strike-cn.top",    country:"CN", risk:99 },
-  { type:"phishing",  indicator:"kcb-secure-alert.co",     country:"KE", risk:86 },
-  { type:"malware",   indicator:"d9e3a12b7c45.pw",         country:"IN", risk:73 },
-];
-
 // ── 6 modules — compact pill cards ───────────────────────────────────────────
 const MODULES = [
   {
@@ -148,8 +135,7 @@ const MODULES = [
 // ── component ─────────────────────────────────────────────────────────────────
 export function Hero() {
   const [console_, setConsole]  = useState<ConsoleEntry[]>([]);
-  const [consoleIdx, setConsoleIdx] = useState(0);
-  const [wsStatus, setWsStatus] = useState<"live"|"replay"|"demo">("demo");
+  const [wsStatus, setWsStatus] = useState<"live"|"replay"|"idle">("idle");
   const consoleRef              = useRef<HTMLDivElement>(null);
   const counterRef              = useRef(0);
 
@@ -187,22 +173,18 @@ export function Hero() {
         .then(data => {
           const indicators = data.indicators || [];
           if (indicators.length === 0) {
-            // True fallback: use demo data only if API returned nothing
-            replayPool = DEMO_INDICATORS.map((src, i) => ({
-              id: i, ts: "", type: src.type, indicator: src.indicator,
-              source: ["urlhaus","sslbl","threatfox","phishtank"][Math.floor(Math.random()*4)],
-              country: src.country, risk: src.risk,
-            }));
-          } else {
-            replayPool = indicators.map((ioc: Record<string, unknown>, i: number) => ({
-              id: i, ts: "",
-              type: String(ioc.threat_type ?? "malware"),
-              indicator: String(ioc.indicator ?? ""),
-              source: String(ioc.source ?? "feed"),
-              country: String(ioc.country_code ?? "??"),
-              risk: Number(ioc.risk_score ?? Math.floor(Math.random() * 40 + 60)),
-            }));
+            // No live data available — show an honest idle state, never fabricate.
+            setWsStatus("idle");
+            return;
           }
+          replayPool = indicators.map((ioc: Record<string, unknown>, i: number) => ({
+            id: i, ts: "",
+            type: String(ioc.threat_type ?? "malware"),
+            indicator: String(ioc.indicator ?? ""),
+            source: String(ioc.source ?? "feed"),
+            country: String(ioc.country_code ?? "??"),
+            risk: Number(ioc.risk_score ?? Math.floor(Math.random() * 40 + 60)),
+          }));
           // Shuffle for visual variety
           replayPool.sort(() => Math.random() - 0.5);
           demoTimer = setInterval(() => {
@@ -212,18 +194,8 @@ export function Hero() {
           }, 1200);
         })
         .catch(() => {
-          // Network error: fall back to demo data
-          setWsStatus("demo");
-          demoTimer = setInterval(() => {
-            const src = DEMO_INDICATORS[consoleIdx % DEMO_INDICATORS.length];
-            addEntry({
-              id: ++counterRef.current, ts: new Date().toTimeString().slice(0, 8),
-              type: src.type, indicator: src.indicator,
-              source: ["urlhaus","sslbl","threatfox","phishtank"][Math.floor(Math.random()*4)],
-              country: src.country, risk: src.risk,
-            });
-            setConsoleIdx(i => i + 1);
-          }, 1400);
+          // Network error — show an honest idle state, never fabricate rows.
+          setWsStatus("idle");
         });
     };
 
@@ -263,8 +235,8 @@ export function Hero() {
 
 
 
-  const statusDot   = wsStatus === "live" ? "bg-green-400" : wsStatus === "replay" ? "bg-yellow-400" : "bg-blue-400";
-  const statusLabel = wsStatus === "live" ? "LIVE"         : wsStatus === "replay" ? "REPLAY"         : "DEMO";
+  const statusDot   = wsStatus === "live" ? "bg-green-400" : wsStatus === "replay" ? "bg-yellow-400" : "bg-white/30";
+  const statusLabel = wsStatus === "live" ? "LIVE"         : wsStatus === "replay" ? "REPLAY"         : "AWAITING";
 
   return (
     <section className="relative bg-ebony-950 overflow-hidden">
@@ -444,7 +416,7 @@ export function Hero() {
                 {console_.length === 0 && (
                   <div className="flex items-center gap-2 text-white/25 p-2">
                     <span className="animate-pulse">▋</span>
-                    <span>Connecting to threat stream…</span>
+                    <span>{wsStatus === "idle" ? "Awaiting live threats…" : "Connecting to threat stream…"}</span>
                   </div>
                 )}
                 {console_.map(e => (

@@ -111,10 +111,6 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = Field(default="")
     STRIPE_PRICE_PROFESSIONAL: str = Field(default="price_professional_monthly")
 
-    # Paystack
-    PAYSTACK_SECRET_KEY: str = Field(default="")
-    PAYSTACK_WEBHOOK_SECRET: str = Field(default="")
-
     # Rate Limits (per tier)
     RATE_LIMIT_FREE: int = 100  # per day
     RATE_LIMIT_PROFESSIONAL: int = 10000  # per day
@@ -128,8 +124,6 @@ class Settings(BaseSettings):
 
     # Feed Update Intervals (seconds)
     FEED_UPDATE_INTERVAL_URLHAUS: int = 300  # 5 minutes
-    FEED_UPDATE_INTERVAL_PHISHTANK: int = 3600  # 1 hour
-    FEED_UPDATE_INTERVAL_OTX: int = 900  # 15 minutes
     FEED_UPDATE_INTERVAL_THREATFOX: int = 600  # 10 minutes
 
     # Analysis Thresholds

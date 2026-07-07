@@ -721,40 +721,6 @@ async def _ingest_osint():
         return {"error": str(e), "duration_seconds": time.monotonic() - start}
 
 
-# === BATCH IMPORTS ===
-
-@celery_app.task(name="app.worker.import_all_feeds")
-def import_all_feeds():
-    """Import from all configured feeds."""
-    results = {}
-    
-    # High priority feeds
-    results["urlhaus"] = import_urlhaus()
-    results["threatfox"] = import_threatfox()
-    results["feodotracker"] = import_feodotracker()
-    results["sslbl"] = import_sslbl()
-    
-    # Medium priority
-    results["openphish"] = import_openphish()
-    results["phishtank"] = import_phishtank()
-    
-    # API-based (may require keys)
-    try:
-        results["abuseipdb"] = import_abuseipdb()
-    except Exception as e:
-        results["abuseipdb"] = {"error": str(e)}
-    
-    try:
-        results["alienvault_otx"] = import_alienvault_otx()
-    except Exception as e:
-        results["alienvault_otx"] = {"error": str(e)}
-    
-    # Certificate monitoring
-    results["crtsh"] = import_crtsh()
-    
-    return results
-
-
 # === MAINTENANCE TASKS ===
 
 @celery_app.task(name="app.worker.aggregate_region_scores")
@@ -861,17 +827,6 @@ def analyze_domain_task(domain: str):
     
     result = analyze_domain(domain)
     return result
-
-
-@celery_app.task(name="app.worker.enrich_indicator")
-def enrich_indicator(indicator: str, indicator_type: str):
-    """Enrich an indicator with additional data."""
-    # TODO: Implement enrichment from Shodan, VT, WHOIS, etc.
-    return {
-        "indicator": indicator,
-        "indicator_type": indicator_type,
-        "enrichment": {},
-    }
 
 
 @celery_app.task(name="app.worker.enrich_geoip_batch")

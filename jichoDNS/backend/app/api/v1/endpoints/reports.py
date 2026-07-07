@@ -56,7 +56,6 @@ class GenerateReportRequest(BaseModel):
     include_darkweb: bool = Field(default=True)
     include_credentials: bool = Field(default=True)
     custom_prompt: Optional[str] = Field(default=None)
-    output_format: str = Field(default="html")
 
 
 class ReportSummary(BaseModel):
@@ -424,10 +423,9 @@ async def view_report_html(
 @router.get("/{report_id}/download")
 async def download_report(
     report_id: str,
-    format: str = Query(default="html"),
     current_user: User = Depends(get_current_user),
 ):
-    """Download a report file."""
+    """Download a report file (always HTML)."""
     sample = _get_sample_if_exists(report_id)
     if sample:
         fname = f"{sample['title'].replace(' ', '_')}_{report_id[:12]}.html"

@@ -12,6 +12,8 @@ import random
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 CRED_INDEX = "credential_exposures"
@@ -423,15 +425,23 @@ async def ingest_credentials(es_client, credentials: List[Dict[str, Any]]) -> Di
 
 
 async def run_credential_ingestion(es_client) -> Dict[str, Any]:
-    """Full credential ingestion: breach seeds + crawl extraction."""
+    """Full credential ingestion: synthetic breach seeds (gated) + crawl extraction."""
     all_creds: List[Dict[str, Any]] = []
 
-    # 1. Generate from all breach datasets (100 per breach)
-    for breach in AFRICAN_BREACH_SEEDS:
-        creds = generate_breach_credentials(breach, count=100)
-        all_creds.extend(creds)
+    # 1. Generate from the synthetic breach datasets (100 per breach).
+    #    This is fabricated seed data — only ingested when ALLOW_MOCK_DATA is
+    #    explicitly enabled, so production does not keep re-seeding fake breach
+    #    records on every scheduled (4h) run.
+    if settings.ALLOW_MOCK_DATA:
+        for breach in AFRICAN_BREACH_SEEDS:
+            creds = generate_breach_credentials(breach, count=100)
+            all_creds.extend(creds)
+    else:
+        logger.info("synthetic seed ingestion disabled (ALLOW_MOCK_DATA=false)")
 
-    # 2. Extract from dark web crawls
+    breach_credentials = len(all_creds)
+
+    # 2. Extract from dark web crawls (real crawl data — always runs)
     crawl_creds = await extract_creds_from_crawls(es_client)
     all_creds.extend(crawl_creds)
 
@@ -439,8 +449,9 @@ async def run_credential_ingestion(es_client) -> Dict[str, Any]:
     result = await ingest_credentials(es_client, all_creds)
 
     return {
-        "breach_count": len(AFRICAN_BREACH_SEEDS),
-        "breach_credentials": len(all_creds) - len(crawl_creds),
+        "synthetic_seeds_enabled": settings.ALLOW_MOCK_DATA,
+        "breach_count": len(AFRICAN_BREACH_SEEDS) if settings.ALLOW_MOCK_DATA else 0,
+        "breach_credentials": breach_credentials,
         "crawl_credentials": len(crawl_creds),
         "total_generated": len(all_creds),
         **result,

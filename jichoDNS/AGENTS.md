@@ -6,12 +6,12 @@ This document provides guidance for AI coding assistants and developers working 
 
 JichoDNS is an Africa-focused DNS threat visibility platform. It provides:
 
-- **Interactive Threat Map**: Choropleth visualization of C2/Exfil/Phishing risk by country and ASN
-- **DNS Threat Intelligence**: Aggregation from 15+ free threat feeds
-- **RIPE Atlas Integration**: Active DNS measurements from African vantage points
-- **ML Classification**: Vertex AI-powered threat detection
+- **Interactive Threat Map**: Live attack-arc replay of malicious DNS indicators (per-country/ASN choropleth risk layer is *planned*, not yet implemented)
+- **DNS Threat Intelligence**: Aggregation from ~12 free threat-feed importers (URLhaus, ThreatFox, Feodo Tracker, SSL Blacklist +JA3, MalwareBazaar, OpenPhish, PhishTank, AbuseIPDB, AlienVault OTX, crt.sh, DNSTwist)
+- **RIPE Atlas Integration** *(planned)*: Active DNS measurements are not yet built — `/api/v1/atlas/*` returns HTTP 501
+- **Threat Reporting**: Deterministic HTML reports from Elasticsearch aggregations (no ML/LLM; Vertex AI classification is *planned*)
 - **Typosquatting Detection**: African brand monitoring (M-Pesa, Safaricom, banks)
-- **Paid API Access**: REST API for SOC/SIEM integration
+- **API Access (JWT)**: REST API for SOC/SIEM integration (paid API-key issuance/metering is *planned*; auth is JWT-only)
 
 ## Repository Structure
 
@@ -70,7 +70,7 @@ jichoDNS/
 | Visualization | Kibana | 8.x |
 | Task Queue | Celery + Redis | Latest |
 | Maps | Mapbox GL JS | Latest |
-| ML | Vertex AI | - |
+| ML | Planned — not yet implemented | - |
 
 ## Development Environment
 
@@ -178,10 +178,10 @@ Priority feeds for implementation:
 ### PostgreSQL Tables
 
 - `indicators` - IOCs (domains, IPs, URLs)
-- `indicator_scores` - ML-generated risk scores
-- `region_scores` - Aggregated country/ASN scores
+- `indicator_scores` - Risk scores (deterministic feed/heuristic labels today; ML is planned)
+- `region_scores` - Aggregated country/ASN scores (choropleth reader not yet wired — see backlog #3)
 - `users` - User accounts
-- `api_keys` - API key management
+- `api_keys` - API-key model (issuance/verification not yet wired; auth is JWT-only today)
 
 ### ClickHouse Tables
 
@@ -222,11 +222,16 @@ pytest tests/test_dns_analysis.py -v
 3. Register in router
 4. Add tests
 
-### Adding ML Classification
+### Adding ML Classification *(roadmap — not yet implemented)*
+
+There is currently **no ML classifier**. Risk labels come from upstream feed
+attribution plus the entropy/DGA heuristics in `services/dns_analysis.py`, and
+reports are deterministic Elasticsearch-aggregation HTML templates
+(`services/report_generator.py`) with no LLM. To build real inference later:
 
 1. Define feature extraction in `services/dns_analysis.py`
-2. Create Vertex AI model endpoint
-3. Implement scoring pipeline
+2. Stand up a model endpoint (e.g. Vertex AI) or an in-process classifier
+3. Implement the scoring pipeline
 4. Store results in `indicator_scores`
 
 ## Environment Variables

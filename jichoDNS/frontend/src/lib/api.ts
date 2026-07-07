@@ -124,41 +124,6 @@ async function fetchAPI<T>(
 export { API_BASE_URL };
 
 export const api = {
-  // Health (public)
-  getHealth: () => fetchAPI<HealthResponse>("/health"),
-
-  // Indicators
-  getIndicators: (params?: {
-    page?: number;
-    page_size?: number;
-    threat_type?: string;
-    indicator_type?: string;
-  }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.set("page", params.page.toString());
-    if (params?.page_size) searchParams.set("page_size", params.page_size.toString());
-    if (params?.threat_type) searchParams.set("threat_type", params.threat_type);
-    if (params?.indicator_type) searchParams.set("indicator_type", params.indicator_type);
-
-    const query = searchParams.toString();
-    return fetchAPI<IndicatorListResponse>(`/api/v1/indicators${query ? `?${query}` : ""}`);
-  },
-
-  getStats: () => fetchAPI<IndicatorStats>("/api/v1/indicators/stats"),
-
-  // Regions
-  getCountryScores: (minRisk = 0) =>
-    fetchAPI<RegionListResponse>(`/api/v1/regions/countries?min_risk=${minRisk}`),
-
-  getAsnScores: (country?: string, minRisk = 0) => {
-    const params = new URLSearchParams({ min_risk: minRisk.toString() });
-    if (country) params.set("country", country);
-    return fetchAPI<RegionListResponse>(`/api/v1/regions/asns?${params}`);
-  },
-
-  getMapData: () =>
-    fetchAPI<GeoJSON.FeatureCollection>("/api/v1/regions/map"),
-
   // Analysis
   analyzeDomain: (domain: string) =>
     fetchAPI<DomainAnalysis>("/api/v1/analysis/domain", {

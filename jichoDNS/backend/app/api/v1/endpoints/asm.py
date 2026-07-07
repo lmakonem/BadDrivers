@@ -994,6 +994,7 @@ async def list_client_findings(
     severity: Optional[str] = Query(None),
     category: Optional[str] = Query(None, description="cve|ssl|http_header|port|ti_hit|email_security|dns_takeover|misconfiguration"),
     status: str = Query("open", description="open|accepted|remediated"),
+    search: Optional[str] = Query(None, description="Full-text search across finding title, description, and asset value"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -1018,6 +1019,7 @@ async def list_client_findings(
             severity=severity,
             category=category,
             status=status,
+            search=search,
             limit=limit,
             offset=offset,
         )

@@ -8,6 +8,8 @@ JichoDNS aggregates data from multiple threat intelligence sources to provide co
 
 ## Your Account-Based Sources
 
+> **Status — not yet integrated.** The three sources in this section (RIPE Atlas, Shodan, Vertex AI) are documented as *targets*. As of the current build none has a live importer or client: `/api/v1/atlas/*` returns HTTP 501, there is no Shodan enrichment path, and there is no ML/Vertex classifier (reports are deterministic Elasticsearch-aggregation templates). See [REMEDIATION_BACKLOG.md](REMEDIATION_BACKLOG.md).
+
 ### RIPE Atlas
 
 | Attribute | Details |
@@ -148,13 +150,15 @@ https://urlhaus.abuse.ch/downloads/csv_recent/
 | **Data Type** | IOCs with malware family attribution |
 | **Format** | JSON |
 | **Update Frequency** | Real-time |
-| **Rate Limits** | Fair use, API key required |
+| **Rate Limits** | Fair use — **no API key required** (keyless endpoint) |
 | **Priority** | Tier 1 - Essential |
 
 **API Endpoints:**
 ```
 POST https://threatfox-api.abuse.ch/api/v1/
 ```
+
+> The `ThreatFoxImporter` calls this endpoint keyless (only a `User-Agent` header); there is no `THREATFOX_API_KEY`.
 
 **Query types:**
 - `get_iocs` - Recent IOCs
@@ -172,7 +176,7 @@ POST https://threatfox-api.abuse.ch/api/v1/
 
 **Configuration:**
 ```python
-THREATFOX_API_KEY = "your_api_key"
+# No API key — keyless public endpoint
 THREATFOX_POLL_INTERVAL = 300  # 5 minutes
 ```
 
@@ -285,6 +289,8 @@ OTX_API_KEY = "your_api_key"
 ---
 
 ### VirusTotal
+
+> **Status — not integrated.** There is no VirusTotal importer; it is a reference/enrichment target only and does **not** feed the IOC store today.
 
 | Attribute | Details |
 |-----------|---------|
@@ -654,14 +660,24 @@ All indicators are normalized to a common schema:
 
 ## Feed Update Schedule
 
+Frequencies below reflect the live Celery beat schedule (`backend/app/worker.py`).
+Only feeds with a running importer are listed — VirusTotal, Shodan, and RIPE Atlas
+have no importer and are therefore not on the schedule.
+
 | Feed | Frequency | Method |
 |------|-----------|--------|
 | URLhaus | Every 5 min | Bulk download |
-| ThreatFox | Every 5 min | API poll |
-| Feodo Tracker | Every 15 min | Bulk download |
+| ThreatFox | Every 5 min | API poll (keyless) |
+| Feodo Tracker | Every 5 min | Bulk download |
+| SSL Blacklist | Every 15 min | CSV download |
+| SSL Blacklist (JA3) | Every 30 min | CSV download |
+| MalwareBazaar | Every 15 min | API poll |
+| OpenPhish | Every 30 min | Bulk download |
+| crt.sh | Every 30 min | API query |
 | PhishTank | Hourly | API download |
-| AlienVault OTX | Every 10 min | API subscription |
-| VirusTotal | On-demand | API (cached) |
-| AbuseIPDB | On-demand | API (cached) |
-| RIPE Atlas | Continuous | Measurement results |
-| Shodan | On-demand | API (cached) |
+| AbuseIPDB | Hourly | API (cached) |
+| AlienVault OTX | Hourly | API subscription |
+| DNSTwist | Every 6 hours | Local generation |
+
+**Feed health:** live importer status/freshness is exposed at
+`GET /api/v1/indicators/health/feeds` (JWT-protected).

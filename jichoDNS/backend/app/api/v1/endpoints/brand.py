@@ -150,7 +150,7 @@ async def delete_brand_monitor(
 
         # Delete from ES
         await brand_service.es_client.delete(
-            index=brand_service.monitor_index, id=brand_id, refresh="wait_for",
+            index=brand_service.brand_index, id=brand_id, refresh="wait_for",
         )
         return {"success": True, "message": f"Brand monitor {brand_id} deleted"}
     except HTTPException:

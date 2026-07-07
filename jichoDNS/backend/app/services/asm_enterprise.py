@@ -644,6 +644,7 @@ class ASMEnterpriseService:
         category: Optional[str] = None,
         status: str = "open",
         asset_value: Optional[str] = None,
+        search: Optional[str] = None,
         limit: int = 200,
         offset: int = 0,
         sort_by: str = "severity",
@@ -653,6 +654,7 @@ class ASMEnterpriseService:
             return [], 0
 
         filters: List[Dict] = []
+        musts: List[Dict] = []
         if severity:
             filters.append({"term": {"severity": severity}})
         if category:
@@ -661,8 +663,19 @@ class ASMEnterpriseService:
             filters.append({"term": {"status": status}})
         if asset_value:
             filters.append({"term": {"asset_value": asset_value}})
+        if search:
+            musts.append({"multi_match": {
+                "query": search,
+                "fields": ["title^3", "description^2", "asset_value"],
+                "type": "best_fields",
+            }})
 
-        query = {"bool": {"filter": filters}} if filters else {"match_all": {}}
+        if musts:
+            query: Dict = {"bool": {"must": musts, "filter": filters}}
+        elif filters:
+            query = {"bool": {"filter": filters}}
+        else:
+            query = {"match_all": {}}
 
         # Severity sort: custom order
         sev_order_script = {

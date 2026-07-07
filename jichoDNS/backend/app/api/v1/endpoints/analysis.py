@@ -1,6 +1,6 @@
 """Analysis endpoints - DNS analysis and DGA detection."""
 
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -49,20 +49,3 @@ async def analyze_domains_bulk(request: BulkAnalysisRequest):
     from app.services.dns_analysis import analyze_domain as do_analysis
     results = [do_analysis(d) for d in request.domains[:100]]  # Limit to 100
     return {"results": results}
-
-
-@router.post("/typosquat")
-async def check_typosquat(domain: str, target_brand: Optional[str] = None):
-    """
-    Check if a domain is a potential typosquat of African brands.
-    
-    Compares against known African brands (M-Pesa, Safaricom, MTN, etc.)
-    """
-    # TODO: Implement typosquat detection
-    return {
-        "domain": domain,
-        "is_typosquat": False,
-        "target_brand": None,
-        "similarity_score": 0.0,
-        "fuzzer_type": None,
-    }

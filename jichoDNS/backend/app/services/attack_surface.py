@@ -1916,11 +1916,3 @@ class AttackSurfaceManager:
             logger.error(f"Failed to get summary: {e}")
 
         return summary
-
-
-# =============================================================================
-# Singleton Instance
-# =============================================================================
-
-# Create a default instance (ES client should be injected in production)
-asm_service = AttackSurfaceManager()

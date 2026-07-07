@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/fetch";
 
 // Icons as SVG components
 const DashboardIcon = () => (
@@ -118,40 +119,26 @@ interface Notification {
   read: boolean;
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    title: "Critical Alert",
-    message: "New C2 domain detected targeting M-Pesa",
-    time: "2 min ago",
-    type: "critical",
-    read: false,
-  },
-  {
-    id: "2",
-    title: "Dark Web Alert",
-    message: "Credentials found on dark web marketplace",
-    time: "15 min ago",
-    type: "high",
-    read: false,
-  },
-  {
-    id: "3",
-    title: "Brand Alert",
-    message: "New typosquat domain: safar1com.com",
-    time: "1 hour ago",
-    type: "medium",
-    read: true,
-  },
-  {
-    id: "4",
-    title: "Report Ready",
-    message: "Weekly threat report is ready for download",
-    time: "3 hours ago",
-    type: "info",
-    read: true,
-  },
-];
+// Map alert severity → notification accent type.
+function severityToType(sev: string): Notification["type"] {
+  if (sev === "critical") return "critical";
+  if (sev === "high") return "high";
+  if (sev === "medium") return "medium";
+  return "info";
+}
+
+// Relative time label; returns "" for missing/invalid timestamps.
+function timeAgo(ts: string): string {
+  if (!ts) return "";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "";
+  const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 1) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 export default function PortalLayout({
   children,
@@ -164,8 +151,41 @@ export default function PortalLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const unreadCount = mockNotifications.filter((n) => !n.read).length;
+  // Populate the header bell from the real alerts feed — never fabricate.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await apiFetch(`/api/v1/alerts/feed?limit=10`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = (data.items || []) as Record<string, unknown>[];
+        if (cancelled) return;
+        setNotifications(
+          items.map((a, i) => ({
+            id: String(a.id ?? `n-${i}`),
+            title: String(a.title || "Alert"),
+            message: String(a.description || ""),
+            time: timeAgo(String(a.timestamp || "")),
+            type: severityToType(String(a.severity || "")),
+            read: String(a.status || "new") !== "new",
+          })),
+        );
+      } catch {
+        // On failure, leave the list empty and show the honest empty state.
+      }
+    };
+    load();
+    const interval = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Derive initials and display name from the authenticated user
   const displayName = user?.name || user?.email?.split("@")[0] || "User";
@@ -386,33 +406,42 @@ export default function PortalLayout({
                         </div>
                       </div>
                       <div className="max-h-96 overflow-y-auto">
-                        {mockNotifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`p-4 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer ${
-                              !notification.read ? "bg-white/[0.02]" : ""
-                            }`}
-                          >
-                            <div className="flex gap-3">
-                              <div
-                                className={`w-2 h-2 rounded-full mt-2 ${getTypeColor(
-                                  notification.type
-                                )}`}
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-white">
-                                  {notification.title}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {notification.message}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-2">
-                                  {notification.time}
-                                </p>
+                        {notifications.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <p className="text-sm text-gray-400">No new notifications</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              You&apos;re all caught up.
+                            </p>
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <div
+                              key={notification.id}
+                              className={`p-4 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer ${
+                                !notification.read ? "bg-white/[0.02]" : ""
+                              }`}
+                            >
+                              <div className="flex gap-3">
+                                <div
+                                  className={`w-2 h-2 rounded-full mt-2 ${getTypeColor(
+                                    notification.type
+                                  )}`}
+                                />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-white">
+                                    {notification.title}
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {notification.message}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-2">
+                                    {notification.time}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                       <div className="p-3 border-t border-white/10">
                         <Link

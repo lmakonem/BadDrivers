@@ -118,10 +118,10 @@ export async function register(body: {
     throw new Error(data.detail || "Registration failed.");
   }
 
-  const user: AuthUser = await res.json();
-
-  // Auto-login after registration
-  await login(body.email, body.password);
+  // The register endpoint returns a generic { message } (HTTP 202) to avoid
+  // account enumeration — NOT a user object. Complete sign-in and return the
+  // AuthUser that login() resolves (login() also caches it).
+  const user = await login(body.email, body.password);
   return user;
 }
 

@@ -48,7 +48,7 @@ Export: None
 
 ### Professional Tier
 
-**Price:** $49/month (or $490/year - 2 months free)
+**Price:** $299/month (or $2,990/year - 2 months free)
 
 **Access:**
 - Everything in Registered tier
@@ -76,7 +76,7 @@ Concurrent requests: 10
 
 ### Enterprise Tier
 
-**Price:** $299/month (or $2,990/year)
+**Price:** Custom — contact sales
 
 **Access:**
 - Everything in Professional tier
@@ -146,7 +146,9 @@ Concurrent requests: 50
 - Invoice generation
 - Tax compliance
 
-### Secondary: Paystack
+### Secondary: Paystack *(planned — not implemented)*
+> Only config placeholders (`PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`) exist; there is **no Paystack code path**. Stripe is the only live processor today (`backend/app/api/v1/endpoints/billing.py`).
+
 - African-focused payments
 - Mobile money (M-Pesa, MTN MoMo)
 - Local bank transfers
@@ -168,7 +170,9 @@ User selects tier
 
 ---
 
-## API Key Management
+## API Key Management *(planned — not implemented)*
+
+> This section describes the **intended** API-key model. Today authentication is **JWT-only** (`backend/app/api/deps.py` accepts only Bearer JWTs). `security.py` has `generate_api_key()`/`hash_api_key()` helpers and an `api_keys` table exists, but there is no key-verification dependency and no usage metering wired into the request path. The scopes, key formats, and metering below are a design target, not shipped behaviour.
 
 ### Key Format
 ```
@@ -228,6 +232,8 @@ def track_usage(api_key, endpoint, credits=1):
 ---
 
 ## Revenue Projections
+
+> **Note:** the figures below are illustrative and still reflect legacy pricing math (Professional at $49, Enterprise at a fixed $299). Shipped pricing is Professional **$299/mo** and Enterprise **Custom**, so these projections need re-modelling before use.
 
 ### Year 1 (Conservative)
 
@@ -326,7 +332,7 @@ def track_usage(api_key, endpoint, credits=1):
 
 | Platform | Similar Tier | Price |
 |----------|--------------|-------|
-| JichoDNS Professional | $49/mo | - |
+| JichoDNS Professional | $299/mo | - |
 | Recorded Future | ~$10K+/year | Enterprise only |
 | Anomali | ~$5K+/year | Enterprise only |
 | DomainTools | ~$99+/mo | Iris Investigate |

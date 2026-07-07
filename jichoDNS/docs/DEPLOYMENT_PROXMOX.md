@@ -90,7 +90,7 @@ To redirect to a different origin, edit `/etc/cloudflared/config.yml` (only the 
 2. **Frontend dev volumes (`./frontend:/app`, `/app/node_modules`, `/app/.next`) shadowed the built image** — Next.js standalone output was unreachable, `node server.js` errored "module not found". Removed from compose on the VM. Same caveat as above for re-rsyncs.
 3. **`backend/migrations/init.sql` and `clickhouse_init.sql` don't exist** in the repo — Docker auto-creates them as empty dirs. ClickHouse exits 74 on first start (`Is a directory`). On subsequent starts the data volume is already initialized so init is skipped — but a fresh `docker compose down -v` would re-trigger. Workaround: create real (or empty) files.
 4. **No Elasticsearch service in repo compose** — backend defaults to `localhost:9200` which fails inside a container. Patched on the VM: added a `jichodns-elasticsearch` service (image `elasticsearch:8.13.4`, single-node, security off, 1 GiB heap), `es_data` volume, and set `ELASTICSEARCH_URL=http://elasticsearch:9200` on api/worker/scheduler.
-5. **`es_service.get_region_scores()` was called by `/regions/map` and `/regions/countries` but never defined** — endpoints silently returned empty FeatureCollection. Added wrapper in `backend/app/services/elasticsearch.py` that aggregates `get_country_threat_stats()` results into the expected `{region_id, region_name, overall_risk, indicator_count}` shape, with an `ISO_TO_NAME` map biased toward African countries.
+5. **`es_service.get_region_scores()` is called by the public `/regions/map` and `/regions/countries` endpoints but is *never defined*** (only `get_country_threat_stats()` exists in `backend/app/services/elasticsearch.py`). The calls in `public.py` are wrapped in `try/except`, so they swallow the `AttributeError` and return an **empty** FeatureCollection / item list — the choropleth is not populated. This was **not** fixed on the VM; building the region-score reader is deferred (see [REMEDIATION_BACKLOG.md](REMEDIATION_BACKLOG.md#L12) item 3).
 6. **Terms aggregations on `country_code` and `threat_type` returned zero buckets** — those fields are indexed as `text` (with auto `.keyword` multi-field). ES 8 requires `.keyword` for terms aggs on text. Patched `get_country_threat_stats()` to use `country_code.keyword` / `threat_type.keyword`.
 7. **`NEXT_PUBLIC_API_URL=http://localhost:8000`** in compose meant the frontend told user browsers to fetch from *their own* localhost. Changed to empty string so the frontend issues relative `/api/v1/*` calls and Cloudflare path-routes them to the backend.
 8. **Cloudflare tunnel ingress only routed to frontend (:3000).** API calls returned the Next 404 page. Updated `/etc/cloudflared/config.yml` to path-route: `^/api/.*` → `http://localhost:8000`, else → `http://localhost:3000`.
@@ -103,9 +103,14 @@ Default admin (bootstrap 2026-05-22):
 - Email: `hmukanda@gmail.com`
 - (Password is stored out-of-band; rotate with `docker exec jichodns-api python create_admin.py <email> <new-password>`.)
 
-Endpoints intentionally **anonymous** (landing page / public threat map): `/api/v1/regions/*`, `/api/v1/indicators/live/feed`, `/api/v1/indicators/stats`, `/api/v1/auth/*`, `/api/v1/forms/*`, `/api/v1/atlas/*`, `/api/v1/analysis/*`, `/api/v1/brand/{typosquats,check,stats,lookalikes,african-brands,alerts,report}`, `/api/v1/darkweb/{leaks,mentions,breaches,stats,paste-sites,alerts}`, `/api/v1/misp/*`, `/api/v1/reports/{types,samples*}`.
+Auth is applied **at the router level** in `backend/app/api/v1/__init__.py` — only the `auth`, `forms`, `public`, `billing`, and `websocket` routers are mounted without `dependencies=[Depends(get_current_user)]`. That makes the **only** anonymous surface:
 
-Endpoints **protected** (`Depends(get_current_user)`): `/api/v1/brand/{monitor,monitors,monitors/{id},alerts/{id}/acknowledge,takedown/{domain}}`, `/api/v1/darkweb/{monitor,monitors,monitor/{id},alerts/{id}/read,exposure/{email},scan-pastes}`, `/api/v1/reports` (list/generate/get/html/download/delete), plus all `/api/v1/asm/*`, `/api/v1/intel/*`, `/api/v1/credentials/*`, `/api/v1/billing/{checkout,portal}`.
+- `/api/v1/auth/*`, `/api/v1/forms/*`
+- the landing-page/public-map endpoints served by `public.router`: `/api/v1/indicators/stats`, `/api/v1/indicators/live/feed`, `/api/v1/regions/countries`, `/api/v1/regions/map`
+- `/api/v1/billing/webhook` (Stripe webhook; `checkout`/`portal` verify auth in-endpoint)
+- the WebSocket route (live map)
+
+**Everything else is JWT-protected** (`dependencies=[Depends(get_current_user)]` on the router): all of `/api/v1/indicators/*`, `/api/v1/regions/*` (beyond the two public paths above), `/api/v1/analysis/*`, `/api/v1/atlas/*` (which *additionally* return HTTP 501 — not implemented), `/api/v1/darkweb/*`, `/api/v1/reports/*`, `/api/v1/asm/*`, `/api/v1/brand/*`, `/api/v1/intel/*`, `/api/v1/search/*`, `/api/v1/alerts/*`, `/api/v1/credentials/*`, `/api/v1/darkweb-intel/*`, and `/api/v1/misp/*`. (Earlier drafts of this runbook wrongly listed `/analysis`, `/darkweb/*`, `/reports/*`, `/brand/*`, `/atlas/*`, and `/misp/*` as anonymous — they are not.)
 
 Endpoints **admin-only** (`Depends(get_current_admin)`): `/api/v1/admin/*` (stats, users, submissions).
 
@@ -128,8 +133,8 @@ Add a key by editing `/opt/jichodns/.env` on the VM, then `docker compose restar
 
 These were patched on the VM only. Mirror them in `~/repos/jichoDNS` and PR:
 - `docker-compose.yml`: change `frontend.build.target` from `development` to `runner`; drop frontend dev bind-mounts; add `elasticsearch` service + `es_data` volume + `ELASTICSEARCH_URL` env on api/worker/scheduler; change `NEXT_PUBLIC_API_URL` to empty string; add `--schedule=/tmp/celerybeat-schedule` to scheduler command.
-- `backend/app/services/elasticsearch.py`: `.keyword` field fix for terms aggs; add `get_region_scores()` method.
-- `backend/app/api/v1/endpoints/{brand,darkweb,reports}.py`: `dependencies=[Depends(get_current_user)]` on the user-scoped routes (see Authentication section above for the list).
+- `backend/app/services/elasticsearch.py`: `.keyword` field fix for terms aggs (done). NOTE: `get_region_scores()` is still **not implemented** — the public region endpoints call it and fall back to empty; building it is a feature (backlog #3), not a mirror.
+- Auth for the user-scoped routers (`brand`, `darkweb`, `reports`, `asm`, `intel`, etc.) is now enforced **at the router-mount level** in `backend/app/api/v1/__init__.py` (`dependencies=[Depends(get_current_user)]`) rather than per-endpoint — see the Authentication section above for the anonymous/protected split.
 - Add `backend/migrations/{init.sql,clickhouse_init.sql}` (can be empty files).
 - Bundle/script-fetch a GeoLite2-City.mmdb (or document the db-ip fallback).
 

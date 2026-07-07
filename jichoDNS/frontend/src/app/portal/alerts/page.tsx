@@ -12,7 +12,20 @@ interface Alert {
   id: string;
   title: string;
   description: string;
-  type: "c2" | "phishing" | "darkweb" | "asm" | "brand" | "malware" | "dga";
+  type:
+    | "c2"
+    | "phishing"
+    | "darkweb"
+    | "asm"
+    | "brand"
+    | "malware"
+    | "dga"
+    | "credential_leak"
+    | "darkweb_mention"
+    | "botnet"
+    | "exfiltration"
+    | "spam"
+    | "unknown";
   severity: "critical" | "high" | "medium" | "low";
   status: "new" | "acknowledged" | "investigating" | "resolved";
   source: string;
@@ -164,13 +177,19 @@ const mockAlerts: Alert[] = [
 ];
 
 const typeLabels: Record<Alert["type"], string> = {
-  c2: "C2/Botnet",
+  c2: "C2",
   phishing: "Phishing",
   darkweb: "Dark Web",
   asm: "Attack Surface",
   brand: "Brand",
   malware: "Malware",
   dga: "DGA",
+  credential_leak: "Credential Leak",
+  darkweb_mention: "Dark Web Mention",
+  botnet: "Botnet",
+  exfiltration: "Exfiltration",
+  spam: "Spam",
+  unknown: "Unknown",
 };
 
 const typeColors: Record<Alert["type"], string> = {
@@ -181,7 +200,22 @@ const typeColors: Record<Alert["type"], string> = {
   brand: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   malware: "bg-pink-500/20 text-pink-400 border-pink-500/30",
   dga: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+  credential_leak: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+  darkweb_mention: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  botnet: "bg-red-500/20 text-red-400 border-red-500/30",
+  exfiltration: "bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30",
+  spam: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  unknown: "bg-slate-500/20 text-slate-400 border-slate-500/30",
 };
+
+// Fallbacks for any threat_type the backend emits that isn't mapped above,
+// so a badge always renders (never blank).
+const FALLBACK_TYPE_COLOR = "bg-slate-500/20 text-slate-400 border-slate-500/30";
+const humanizeType = (t: string) =>
+  t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Severity ordering for the alerts list (critical → low).
+const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const severityColors: Record<Alert["severity"], string> = {
   critical: "bg-red-500",
@@ -273,7 +307,7 @@ export default function AlertsPage() {
       const items = (data.items || []) as Record<string, unknown>[];
       if (items.length > 0) {
         setIsSample(false);
-        setAlerts(items.map((a, i) => ({
+        const mapped: Alert[] = items.map((a, i) => ({
           id: String(a.id ?? `alert-${i}`),
           title: String(a.title || ""),
           description: String(a.description || ""),
@@ -283,7 +317,15 @@ export default function AlertsPage() {
           source: String(a.source || ""),
           indicator: a.indicator ? String(a.indicator) : undefined,
           timestamp: String(a.timestamp || new Date().toISOString()),
-        })));
+        }));
+        // Order critical → low, then NEWEST first within each severity band.
+        // (The backend feed sorts intra-severity oldest-first; reverse it here.)
+        mapped.sort((a, b) => {
+          const s = (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4);
+          if (s !== 0) return s;
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
+        setAlerts(mapped);
       } else {
         // No real alerts. Show sample data ONLY behind the explicit flag,
         // otherwise show a genuine empty state (never fabricate intel).
@@ -614,8 +656,8 @@ export default function AlertsPage() {
                         className="flex-1 min-w-0 text-left cursor-pointer rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
                       >
                         <div className="flex items-center flex-wrap gap-2 mb-1">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium border ${typeColors[alert.type]}`}>
-                            {typeLabels[alert.type]}
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium border ${typeColors[alert.type] ?? FALLBACK_TYPE_COLOR}`}>
+                            {typeLabels[alert.type] ?? humanizeType(alert.type)}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-xs ${statusColors[alert.status]}`}>
                             {alert.status.replace("_", " ")}
@@ -701,8 +743,8 @@ export default function AlertsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${severityColors[selectedAlert.severity]}`} />
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium border ${typeColors[selectedAlert.type]}`}>
-                    {typeLabels[selectedAlert.type]}
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium border ${typeColors[selectedAlert.type] ?? FALLBACK_TYPE_COLOR}`}>
+                    {typeLabels[selectedAlert.type] ?? humanizeType(selectedAlert.type)}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-xs ${statusColors[selectedAlert.status]}`}>
                     {selectedAlert.status.replace("_", " ")}

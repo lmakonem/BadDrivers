@@ -5,15 +5,13 @@ Provides comprehensive brand protection capabilities for African brands includin
 - Typosquatting detection using dnstwist algorithms
 - Brand abuse monitoring
 - Phishing domain similarity checking
-- Social media impersonation detection (mock)
-- Fake mobile app detection (mock)
 - Lookalike domain discovery
 """
 
 import logging
 import asyncio
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Set
 from enum import Enum
 from dataclasses import dataclass
@@ -131,32 +129,6 @@ class PhishingDomain(BaseModel):
     techniques_detected: List[str] = Field(default_factory=list)
     status: str = Field(default="active", description="Domain status")
     checked_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class SocialMediaAccount(BaseModel):
-    """Social media account detection result (mock)."""
-    platform: str
-    handle: str
-    display_name: str
-    is_official: bool
-    is_suspicious: bool
-    follower_count: int
-    created_date: Optional[datetime]
-    similarity_score: float
-    url: str
-
-
-class MobileApp(BaseModel):
-    """Mobile app detection result (mock)."""
-    store: str  # google_play, apple_app_store
-    app_name: str
-    developer: str
-    package_id: str
-    is_official: bool
-    is_suspicious: bool
-    download_count: int
-    rating: float
-    url: str
 
 
 # =============================================================================
@@ -967,120 +939,6 @@ class BrandProtectionService:
         return diffs == 2 and sorted(s1) == sorted(s2)
     
     # -------------------------------------------------------------------------
-    # Social Media Scanning (Mock)
-    # -------------------------------------------------------------------------
-    
-    async def scan_social_media(self, brand: str) -> List[SocialMediaAccount]:
-        """
-        Detect fake social media accounts impersonating a brand.
-        
-        Note: This is a mock implementation. Real implementation would
-        use platform APIs (Twitter, Facebook, Instagram, etc.)
-        
-        Args:
-            brand: Brand name to search for
-            
-        Returns:
-            List of suspicious social media accounts
-        """
-        # Mock data for demonstration
-        mock_accounts = [
-            SocialMediaAccount(
-                platform="twitter",
-                handle=f"@{brand.lower()}_official",
-                display_name=f"{brand} Official",
-                is_official=False,
-                is_suspicious=True,
-                follower_count=234,
-                created_date=datetime.utcnow() - timedelta(days=30),
-                similarity_score=0.85,
-                url=f"https://twitter.com/{brand.lower()}_official",
-            ),
-            SocialMediaAccount(
-                platform="facebook",
-                handle=f"{brand.lower()}.support",
-                display_name=f"{brand} Customer Support",
-                is_official=False,
-                is_suspicious=True,
-                follower_count=567,
-                created_date=datetime.utcnow() - timedelta(days=15),
-                similarity_score=0.78,
-                url=f"https://facebook.com/{brand.lower()}.support",
-            ),
-            SocialMediaAccount(
-                platform="instagram",
-                handle=f"{brand.lower()}_africa",
-                display_name=f"{brand} Africa",
-                is_official=False,
-                is_suspicious=True,
-                follower_count=1234,
-                created_date=datetime.utcnow() - timedelta(days=60),
-                similarity_score=0.72,
-                url=f"https://instagram.com/{brand.lower()}_africa",
-            ),
-        ]
-        
-        logger.info(f"Social media scan for '{brand}' returned {len(mock_accounts)} suspicious accounts (mock)")
-        return mock_accounts
-    
-    # -------------------------------------------------------------------------
-    # App Store Scanning (Mock)
-    # -------------------------------------------------------------------------
-    
-    async def check_app_stores(self, brand: str) -> List[MobileApp]:
-        """
-        Check for fake mobile apps in app stores.
-        
-        Note: This is a mock implementation. Real implementation would
-        use Google Play and Apple App Store APIs.
-        
-        Args:
-            brand: Brand name to search for
-            
-        Returns:
-            List of suspicious mobile apps
-        """
-        # Mock data for demonstration
-        mock_apps = [
-            MobileApp(
-                store="google_play",
-                app_name=f"{brand} Mobile Banking",
-                developer="Quick Dev Team",
-                package_id=f"com.{brand.lower()}.fakebank",
-                is_official=False,
-                is_suspicious=True,
-                download_count=5000,
-                rating=4.2,
-                url=f"https://play.google.com/store/apps/details?id=com.{brand.lower()}.fakebank",
-            ),
-            MobileApp(
-                store="google_play",
-                app_name=f"{brand} Wallet",
-                developer="Money Apps Inc",
-                package_id=f"com.moneyapps.{brand.lower()}wallet",
-                is_official=False,
-                is_suspicious=True,
-                download_count=12000,
-                rating=3.8,
-                url=f"https://play.google.com/store/apps/details?id=com.moneyapps.{brand.lower()}wallet",
-            ),
-            MobileApp(
-                store="apple_app_store",
-                app_name=f"{brand} Pay",
-                developer="FinTech Solutions",
-                package_id=f"com.fintech.{brand.lower()}pay",
-                is_official=False,
-                is_suspicious=True,
-                download_count=2500,
-                rating=4.0,
-                url=f"https://apps.apple.com/app/id123456789",
-            ),
-        ]
-        
-        logger.info(f"App store scan for '{brand}' returned {len(mock_apps)} suspicious apps (mock)")
-        return mock_apps
-    
-    # -------------------------------------------------------------------------
     # Lookalike Domain Discovery
     # -------------------------------------------------------------------------
     
@@ -1143,45 +1001,6 @@ class BrandProtectionService:
     # -------------------------------------------------------------------------
     # Alert Management
     # -------------------------------------------------------------------------
-    
-    async def create_alert(
-        self,
-        brand_id: str,
-        alert_type: AlertType,
-        severity: AlertSeverity,
-        title: str,
-        details: Dict[str, Any],
-        domain: Optional[str] = None,
-    ) -> BrandAlert:
-        """Create a brand protection alert."""
-        await self.connect()
-        
-        alert_id = hashlib.sha256(
-            f"{brand_id}:{alert_type}:{domain or ''}:{datetime.utcnow().isoformat()}".encode()
-        ).hexdigest()[:16]
-        
-        alert = BrandAlert(
-            id=alert_id,
-            brand_id=brand_id,
-            alert_type=alert_type,
-            severity=severity,
-            title=title,
-            details=details,
-            domain=domain,
-        )
-        
-        if self.es_client:
-            try:
-                await self.es_client.index(
-                    index=self.alert_index,
-                    id=alert_id,
-                    body=alert.model_dump(mode='json'),
-                )
-                logger.info(f"Alert created: {title} ({alert_id})")
-            except Exception as e:
-                logger.error(f"Error storing alert: {e}")
-        
-        return alert
     
     async def get_alerts(
         self,
