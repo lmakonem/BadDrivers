@@ -7,6 +7,8 @@ views for Indicators.  Authentication requires an admin user account.
 
 from sqladmin import Admin, ModelView, action
 from sqladmin.authentication import AuthenticationBackend
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 from wtforms import SelectField, PasswordField
@@ -52,7 +54,38 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
-        return request.session.get("admin_user_id") is not None
+        """Re-validate the admin on EVERY request.
+
+        A present session cookie is NOT sufficient: the referenced user must
+        still exist, be active, and retain admin privileges. This mirrors
+        get_current_admin so that a demoted or deactivated admin loses panel
+        access immediately, rather than keeping full CRUD for the remaining
+        cookie lifetime.
+        """
+        admin_user_id = request.session.get("admin_user_id")
+        if not admin_user_id:
+            return False
+
+        from sqlalchemy import select
+
+        try:
+            user_id = int(admin_user_id)
+        except (TypeError, ValueError):
+            request.session.clear()
+            return False
+
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+
+        if user and user.is_active and user.is_admin:
+            return True
+
+        # Stale / revoked session — force re-login.
+        request.session.clear()
+        return False
 
 
 # ─── Model Views ──────────────────────────────────────────────────────────────
@@ -362,7 +395,20 @@ def setup_admin(app):
     from app.core.config import settings
 
     # Separate signing key for the admin session cookie; falls back to SECRET_KEY.
-    auth_backend = AdminAuth(secret_key=settings.SESSION_SECRET_KEY or settings.SECRET_KEY)
+    session_secret = settings.SESSION_SECRET_KEY or settings.SECRET_KEY
+    auth_backend = AdminAuth(secret_key=session_secret)
+
+    # SQLAdmin defaults the session cookie to a 14-day lifetime. authenticate()
+    # re-validates against the DB on every request, but shortening the cookie to
+    # 8 hours further limits the window for a stolen/stale session cookie.
+    ADMIN_SESSION_MAX_AGE = 8 * 60 * 60  # 8 hours, in seconds
+    auth_backend.middlewares = [
+        Middleware(
+            SessionMiddleware,
+            secret_key=session_secret,
+            max_age=ADMIN_SESSION_MAX_AGE,
+        ),
+    ]
 
     admin = Admin(
         app,

@@ -47,13 +47,18 @@ async def public_indicator_stats():
 
 @router.get("/indicators/live/feed")
 async def public_live_feed(
-    limit: int = Query(100, ge=1, le=50000, description="Number of recent indicators"),
-    since_minutes: int = Query(10080, ge=1, le=10080),
+    limit: int = Query(100, ge=1, le=500, description="Number of recent indicators"),
+    since_minutes: int = Query(1440, ge=1, le=1440),
 ):
     """
     Recent indicators for threat map animation.
 
     Returns indicators with geo data for map visualization.
+
+    This is a public, unauthenticated endpoint: it is deliberately capped to a
+    small, map-appropriate slice (<=500 indicators over the last <=24h) and is
+    NOT a full IOC listing. The large authenticated bulk pull lives behind
+    indicators.py.
     """
     since_time = datetime.utcnow() - timedelta(minutes=since_minutes)
     result = await es_service.get_recent_indicators(limit=limit, since=since_time)

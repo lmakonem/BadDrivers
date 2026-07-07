@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
+from app.core.ownership import get_owned_domains, redact_credential, bare_domain
 from app.models.user import User
 from app.models.intel import (
     OrgWatchlist,
@@ -260,15 +261,26 @@ async def osint_results(
     scan_target: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get OSINT scan results."""
+    """Get OSINT scan results (scoped to the caller's owned scan targets)."""
     await es_service.connect()
     try:
         must = []
         if scan_target:
-            must.append({"term": {"scan_target": scan_target}})
+            must.append({"term": {"scan_target": scan_target.lower()}})
         if severity:
             must.append({"term": {"severity": severity}})
+
+        # Owned-target scoping — non-admins only see OSINT results for the
+        # domains they monitor (watchlist / ASM targets), never arbitrary
+        # cross-tenant scan_target results.
+        if not current_user.is_admin:
+            owned = await get_owned_domains(current_user, db)
+            if not owned or (scan_target and bare_domain(scan_target) not in owned):
+                return {"total": 0, "items": []}
+            must.append({"terms": {"scan_target": sorted(owned)}})
 
         query = {"bool": {"must": must}} if must else {"match_all": {}}
 
@@ -296,8 +308,10 @@ async def search_credentials(
     email: Optional[str] = Query(None, description="Search by exact email"),
     severity: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Search credential exposures."""
+    """Search credential exposures (scoped to the caller's owned domains)."""
     await es_service.connect()
     try:
         must = []
@@ -307,6 +321,20 @@ async def search_credentials(
             must.append({"term": {"email": email.lower()}})
         if severity:
             must.append({"term": {"severity": severity}})
+
+        # Owned-domain scoping — non-admins only see creds for domains they
+        # monitor. Deny when they own nothing, or when the requested domain /
+        # email's domain falls outside their owned set.
+        if not current_user.is_admin:
+            owned = await get_owned_domains(current_user, db)
+            deny = (
+                not owned
+                or (domain and domain.lower() not in owned)
+                or (email and bare_domain(email) not in owned)
+            )
+            if deny:
+                return {"total": 0, "items": []}
+            must.append({"terms": {"domain": sorted(owned)}})
 
         query = {"bool": {"must": must}} if must else {"match_all": {}}
 
@@ -321,7 +349,10 @@ async def search_credentials(
                 },
             },
         )
-        hits = [{**h["_source"], "id": h["_id"]} for h in result["hits"]["hits"]]
+        hits = [
+            redact_credential({**h["_source"], "id": h["_id"]})
+            for h in result["hits"]["hits"]
+        ]
         return {"total": result["hits"]["total"]["value"], "items": hits}
     except Exception as e:
         if "index_not_found" in str(e):
@@ -330,14 +361,27 @@ async def search_credentials(
 
 
 @router.get("/credentials/stats")
-async def credential_stats():
-    """Get credential exposure statistics."""
+async def credential_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get credential exposure statistics (scoped to the caller's owned domains)."""
     await es_service.connect()
+
+    # Owned-domain scoping — non-admins only aggregate over domains they monitor.
+    scope_query = {"match_all": {}}
+    if not current_user.is_admin:
+        owned = await get_owned_domains(current_user, db)
+        if not owned:
+            return {"total": 0}
+        scope_query = {"bool": {"filter": [{"terms": {"domain": sorted(owned)}}]}}
+
     try:
         result = await es_service.client.search(
             index="credential_exposures",
             body={
                 "size": 0,
+                "query": scope_query,
                 "aggs": {
                     "total": {"value_count": {"field": "email"}},
                     "by_severity": {"terms": {"field": "severity"}},

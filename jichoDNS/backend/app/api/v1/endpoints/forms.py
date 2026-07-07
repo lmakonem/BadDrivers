@@ -10,17 +10,59 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+# Reuse the shared Redis limiter from app.core.ratelimit: client_ip() for the
+# real (Cloudflare-fronted) source IP, and its shared async Redis client.
+from app.core.ratelimit import _get_redis, client_ip
 from app.models.form_submission import FormSubmission
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ── Anti-abuse rate limiting ──────────────────────────────────────────────────
+# These POST routes are public and unauthenticated, so they are a spam/abuse
+# target. Apply a simple per-source-IP fixed-window limit that mirrors the
+# existing login limiter pattern. FAIL-OPEN: any Redis problem allows the
+# request so a Redis outage never blocks legitimate submissions.
+
+FORM_WINDOW_SECONDS = 3600   # 1-hour fixed window
+MAX_FORMS_PER_IP = 10        # max submissions per source IP per window
+
+
+async def rate_limit_forms(request: Request) -> None:
+    """FastAPI dependency: throttle public form POSTs per source IP.
+
+    Raises HTTP 429 (with Retry-After) when an IP exceeds MAX_FORMS_PER_IP in
+    the current window; allows the request on any Redis error (fail-open).
+    """
+    r = _get_redis()
+    if r is None:
+        return  # fail-open — Redis unavailable
+    key = f"form_submit:ip:{client_ip(request)}"
+    try:
+        n = await r.incr(key)
+        if int(n) == 1:
+            # Set TTL only on first hit so the window doesn't slide forward.
+            await r.expire(key, FORM_WINDOW_SECONDS)
+        if int(n) > MAX_FORMS_PER_IP:
+            ttl = await r.ttl(key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many submissions from this address. Please try again later.",
+                headers={"Retry-After": str(max(int(ttl or 0), 1))},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("form-ratelimit: check failed, allowing request: %s", e)
+        return  # fail-open
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
@@ -138,7 +180,12 @@ async def _store(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("/demo", response_model=FormSubmissionResponse, status_code=201)
+@router.post(
+    "/demo",
+    response_model=FormSubmissionResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit_forms)],
+)
 async def request_demo(req: DemoRequest, db: AsyncSession = Depends(get_db)):
     payload = req.model_dump()
     payload["company_size"] = req.company_size.value
@@ -155,7 +202,12 @@ async def request_demo(req: DemoRequest, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/contact", response_model=FormSubmissionResponse, status_code=201)
+@router.post(
+    "/contact",
+    response_model=FormSubmissionResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit_forms)],
+)
 async def contact_us(req: ContactRequest, db: AsyncSession = Depends(get_db)):
     sub = await _store(db, "contact", req.email, req.name, req.model_dump())
     logger.info(f"Contact from {req.name} — {req.subject}")
@@ -167,7 +219,12 @@ async def contact_us(req: ContactRequest, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/subscribe", response_model=SubscriptionResponse, status_code=201)
+@router.post(
+    "/subscribe",
+    response_model=SubscriptionResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit_forms)],
+)
 async def subscribe(req: SubscribeRequest, db: AsyncSession = Depends(get_db)):
     email = req.email.lower()
     # Check for existing
@@ -196,7 +253,12 @@ async def subscribe(req: SubscribeRequest, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/quote", response_model=FormSubmissionResponse, status_code=201)
+@router.post(
+    "/quote",
+    response_model=FormSubmissionResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit_forms)],
+)
 async def request_quote(req: QuoteRequest, db: AsyncSession = Depends(get_db)):
     payload = req.model_dump()
     payload["budget_range"] = req.budget_range.value

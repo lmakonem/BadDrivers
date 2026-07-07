@@ -13,8 +13,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
+from elasticsearch import NotFoundError
 
 from app.api.deps import get_current_user
+from app.core.ownership import bare_domain
 from app.models.user import User
 from app.services.brand_protection import (
     BrandProtectionService,
@@ -26,6 +28,38 @@ from app.services.brand_protection import (
 
 router = APIRouter()
 brand_service = BrandProtectionService()
+
+
+async def _owned_brand_scope(es, user: User):
+    """
+    Resolve the caller's owned brand monitors from Elasticsearch.
+
+    Brand monitors carry ``owner_user_id`` (set at create time); brand alerts
+    and stored typosquats do not, so they are scoped by *joining* to the
+    caller's monitors. Returns ``(monitor_ids, domains)`` where ``domains``
+    holds both the raw and bare form of every monitored domain across the
+    caller's monitors. For non-admin scoping only — admins bypass this and see
+    everything.
+    """
+    monitor_ids: set = set()
+    domains: set = set()
+    resp = await es.search(
+        index="brand_monitors",
+        query={"bool": {"filter": [{"term": {"owner_user_id": user.id}}]}},
+        size=1000,
+        _source=["id", "domains"],
+    )
+    for h in resp["hits"]["hits"]:
+        src = h.get("_source", {})
+        mid = src.get("id") or h.get("_id")
+        if mid:
+            monitor_ids.add(mid)
+        for d in (src.get("domains") or []):
+            if d:
+                domains.add(d)
+                domains.add(bare_domain(d))
+    domains.discard("")
+    return monitor_ids, domains
 
 
 # =============================================================================
@@ -164,25 +198,54 @@ async def list_all_typosquats(
     registered_only: bool = Query(False),
     min_risk_score: float = Query(0, ge=0, le=100),
     limit: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    List all stored typosquat domains across all monitored brands.
+    List all stored typosquat domains across the caller's monitored brands.
+    Admins see every stored typosquat; owners see only those whose original
+    domain is covered by a brand monitor they own.
     """
     try:
-        result = await brand_service.get_stored_typosquats(
-            registered_only=registered_only,
-            min_risk_score=min_risk_score,
-            limit=limit,
+        # Admins keep the global service path.
+        if current_user.is_admin:
+            result = await brand_service.get_stored_typosquats(
+                registered_only=registered_only,
+                min_risk_score=min_risk_score,
+                limit=limit,
+            )
+            typosquats = result.get("typosquats", []) if isinstance(result, dict) else result
+            total = result.get("total", len(typosquats)) if isinstance(result, dict) else len(typosquats)
+            return {"total": total, "typosquats": typosquats}
+
+        # Non-admins are scoped to the original domains of monitors they own.
+        await brand_service.connect()
+        es = brand_service.es_client
+        if not es:
+            raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+
+        _, owned_domains = await _owned_brand_scope(es, current_user)
+        if not owned_domains:
+            return {"total": 0, "typosquats": []}
+
+        must: list = [{"terms": {"original": sorted(owned_domains)}}]
+        if registered_only:
+            must.append({"term": {"is_registered": True}})
+        if min_risk_score > 0:
+            must.append({"range": {"risk_score": {"gte": min_risk_score}}})
+
+        resp = await es.search(
+            index=brand_service.typosquat_index,
+            query={"bool": {"must": must}},
+            sort=[{"risk_score": {"order": "desc"}}],
+            size=limit,
+            track_total_hits=True,
         )
-
-        # Returns {"typosquats": [...], "total": int}
-        typosquats = result.get("typosquats", []) if isinstance(result, dict) else result
-        total = result.get("total", len(typosquats)) if isinstance(result, dict) else len(typosquats)
-
-        return {
-            "total": total,
-            "typosquats": typosquats,
-        }
+        typosquats = [h["_source"] for h in resp["hits"]["hits"]]
+        total_raw = resp["hits"]["total"]
+        total = total_raw["value"] if isinstance(total_raw, dict) else int(total_raw)
+        return {"total": total, "typosquats": typosquats}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -191,14 +254,41 @@ async def list_all_typosquats(
 async def detect_typosquats(
     domain: str,
     limit: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Detect typosquat variants for a specific domain.
     Uses multiple techniques: omission, transposition, homoglyph, TLD swap, etc.
+
+    Generated variants are algorithmic and safe for anyone; stored typosquat
+    records are only returned to admins or to owners of a monitor covering the
+    requested domain.
     """
     try:
-        # Generate variants (sync)
+        # Generate variants (sync) — pure algorithm, no stored tenant data.
         variants = brand_service.detect_typosquatting(domain)
+
+        # Stored records are tenant data: gate them behind monitor ownership.
+        allowed = current_user.is_admin
+        if not allowed:
+            await brand_service.connect()
+            es = brand_service.es_client
+            if not es:
+                raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+            _, owned_domains = await _owned_brand_scope(es, current_user)
+            allowed = domain in owned_domains or bare_domain(domain) in owned_domains
+
+        if not allowed:
+            return {
+                "original_domain": domain,
+                "total_variants": len(variants),
+                "stored_count": 0,
+                "registered_count": 0,
+                "high_risk_count": 0,
+                "variants": [
+                    {"domain": v, "technique": "generated"} for v in variants[:limit]
+                ],
+            }
 
         # Get stored typosquats for this domain
         stored_result = await brand_service.get_stored_typosquats(
@@ -220,6 +310,8 @@ async def detect_typosquats(
                 {"domain": v, "technique": "generated"} for v in variants[:limit]
             ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -233,6 +325,7 @@ async def get_brand_alerts(
     alert_type: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
 ):
     """Get brand protection alerts with filtering and pagination."""
     try:
@@ -252,6 +345,14 @@ async def get_brand_alerts(
             filters.append({"term": {"severity": severity}})
         if alert_type:
             filters.append({"term": {"alert_type": alert_type}})
+
+        # Tenant scoping — non-admins only see alerts on brand monitors they own
+        # (alerts carry no owner_user_id; join via the owned monitor's brand_id).
+        if not current_user.is_admin:
+            owned_ids, _ = await _owned_brand_scope(es, current_user)
+            if not owned_ids:
+                return {"total": 0, "critical": 0, "high": 0, "alerts": []}
+            filters.append({"terms": {"brand_id": sorted(owned_ids)}})
 
         query = {"bool": {"filter": filters}} if filters else {"match_all": {}}
 
@@ -283,13 +384,39 @@ async def get_brand_alerts(
 
 
 @router.post("/alerts/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: str, user: str = "system"):
-    """Acknowledge a brand alert."""
+async def acknowledge_alert(
+    alert_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Acknowledge a brand alert. The caller must own the brand monitor the alert
+    belongs to (admins may acknowledge any). ``acknowledged_by`` is recorded
+    from the authenticated user, never from the request.
+    """
     try:
-        success = await brand_service.acknowledge_alert(alert_id, acknowledged_by=user)
+        await brand_service.connect()
+        es = brand_service.es_client
+        if not es:
+            raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
+
+        # Load the alert to enforce ownership before mutating.
+        try:
+            alert_resp = await es.get(index="brand_alerts", id=alert_id)
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        alert = alert_resp.get("_source", {})
+
+        if not current_user.is_admin:
+            owned_ids, _ = await _owned_brand_scope(es, current_user)
+            if alert.get("brand_id") not in owned_ids:
+                raise HTTPException(status_code=404, detail="Alert not found")
+
+        success = await brand_service.acknowledge_alert(
+            alert_id, acknowledged_by=current_user.email,
+        )
         if not success:
             raise HTTPException(status_code=404, detail="Alert not found")
-        return {"status": "acknowledged", "id": alert_id}
+        return {"status": "acknowledged", "id": alert_id, "acknowledged_by": current_user.email}
     except HTTPException:
         raise
     except Exception as e:
@@ -306,9 +433,19 @@ async def check_suspicious_domain(request: CheckDomainRequest):
 
 
 @router.get("/report/{brand_id}")
-async def get_brand_report(brand_id: str):
+async def get_brand_report(
+    brand_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """Get a comprehensive brand protection report."""
     try:
+        # Ownership check — mirror get_brand_monitor before generating.
+        monitor = await brand_service.get_brand_monitor(brand_id)
+        if not monitor:
+            raise HTTPException(status_code=404, detail="Brand not found")
+        if not current_user.is_admin and getattr(monitor, "owner_user_id", None) != current_user.id:
+            raise HTTPException(status_code=404, detail="Brand not found")
+
         report = await brand_service.generate_brand_report(brand_id)
         if not report:
             raise HTTPException(status_code=404, detail="Brand not found")
@@ -346,35 +483,70 @@ async def request_takedown(domain: str, evidence: Optional[str] = None):
 
 
 @router.get("/stats")
-async def get_brand_stats():
-    """Get overall brand protection statistics directly from Elasticsearch."""
+async def get_brand_stats(current_user: User = Depends(get_current_user)):
+    """
+    Get overall brand protection statistics directly from Elasticsearch.
+    Admins get global counts; owners get counts scoped to the monitors and
+    alerts they own.
+    """
     try:
         await brand_service.connect()
         es = brand_service.es_client
         if not es:
             raise HTTPException(status_code=503, detail="Elasticsearch unavailable")
 
+        # Resolve scoping. Admins are global; owners are scoped to their monitors
+        # and to alerts joined to those monitors via brand_id.
+        if current_user.is_admin:
+            monitors_query = {"match_all": {}}
+            alert_scope: list = []
+        else:
+            owned_ids, _ = await _owned_brand_scope(es, current_user)
+            if not owned_ids:
+                return {
+                    "total_monitors": 0,
+                    "total_alerts": 0,
+                    "critical_alerts": 0,
+                    "high_alerts": 0,
+                    "total_typosquats": 0,
+                }
+            monitors_query = {"bool": {"filter": [{"term": {"owner_user_id": current_user.id}}]}}
+            alert_scope = [{"terms": {"brand_id": sorted(owned_ids)}}]
+
+        def _alert_query(extra: Optional[dict] = None) -> dict:
+            filters = list(alert_scope)
+            if extra:
+                filters.append(extra)
+            return {"bool": {"filter": filters}} if filters else {"match_all": {}}
+
         # Count monitors
-        mon_count = await es.count(index="brand_monitors", query={"match_all": {}})
+        mon_count = await es.count(index="brand_monitors", query=monitors_query)
         total_monitors = mon_count.get("count", 0)
 
         # Count all alerts
-        alert_count = await es.count(index="brand_alerts", query={"match_all": {}})
+        alert_count = await es.count(index="brand_alerts", query=_alert_query())
         total_alerts = alert_count.get("count", 0)
 
         # Count critical alerts
-        crit_count = await es.count(index="brand_alerts", query={"term": {"severity": "critical"}})
+        crit_count = await es.count(
+            index="brand_alerts", query=_alert_query({"term": {"severity": "critical"}}),
+        )
         critical_alerts = crit_count.get("count", 0)
 
         # Count high alerts
-        high_count = await es.count(index="brand_alerts", query={"term": {"severity": "high"}})
+        high_count = await es.count(
+            index="brand_alerts", query=_alert_query({"term": {"severity": "high"}}),
+        )
         high_alerts = high_count.get("count", 0)
 
         # Count typosquats (domain_registered + typosquat_detected)
-        typo_count = await es.count(index="brand_alerts", query={"bool": {"should": [
-            {"term": {"alert_type": "typosquat_detected"}},
-            {"term": {"alert_type": "domain_registered"}},
-        ], "minimum_should_match": 1}})
+        typo_count = await es.count(
+            index="brand_alerts",
+            query=_alert_query({"bool": {"should": [
+                {"term": {"alert_type": "typosquat_detected"}},
+                {"term": {"alert_type": "domain_registered"}},
+            ], "minimum_should_match": 1}}),
+        )
         total_typosquats = typo_count.get("count", 0)
 
         return {

@@ -1327,12 +1327,25 @@ async def export_client_data(
 async def get_job_status(
     job_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Poll the status of an async discovery job (Celery task).
     Returns state: PENDING | STARTED | SUCCESS | FAILURE | REVOKED
     """
     _require_asm_tier(current_user)
+    # Ownership: non-admins may only poll a job that belongs to a client they
+    # can access. The dispatching client records its most recent job in
+    # ASMClient.last_scan_job_id; admins bypass and can poll any job.
+    if not current_user.is_admin:
+        owner = await db.execute(
+            select(ASMClient.id).where(
+                ASMClient.last_scan_job_id == job_id,
+                ASMClient.id.in_(await _accessible_client_ids(current_user, db)),
+            )
+        )
+        if owner.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Job not found")
     try:
         from celery.result import AsyncResult
         from app.worker import celery_app
@@ -1896,25 +1909,35 @@ async def bulk_revoke_access(
 
 
 @router.get("/subdomains/{domain}")
-async def discover_subdomains_legacy(domain: str, current_user: User = Depends(get_current_user)):
+async def discover_subdomains_legacy(
+    domain: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Deprecated — use GET /check/subdomains/{domain}"""
     _require_asm_tier(current_user)
+    host = await _precheck_target(domain, current_user, db, resolve=False)
     asm = await _get_asm()
     try:
-        subdomains = await asm._discover_subdomains(domain)
-        return {"domain": domain, "total": len(subdomains), "subdomains": list(subdomains)}
+        subdomains = await asm._discover_subdomains(host)
+        return {"domain": host, "total": len(subdomains), "subdomains": list(subdomains)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/services/{domain}")
-async def find_exposed_services_legacy(domain: str, current_user: User = Depends(get_current_user)):
+async def find_exposed_services_legacy(
+    domain: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Deprecated — use GET /check/services/{domain}"""
     _require_asm_tier(current_user)
+    host = await _precheck_target(domain, current_user, db)
     asm = await _get_asm()
     try:
-        services = await asm.find_exposed_services(domain)
-        return {"domain": domain, "total": len(services),
+        services = await asm.find_exposed_services(host)
+        return {"domain": host, "total": len(services),
                 "services": [s.model_dump() if hasattr(s, "model_dump") else s for s in services]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

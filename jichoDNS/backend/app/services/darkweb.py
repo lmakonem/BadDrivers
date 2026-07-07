@@ -227,11 +227,12 @@ class MonitoredTarget(BaseModel):
     organization: Optional[str] = None
     alert_email: Optional[str] = None
     webhook_url: Optional[str] = None
+    owner_user_id: Optional[int] = None  # owning JichoDNS user id (multi-tenant)
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_checked: Optional[datetime] = None
     total_alerts: int = 0
-    
+
     def to_es_doc(self) -> Dict[str, Any]:
         """Convert to Elasticsearch document."""
         return {
@@ -241,6 +242,7 @@ class MonitoredTarget(BaseModel):
             "organization": self.organization,
             "alert_email": self.alert_email,
             "webhook_url": self.webhook_url,
+            "owner_user_id": self.owner_user_id,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
             "last_checked": self.last_checked.isoformat() if self.last_checked else None,
@@ -259,11 +261,12 @@ class DarkWebAlert(BaseModel):
     source: str
     source_url: Optional[str] = None
     matched_target: str
+    owner_user_id: Optional[int] = None  # owning JichoDNS user id (multi-tenant)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_read: bool = False
     is_acknowledged: bool = False
     related_item_id: Optional[str] = None
-    
+
     def to_es_doc(self) -> Dict[str, Any]:
         """Convert to Elasticsearch document."""
         return {
@@ -276,6 +279,7 @@ class DarkWebAlert(BaseModel):
             "source": self.source,
             "source_url": self.source_url,
             "matched_target": self.matched_target,
+            "owner_user_id": self.owner_user_id,
             "created_at": self.created_at.isoformat(),
             "is_read": self.is_read,
             "is_acknowledged": self.is_acknowledged,
@@ -447,6 +451,7 @@ class DarkWebMonitor:
                         "organization": {"type": "keyword"},
                         "alert_email": {"type": "keyword"},
                         "webhook_url": {"type": "text"},
+                        "owner_user_id": {"type": "integer"},
                         "is_active": {"type": "boolean"},
                         "created_at": {"type": "date"},
                         "last_checked": {"type": "date"},
@@ -466,6 +471,7 @@ class DarkWebMonitor:
                         "source": {"type": "keyword"},
                         "source_url": {"type": "text"},
                         "matched_target": {"type": "keyword"},
+                        "owner_user_id": {"type": "integer"},
                         "created_at": {"type": "date"},
                         "is_read": {"type": "boolean"},
                         "is_acknowledged": {"type": "boolean"},
@@ -1079,17 +1085,19 @@ class DarkWebMonitor:
         organization: Optional[str] = None,
         alert_email: Optional[str] = None,
         webhook_url: Optional[str] = None,
+        owner_user_id: Optional[int] = None,
     ) -> MonitoredTarget:
         """
         Add a new monitoring target.
-        
+
         Args:
             target: Domain, email, or keyword to monitor
             target_type: Type of target
             organization: Organization name
             alert_email: Email for alerts
             webhook_url: Webhook for alerts
-            
+            owner_user_id: Owning JichoDNS user id (multi-tenant scoping)
+
         Returns:
             Created monitor
         """
@@ -1099,6 +1107,7 @@ class DarkWebMonitor:
             organization=organization,
             alert_email=alert_email,
             webhook_url=webhook_url,
+            owner_user_id=owner_user_id,
         )
         
         # Store in Elasticsearch
@@ -1129,35 +1138,65 @@ class DarkWebMonitor:
         self,
         active_only: bool = True,
         limit: int = 100,
+        owner_user_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Get all monitoring targets."""
+        """
+        Get monitoring targets.
+
+        Args:
+            active_only: Only return active monitors
+            limit: Maximum monitors to return
+            owner_user_id: When provided, restrict to monitors owned by this
+                user (multi-tenant scoping). Pass None for admins/full access.
+        """
         if not es_service.client:
             await es_service.connect()
-        
+
         if not es_service.client:
             return []
-        
+
         try:
-            query = {"match_all": {}}
+            filters = []
             if active_only:
-                query = {"term": {"is_active": True}}
-            
+                filters.append({"term": {"is_active": True}})
+            if owner_user_id is not None:
+                filters.append({"term": {"owner_user_id": owner_user_id}})
+
+            query = {"bool": {"filter": filters}} if filters else {"match_all": {}}
+
             body = {
                 "query": query,
                 "sort": [{"created_at": "desc"}],
                 "size": limit,
             }
-            
+
             response = await es_service.client.search(
                 index=self.MONITORS_INDEX,
                 body=body,
             )
-            
+
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"Get monitors error: {e}")
             return []
-    
+
+    async def get_monitor(self, monitor_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single monitor document by id (or None if missing)."""
+        if not es_service.client:
+            await es_service.connect()
+
+        if not es_service.client:
+            return None
+
+        try:
+            response = await es_service.client.get(
+                index=self.MONITORS_INDEX,
+                id=monitor_id,
+            )
+            return response["_source"]
+        except Exception:
+            return None
+
     async def delete_monitor(self, monitor_id: str) -> bool:
         """Delete a monitor."""
         if not es_service.client:
@@ -1185,15 +1224,18 @@ class DarkWebMonitor:
         unread_only: bool = False,
         severity_filter: Optional[str] = None,
         limit: int = 50,
+        owner_user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Get dark web alerts.
-        
+
         Args:
             unread_only: Only return unread alerts
             severity_filter: Filter by severity
             limit: Maximum alerts to return
-            
+            owner_user_id: When provided, restrict to alerts owned by this user
+                (multi-tenant scoping). Pass None for admins/full access.
+
         Returns:
             Alerts with statistics
         """
@@ -1203,26 +1245,29 @@ class DarkWebMonitor:
             "by_severity": {},
             "alerts": [],
         }
-        
+
         if not es_service.client:
             await es_service.connect()
-        
+
         if not es_service.client:
             # Return demo alerts
             results["alerts"] = self._generate_demo_alerts()
             results["is_demo"] = True
             results["total"] = len(results["alerts"])
             return results
-        
+
         try:
             filter_clauses = []
-            
+
             if unread_only:
                 filter_clauses.append({"term": {"is_read": False}})
-            
+
             if severity_filter:
                 filter_clauses.append({"term": {"severity": severity_filter}})
-            
+
+            if owner_user_id is not None:
+                filter_clauses.append({"term": {"owner_user_id": owner_user_id}})
+
             body = {
                 "query": {
                     "bool": {
@@ -1232,18 +1277,21 @@ class DarkWebMonitor:
                 "sort": [{"created_at": "desc"}],
                 "size": limit,
             }
-            
+
             response = await es_service.client.search(
                 index=self.ALERTS_INDEX,
                 body=body,
             )
-            
+
             results["alerts"] = [hit["_source"] for hit in response["hits"]["hits"]]
             results["total"] = response["hits"]["total"]["value"]
-            
-            # Count unread
+
+            # Count unread (scoped to owner for non-admins)
+            unread_filter = [{"term": {"is_read": False}}]
+            if owner_user_id is not None:
+                unread_filter.append({"term": {"owner_user_id": owner_user_id}})
             unread_body = {
-                "query": {"term": {"is_read": False}},
+                "query": {"bool": {"filter": unread_filter}},
             }
             unread_response = await es_service.client.count(
                 index=self.ALERTS_INDEX,
@@ -1275,6 +1323,7 @@ class DarkWebMonitor:
         matched_target: str,
         source_url: Optional[str] = None,
         related_item_id: Optional[str] = None,
+        owner_user_id: Optional[int] = None,
     ) -> DarkWebAlert:
         """Create a new alert."""
         alert = DarkWebAlert(
@@ -1286,6 +1335,7 @@ class DarkWebMonitor:
             source=source,
             source_url=source_url,
             matched_target=matched_target,
+            owner_user_id=owner_user_id,
             related_item_id=related_item_id,
         )
         
@@ -1301,6 +1351,23 @@ class DarkWebMonitor:
         
         return alert
     
+    async def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single alert document by id (or None if missing)."""
+        if not es_service.client:
+            await es_service.connect()
+
+        if not es_service.client:
+            return None
+
+        try:
+            response = await es_service.client.get(
+                index=self.ALERTS_INDEX,
+                id=alert_id,
+            )
+            return response["_source"]
+        except Exception:
+            return None
+
     async def mark_alert_read(self, alert_id: str) -> bool:
         """Mark an alert as read."""
         if not es_service.client:

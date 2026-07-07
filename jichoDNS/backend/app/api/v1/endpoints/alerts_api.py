@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.core.ownership import get_owned_domains
 from app.models.user import User
 from app.services.elasticsearch import es_service
 
@@ -28,6 +31,7 @@ async def get_alerts_feed(
     alert_type: Optional[str] = Query(None, description="Filter: c2, malware, phishing, credential_leak, brand_abuse, vulnerability, darkweb_mention"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Unified alerts feed aggregated from all intelligence sources.
@@ -85,39 +89,52 @@ async def get_alerts_feed(
         if "index_not_found" not in str(e):
             logger.warning(f"IOC alerts error: {e}")
 
-    # 2. Credential exposure alerts
-    try:
-        cred_result = await es_service.client.search(
-            index="credential_exposures",
-            body={
-                "query": {"match_all": {}},
-                "aggs": {
-                    "by_severity": {"terms": {"field": "severity.keyword"}},
-                    "vip_count": {"filter": {"term": {"vip_match": True}}},
-                    "recent": {"top_hits": {"size": 1, "sort": [{"discovered_at": "desc"}]}},
-                    "total": {"value_count": {"field": "email.keyword"}},
-                },
-                "size": 0,
-            },
-        )
-        aggs = cred_result.get("aggregations", {})
-        total_creds = aggs.get("total", {}).get("value", 0)
-        vip_count = aggs.get("vip_count", {}).get("doc_count", 0)
+    # 2. Credential exposure alerts (scoped to the caller's owned domains).
+    # credential_exposures is a global breach corpus; non-admins must only see
+    # counts for domains they monitor — mirror the scoping in credentials.py.
+    cred_query = {"match_all": {}}
+    include_creds = True
+    if not current_user.is_admin:
+        owned = await get_owned_domains(current_user, db)
+        if owned:
+            cred_query = {"bool": {"filter": [{"terms": {"domain": sorted(owned)}}]}}
+        else:
+            # Owns no domains → contribute nothing (no platform-wide leak).
+            include_creds = False
 
-        if total_creds > 0:
-            recent = aggs.get("recent", {}).get("hits", {}).get("hits", [{}])[0].get("_source", {})
-            alerts.append({
-                "id": "cred-exposure",
-                "type": "credential_leak",
-                "title": f"{total_creds:,} credential exposures detected",
-                "description": f"Leaked credentials found across breach databases. {vip_count} VIP matches.",
-                "severity": "critical" if vip_count > 0 else "high",
-                "source": "credential_monitoring",
-                "timestamp": recent.get("discovered_at", datetime.now(timezone.utc).isoformat()),
-                "indicator_count": total_creds,
-            })
-    except Exception:
-        pass
+    if include_creds:
+        try:
+            cred_result = await es_service.client.search(
+                index="credential_exposures",
+                body={
+                    "query": cred_query,
+                    "aggs": {
+                        "by_severity": {"terms": {"field": "severity.keyword"}},
+                        "vip_count": {"filter": {"term": {"vip_match": True}}},
+                        "recent": {"top_hits": {"size": 1, "sort": [{"discovered_at": "desc"}]}},
+                        "total": {"value_count": {"field": "email.keyword"}},
+                    },
+                    "size": 0,
+                },
+            )
+            aggs = cred_result.get("aggregations", {})
+            total_creds = aggs.get("total", {}).get("value", 0)
+            vip_count = aggs.get("vip_count", {}).get("doc_count", 0)
+
+            if total_creds > 0:
+                recent = aggs.get("recent", {}).get("hits", {}).get("hits", [{}])[0].get("_source", {})
+                alerts.append({
+                    "id": "cred-exposure",
+                    "type": "credential_leak",
+                    "title": f"{total_creds:,} credential exposures detected",
+                    "description": f"Leaked credentials found across breach databases. {vip_count} VIP matches.",
+                    "severity": "critical" if vip_count > 0 else "high",
+                    "source": "credential_monitoring",
+                    "timestamp": recent.get("discovered_at", datetime.now(timezone.utc).isoformat()),
+                    "indicator_count": total_creds,
+                })
+        except Exception:
+            pass
 
     # 3. Dark web alerts
     try:
