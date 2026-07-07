@@ -149,14 +149,7 @@ export function Hero() {
           HERO — flat near-black navy, one subtle radial glow top-right.
           Split: copy left, calm eye right. Lots of negative space.
          ════════════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-body-dark">
-        {/* the single, very subtle green glow (opsec .of-hero::before) */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute z-0 top-[-25%] right-[-10%] w-[min(820px,80vw)] h-[min(820px,80vw)]"
-          style={{ background: "radial-gradient(circle at center, rgba(74,222,128,0.09) 0%, rgba(74,222,128,0.05) 38%, transparent 70%)" }}
-        />
-
+      <section className="relative overflow-hidden">
         <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-32 lg:pt-40 pb-20 lg:pb-28">
           <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] items-center gap-12 lg:gap-14">
 
@@ -178,11 +171,11 @@ export function Hero() {
               </p>
 
               <div className="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                <Link href="/signup" className="btn-primary group">
+                <Link href="/signup" className="btn-primary group whitespace-nowrap">
                   Start Free Trial
                   <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </Link>
-                <Link href="#demo" className="btn-secondary group">
+                <Link href="#demo" className="btn-secondary group whitespace-nowrap">
                   See how it works
                   <span className="transition-transform group-hover:translate-x-0.5">→</span>
                 </Link>
@@ -201,7 +194,7 @@ export function Hero() {
           SEE IT LIVE — restrained section, flat bg (no grid, no glow).
           Live threat map + console. All WebSocket/console logic preserved.
          ════════════════════════════════════════════════════════════════════ */}
-      <section id="live" className="relative bg-body-dark">
+      <section id="live" className="relative">
         <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pb-[clamp(4rem,8vw,7.5rem)]">
 
           {/* section head — green uppercase label + big Space Grotesk title */}

@@ -63,7 +63,7 @@ const plans = [
 
 export function Pricing() {
   return (
-    <section id="pricing" className="bg-card-light py-24 lg:py-32">
+    <section id="pricing" className="bg-ebony-900/45 py-24 lg:py-32">
       <div className="max-w-[1200px] mx-auto px-6 lg:px-8">
 
         {/* section head — small green label + big left-aligned white title */}

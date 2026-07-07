@@ -34,6 +34,27 @@ body {
   line-height: 1.7;
 }
 
+/* ── Site-wide fixed background — opsecfusion parity ──────────────────────────
+   Datacenter photo under a dark veil gradient, plus accent glows masked to
+   fade toward the bottom. Fixed + behind all content (landing sections are
+   transparent so this shows through). Mirrors opsec .wp-site-blocks::before/after. */
+.site-bg {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(10, 14, 23, 0.62), rgba(10, 14, 23, 0.80)),
+    url('/bg-datacenter.webp') center center / cover no-repeat,
+    var(--ink);
+}
+.site-bg::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(1000px 680px at 85% -6%, rgba(74, 222, 128, 0.16), transparent 60%),
+    radial-gradient(820px 560px at 2% 8%, rgba(56, 189, 248, 0.11), transparent 58%),
+    radial-gradient(900px 900px at 50% 118%, rgba(74, 222, 128, 0.10), transparent 60%);
+  -webkit-mask-image: radial-gradient(160% 112% at 50% -4%, #000 0%, rgba(0, 0, 0, 0.6) 50%, transparent 92%);
+  mask-image: radial-gradient(160% 112% at 50% -4%, #000 0%, rgba(0, 0, 0, 0.6) 50%, transparent 92%);
+}
+
 /* Headings default to the display face (Space Grotesk) */
 h1, h2, h3, h4, .font-display {
   font-family: var(--font-display), var(--font-inter), system-ui, sans-serif;

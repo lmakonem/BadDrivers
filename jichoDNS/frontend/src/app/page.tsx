@@ -7,7 +7,7 @@ import { Footer } from "@/components/landing/Footer";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-ebony-950">
+    <main className="min-h-screen">
       <Header />
       <Hero />
       <Features />

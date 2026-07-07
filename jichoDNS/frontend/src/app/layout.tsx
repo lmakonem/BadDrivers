@@ -43,6 +43,8 @@ export default function RootLayout({
       <body
         className={`${spaceGrotesk.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100 overflow-x-hidden`}
       >
+        {/* Site-wide fixed datacenter-photo background (opsecfusion parity) */}
+        <div aria-hidden="true" className="site-bg" />
         <Providers>{children}</Providers>
       </body>
     </html>
