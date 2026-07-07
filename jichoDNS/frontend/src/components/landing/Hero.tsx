@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { JichoMark } from "@/components/brand/JichoMark";
 
 const RealThreatMap = dynamic(() => import("@/components/map/RealThreatMap"), {
   ssr: false,
@@ -102,8 +103,8 @@ const MODULES = [
     id: "ai-reports",
     href: "/portal/reports",
     label: "AI Threat Reports",
-    sublabel: "Vertex AI · Gemini",
-    accent: "#fe4562",          // primary red
+    sublabel: "AI-Generated Summaries",
+    accent: "#f5b62c",          // brand gold
     accentClass: "text-primary",
     borderAccent: "hover:border-primary/40",
     glowClass: "group-hover:shadow-primary/20",
@@ -241,10 +242,18 @@ export function Hero() {
   return (
     <section className="relative bg-ebony-950 overflow-hidden">
 
-      {/* bg glows */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-primary/5 rounded-full blur-[160px]" />
-        <div className="absolute bottom-0 right-0 w-[500px] h-[400px] bg-purple-700/4 rounded-full blur-[120px]" />
+      {/* branded ambient backdrop — PCB grid + gold/cyan glows */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute inset-x-0 top-0 h-[620px] circuit-grid opacity-60"
+          style={{
+            maskImage: "linear-gradient(180deg, rgba(0,0,0,0.7), transparent 82%)",
+            WebkitMaskImage: "linear-gradient(180deg, rgba(0,0,0,0.7), transparent 82%)",
+          }}
+        />
+        <div className="absolute inset-0 glow-gold" />
+        <div className="absolute inset-0 glow-cyan" />
+        <div className="absolute bottom-0 right-0 w-[500px] h-[400px] bg-secondary/[0.04] rounded-full blur-[130px]" />
       </div>
 
       <div className="relative z-10 max-w-[1680px] mx-auto px-6 lg:px-10">
@@ -254,44 +263,60 @@ export function Hero() {
         ════════════════════════════════════════════════════════════════════ */}
         <div className="pt-28 pb-10">
 
-          {/* headline */}
-          <div className="text-center max-w-5xl mx-auto mb-4">
-            <h1 className="text-[42px] lg:text-[60px] font-bold leading-[1.1] tracking-tight mb-5">
-              <span className="text-white">Everything Your SOC Needs</span>
+          {/* headline + brand eye */}
+          <div className="text-center max-w-4xl mx-auto mb-6">
+
+            {/* the watchful eye — brand signature */}
+            <div className="relative mx-auto mb-7 grid h-32 place-items-center">
+              <div
+                className="pointer-events-none absolute h-56 w-56 rounded-full"
+                style={{ background: "radial-gradient(circle, rgba(245,182,44,0.18), rgba(56,225,208,0.07) 46%, transparent 72%)" }}
+              />
+              <JichoMark size={122} className="relative drop-shadow-[0_0_26px_rgba(245,182,44,0.35)]" />
+            </div>
+
+            {/* eyebrow */}
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/60">
+              <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+              The watchful eye over African cyberspace
+            </div>
+
+            <h1 className="font-display text-[40px] lg:text-[62px] font-bold leading-[1.05] tracking-tight mb-5">
+              <span className="text-white">See the threat</span>
               <br />
-              <span className="text-primary">in One Platform</span>
+              <span className="gradient-text">before it sees you</span>
             </h1>
             <p className="text-base lg:text-lg text-white/50 max-w-3xl mx-auto leading-relaxed">
-              <span className="text-purple-400 font-medium">Threat intelligence</span>
+              Africa-first threat intelligence —{" "}
+              <span className="text-purple-400 font-medium">threat intel</span>
               {" · "}
-              <span className="text-blue-400 font-medium">dark web monitoring</span>
+              <span className="text-blue-400 font-medium">dark web</span>
               {" · "}
               <span className="text-orange-400 font-medium">brand protection</span>
               {" · "}
-              <span className="text-green-400 font-medium">attack surface management</span>
+              <span className="text-green-400 font-medium">attack surface</span>
               {" · "}
               <span className="text-primary font-medium">AI reports</span>
               {" · "}
               <span className="text-teal-400 font-medium">API access</span>
-              <span className="text-white/40"> — built for African enterprises.</span>
+              <span className="text-white/40">, unified for your SOC.</span>
             </p>
           </div>
 
           {/* CTAs */}
           <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
-            <Link href="/signup"
-              className="group inline-flex items-center gap-2 px-7 py-3 bg-primary hover:bg-primary-hover text-white font-semibold rounded-full transition-all shadow-lg shadow-primary/30">
+            <Link href="/signup" className="btn-primary group">
               Start Free Trial
               <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </Link>
-            <Link href="/portal"
-              className="inline-flex items-center gap-2 px-7 py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-full border border-white/10 hover:border-white/20 transition-all">
+            <Link href="/portal" className="btn-secondary">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
               Open Portal
             </Link>
             <Link href="#demo"
-              className="inline-flex items-center gap-2 px-7 py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-full border border-white/10 hover:border-white/20 transition-all">
+              className="group inline-flex items-center gap-1.5 px-3 py-3 text-sm font-medium text-white/55 hover:text-secondary transition-colors">
               Request Demo
+              <svg className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </Link>
           </div>
 
@@ -352,7 +377,7 @@ export function Hero() {
                     </span>
                     <span className="text-[11px] font-semibold text-green-400">LIVE</span>
                   </div>
-                  <span className="text-white/35 text-xs">15+ feeds · 5 min updates</span>
+                  <span className="text-white/35 text-xs">Aggregated threat feeds</span>
                 </div>
                 <Link href="/map" target="_blank"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/8 hover:bg-white/15 text-white text-xs font-medium transition-colors border border-white/10">

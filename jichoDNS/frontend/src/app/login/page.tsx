@@ -3,8 +3,64 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import { JichoLogo, JichoMark } from "@/components/brand/JichoMark";
+
+/* Decorative circuit-board brand panel — the animated eye over a PCB grid + gold glow. */
+function BrandPanel({
+  eyebrow,
+  headline,
+  tagline,
+}: {
+  eyebrow: string;
+  headline: string;
+  tagline: string;
+}) {
+  return (
+    <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between overflow-hidden bg-body-dark p-12">
+      {/* PCB grid + ambient glows */}
+      <div className="circuit-grid absolute inset-0 opacity-70" />
+      <div className="glow-gold absolute inset-0" />
+      <div className="glow-cyan absolute inset-0" />
+      {/* faint circuit traces along the lower edge */}
+      <svg
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-44 w-full opacity-25"
+        viewBox="0 0 480 176"
+        fill="none"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round">
+          <path className="circuit-trace" d="M0 132 H96 L128 100 H236" />
+          <path className="circuit-trace" d="M40 176 V148 L76 112 H168 L192 88 H320" />
+          <path className="circuit-trace" d="M300 176 V144 L340 104 H480" />
+        </g>
+        <g fill="#f5b62c">
+          <circle cx="236" cy="100" r="1.6" />
+          <circle cx="320" cy="88" r="1.6" />
+          <circle cx="168" cy="112" r="1.6" />
+        </g>
+      </svg>
+
+      <Link href="/" className="relative z-10">
+        <JichoLogo size={34} />
+      </Link>
+
+      <div className="relative z-10 flex flex-col items-center text-center">
+        <JichoMark size={148} />
+        <span className="mt-9 text-xs font-semibold uppercase tracking-[0.28em] text-cyan/80">
+          {eyebrow}
+        </span>
+        <h1 className="font-display mt-3 text-4xl font-bold text-white">{headline}</h1>
+        <p className="mt-4 max-w-sm text-white/55">{tagline}</p>
+      </div>
+
+      <p className="relative z-10 text-sm text-white/40">
+        jicho — the watchful eye over Africa&apos;s cyberspace.
+      </p>
+    </div>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -41,70 +97,25 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-ebony-950 flex">
+    <div className="min-h-screen bg-body-dark flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/20 via-ebony-950 to-purple-600/20 p-12 flex-col justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <Image src="/jichosec.png" alt="JichoSec" width={40} height={40} className="rounded-lg" />
-          <div className="flex flex-col">
-            <div className="flex items-baseline">
-              <span className="text-xl font-bold text-white">Jicho</span>
-              <span className="text-xl font-bold text-primary">Sec</span>
-            </div>
-          </div>
-        </Link>
-
-        <div className="space-y-8">
-          <h1 className="text-4xl font-bold text-white">
-            Welcome back to JichoSec
-          </h1>
-          <p className="text-xl text-white/60">
-            Access your threat intelligence dashboard and stay ahead of emerging cyber threats.
-          </p>
-          
-          <div className="p-6 rounded-2xl bg-card-dark/50 border border-white/10">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Real-Time Protection</p>
-                <p className="text-sm text-white/50">Active threats monitored 24/7</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-                <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">M</div>
-                <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold">E</div>
-              </div>
-              <span className="text-sm text-white/50">Join 200+ security teams</span>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-white/40 text-sm">
-          Securing Africa&apos;s digital future, one threat at a time.
-        </p>
-      </div>
+      <BrandPanel
+        eyebrow="Threat intelligence"
+        headline="Welcome back"
+        tagline="Sign in to your dashboard — continuous watch over your attack surface, brand, and the dark web."
+      />
 
       {/* Right Side - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8">
-            <Link href="/" className="flex items-center gap-3">
-              <Image src="/jichosec.png" alt="JichoSec" width={40} height={40} className="rounded-lg" />
-              <div className="flex items-baseline">
-                <span className="text-xl font-bold text-white">Jicho</span>
-                <span className="text-xl font-bold text-primary">Sec</span>
-              </div>
+            <Link href="/">
+              <JichoLogo size={30} />
             </Link>
           </div>
 
-          <h2 className="text-3xl font-bold text-white mb-2">Sign in</h2>
+          <h2 className="font-display text-3xl font-bold text-white mb-2">Sign in</h2>
           <p className="text-white/50 mb-8">
             Enter your credentials to access your dashboard
           </p>
@@ -118,7 +129,7 @@ function LoginForm() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/50 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
                 placeholder="you@company.com"
               />
             </div>
@@ -126,6 +137,9 @@ function LoginForm() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-white/70">Password</label>
+                <Link href="/forgot-password" className="text-sm text-cyan hover:underline">
+                  Forgot?
+                </Link>
               </div>
               <input
                 type="password"
@@ -134,7 +148,7 @@ function LoginForm() {
                 onChange={handleChange}
                 required
                 minLength={8}
-                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-primary/50 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-card-dark border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-secondary/60 transition-colors"
                 placeholder="Enter your password"
               />
             </div>
@@ -148,7 +162,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 disabled:opacity-50"
+              className="btn-primary w-full py-3.5 text-base disabled:opacity-50"
             >
               {isSubmitting ? "Signing in..." : "Sign in"}
             </button>
@@ -156,7 +170,7 @@ function LoginForm() {
 
           <p className="mt-8 text-center text-white/50">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline font-medium">
+            <Link href="/signup" className="text-cyan hover:underline font-medium">
               Sign up free
             </Link>
           </p>
@@ -169,7 +183,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-ebony-950 flex items-center justify-center">
+      <div className="min-h-screen bg-body-dark flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     }>

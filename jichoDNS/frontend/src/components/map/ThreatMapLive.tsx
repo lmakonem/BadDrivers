@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Shield, Activity, Zap, TrendingUp, Filter, X, ChevronDown, Check, Terminal } from "lucide-react";
+import { JichoMark } from "@/components/brand/JichoMark";
 
 // Import country list (safe for SSR - no browser APIs)
 import { AFRICAN_COUNTRY_LIST } from "./countries";
@@ -168,10 +169,10 @@ export function ThreatMapLive() {
       <div className="absolute top-0 left-0 right-0 z-[500] bg-gradient-to-b from-gray-950 via-gray-950/80 to-transparent p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img src="/jichosec.png" alt="JichoSec" className="w-10 h-10 rounded" />
+            <JichoMark size={40} />
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-white">Jicho Threat Map</h1>
+                <h1 className="font-display text-2xl font-bold text-white">Jicho Threat Map</h1>
               </div>
               <span className="text-sm text-gray-400">
                 Real threat intelligence data

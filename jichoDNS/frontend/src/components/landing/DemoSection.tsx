@@ -54,8 +54,13 @@ export function DemoSection() {
   };
 
   return (
-    <section id="demo" className="relative py-24 bg-ebony-950">
-      <div className="max-w-[1680px] mx-auto px-8">
+    <section id="demo" className="relative py-24 bg-body-dark overflow-hidden">
+      {/* circuit-board backdrop + ambient glows */}
+      <div className="absolute inset-0 circuit-grid opacity-40 pointer-events-none" />
+      <div className="absolute inset-0 glow-cyan pointer-events-none" />
+      <div className="absolute inset-0 glow-gold pointer-events-none" />
+
+      <div className="relative z-10 max-w-[1680px] mx-auto px-8">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           {/* Left Content */}
           <div>
@@ -66,9 +71,9 @@ export function DemoSection() {
               <span className="text-sm font-medium text-primary">Live Demo</span>
             </div>
 
-            <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6">
+            <h2 className="font-display text-4xl lg:text-5xl font-bold text-white mb-6">
               See JichoSec
-              <span className="text-primary"> in Action</span>
+              <span className="gradient-text"> in Action</span>
             </h2>
 
             <p className="text-xl text-white/50 mb-8">
@@ -78,7 +83,7 @@ export function DemoSection() {
 
             <div className="space-y-6">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
                   <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   </svg>
@@ -90,8 +95,8 @@ export function DemoSection() {
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div className="w-10 h-10 rounded-lg bg-secondary/10 ring-1 ring-secondary/20 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                   </svg>
@@ -103,7 +108,7 @@ export function DemoSection() {
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
                   <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
                   </svg>
@@ -118,24 +123,24 @@ export function DemoSection() {
 
           {/* Right - Form */}
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-purple-600/10 rounded-3xl blur-xl" />
-            
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-3xl blur-xl" />
+
             <div className="relative p-8 lg:p-10 rounded-3xl bg-card-dark border border-white/10">
               {isSubmitted ? (
                 <div className="text-center py-12">
-                  <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
-                    <svg className="w-8 h-8 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <div className="w-16 h-16 rounded-full bg-secondary/15 ring-1 ring-secondary/30 flex items-center justify-center mx-auto mb-6">
+                    <svg className="w-8 h-8 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                   </div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Demo Request Received!</h3>
+                  <h3 className="font-display text-2xl font-bold text-white mb-2">Demo Request Received!</h3>
                   <p className="text-white/50">
                     Our team will contact you within 24 hours to schedule your personalized demo.
                   </p>
                 </div>
               ) : (
                 <>
-                  <h3 className="text-2xl font-bold text-white mb-2">Request a Demo</h3>
+                  <h3 className="font-display text-2xl font-bold text-white mb-2">Request a Demo</h3>
                   <p className="text-white/50 mb-8">Fill out the form and we&apos;ll be in touch shortly.</p>
 
                   <form onSubmit={handleSubmit} className="space-y-5">
@@ -256,7 +261,7 @@ export function DemoSection() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="btn-primary w-full py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
                         <span className="flex items-center justify-center gap-2">

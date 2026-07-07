@@ -2,7 +2,42 @@
 
 import Link from "next/link";
 
-const modules = [
+// Two-tone accent system — gold (signal) + cyan (network), no rainbow.
+type Tone = "gold" | "cyan";
+
+const tones: Record<
+  Tone,
+  { glow: string; border: string; iconBg: string; check: string; badge: string; hover: string }
+> = {
+  gold: {
+    glow: "from-primary/12 to-transparent",
+    border: "hover:border-primary/40",
+    iconBg: "bg-primary/10 text-primary ring-1 ring-primary/20",
+    check: "text-primary",
+    badge: "bg-primary/15 text-primary border-primary/25",
+    hover: "group-hover:text-primary",
+  },
+  cyan: {
+    glow: "from-secondary/12 to-transparent",
+    border: "hover:border-secondary/40",
+    iconBg: "bg-secondary/10 text-secondary ring-1 ring-secondary/20",
+    check: "text-secondary",
+    badge: "bg-secondary/15 text-secondary border-secondary/25",
+    hover: "group-hover:text-secondary",
+  },
+};
+
+const modules: Array<{
+  id: string;
+  href: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  features: string[];
+  stat: { value: string; label: string };
+  icon: React.ReactNode;
+  tone: Tone;
+}> = [
   {
     id: "threat-intelligence",
     href: "/portal",
@@ -22,11 +57,7 @@ const modules = [
         <path d="M12 16l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
-    accent: "purple",
-    glow: "from-purple-500/20 to-transparent",
-    border: "hover:border-purple-500/40",
-    iconBg: "bg-purple-500/10 text-purple-400",
-    badge: "bg-purple-500/15 text-purple-300 border-purple-500/25",
+    tone: "gold",
   },
   {
     id: "dark-web",
@@ -49,11 +80,7 @@ const modules = [
         <path d="M6.4 10h19.2M6.4 22h19.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
       </svg>
     ),
-    accent: "blue",
-    glow: "from-blue-500/20 to-transparent",
-    border: "hover:border-blue-500/40",
-    iconBg: "bg-blue-500/10 text-blue-400",
-    badge: "bg-blue-500/15 text-blue-300 border-blue-500/25",
+    tone: "cyan",
   },
   {
     id: "brand-protection",
@@ -74,11 +101,7 @@ const modules = [
         <path d="M10 16l4 4 8-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
-    accent: "orange",
-    glow: "from-orange-500/20 to-transparent",
-    border: "hover:border-orange-500/40",
-    iconBg: "bg-orange-500/10 text-orange-400",
-    badge: "bg-orange-500/15 text-orange-300 border-orange-500/25",
+    tone: "gold",
   },
   {
     id: "attack-surface",
@@ -100,11 +123,7 @@ const modules = [
         <path d="M14 10v8M10 14h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
-    accent: "green",
-    glow: "from-green-500/20 to-transparent",
-    border: "hover:border-green-500/40",
-    iconBg: "bg-green-500/10 text-green-400",
-    badge: "bg-green-500/15 text-green-300 border-green-500/25",
+    tone: "cyan",
   },
   {
     id: "threat-reports",
@@ -126,11 +145,7 @@ const modules = [
         <path d="M20 4v4M28 12h-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
-    accent: "pink",
-    glow: "from-primary/20 to-transparent",
-    border: "hover:border-primary/40",
-    iconBg: "bg-primary/10 text-primary",
-    badge: "bg-primary/15 text-red-300 border-primary/25",
+    tone: "gold",
   },
   {
     id: "api-access",
@@ -151,20 +166,36 @@ const modules = [
         <line x1="14" y1="18" x2="26" y2="18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
-    accent: "teal",
-    glow: "from-teal-500/20 to-transparent",
-    border: "hover:border-teal-500/40",
-    iconBg: "bg-teal-500/10 text-teal-400",
-    badge: "bg-teal-500/15 text-teal-300 border-teal-500/25",
+    tone: "cyan",
   },
 ];
 
 export function Features() {
   return (
-    <section id="features" className="relative py-20 bg-ebony-950">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-primary/4 rounded-full blur-[180px]" />
-      </div>
+    <section id="features" className="relative py-20 bg-body-dark overflow-hidden">
+      {/* circuit-board backdrop + ambient glows — the section signature */}
+      <div className="absolute inset-0 circuit-grid opacity-40 pointer-events-none" />
+      <div className="absolute inset-0 glow-gold pointer-events-none" />
+      <div className="absolute inset-0 glow-cyan pointer-events-none" />
+
+      {/* faint PCB trace cluster, top-right */}
+      <svg
+        className="absolute top-6 right-6 w-72 h-44 opacity-20 pointer-events-none hidden lg:block"
+        viewBox="0 0 260 160"
+        fill="none"
+        aria-hidden="true"
+      >
+        <g stroke="#38e1d0" strokeWidth="1.2" strokeLinecap="round" className="circuit-trace">
+          <path d="M8 22 H96 L118 44 H196" />
+          <path d="M8 66 H64 L86 88 H160 L182 110 H252" />
+          <path d="M44 140 H128 L150 118 H222" />
+        </g>
+        <g fill="#f5b62c">
+          <circle cx="96" cy="22" r="2" /><circle cx="196" cy="44" r="2" />
+          <circle cx="160" cy="88" r="2" /><circle cx="222" cy="118" r="2" />
+          <circle cx="128" cy="140" r="2" />
+        </g>
+      </svg>
 
       <div className="relative z-10 max-w-[1680px] mx-auto px-6 lg:px-10">
 
@@ -173,9 +204,9 @@ export function Features() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-5">
             <span className="text-sm font-medium text-primary">6 Integrated Modules</span>
           </div>
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">
+          <h2 className="font-display text-4xl lg:text-5xl font-bold text-white mb-4">
             Everything Your SOC Needs
-            <span className="text-primary"> in One Platform</span>
+            <span className="gradient-text"> in One Platform</span>
           </h2>
           <p className="text-lg text-white/50 leading-relaxed">
             Threat intelligence, dark web monitoring, brand protection, attack surface
@@ -185,64 +216,67 @@ export function Features() {
 
         {/* 3-column grid on large, 2-col on md, 1-col on mobile */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {modules.map((m) => (
-            <Link
-              key={m.id}
-              href={m.href}
-              className={`group relative flex flex-col p-6 rounded-2xl bg-card-dark border border-white/10 ${m.border} transition-all duration-400 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/30`}
-            >
-              {/* hover gradient overlay */}
-              <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${m.glow} opacity-0 group-hover:opacity-100 transition-opacity duration-400`} />
+          {modules.map((m) => {
+            const t = tones[m.tone];
+            return (
+              <Link
+                key={m.id}
+                href={m.href}
+                className={`group relative flex flex-col p-6 rounded-2xl bg-card-dark border border-white/10 ${t.border} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/30`}
+              >
+                {/* hover gradient overlay */}
+                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${t.glow} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
-              <div className="relative z-10 flex flex-col h-full">
-                {/* top row */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${m.iconBg} group-hover:scale-105 transition-transform`}>
-                    {m.icon}
+                <div className="relative z-10 flex flex-col h-full">
+                  {/* top row */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${t.iconBg} group-hover:scale-105 transition-transform`}>
+                      {m.icon}
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${t.badge}`}>
+                      {m.stat.value} <span className="font-normal opacity-80">{m.stat.label}</span>
+                    </span>
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${m.badge}`}>
-                    {m.stat.value} <span className="font-normal opacity-80">{m.stat.label}</span>
-                  </span>
+
+                  {/* title */}
+                  <h3 className={`font-display text-lg font-semibold text-white mb-0.5 transition-colors ${t.hover}`}>
+                    {m.title}
+                  </h3>
+                  <p className="text-xs text-white/35 mb-3">{m.subtitle}</p>
+
+                  {/* description */}
+                  <p className="text-sm text-white/55 leading-relaxed mb-4 flex-1">
+                    {m.description}
+                  </p>
+
+                  {/* feature bullets */}
+                  <ul className="space-y-2">
+                    {m.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-white/50">
+                        <svg className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${t.check}`} viewBox="0 0 16 16" fill="currentColor">
+                          <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                        </svg>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* bottom link arrow */}
+                  <div className={`mt-5 pt-4 border-t border-white/10 flex items-center gap-1.5 text-xs font-medium text-white/30 transition-colors ${t.hover}`}>
+                    Explore module
+                    <svg className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </div>
                 </div>
-
-                {/* title */}
-                <h3 className="text-lg font-semibold text-white mb-0.5 group-hover:text-primary transition-colors">
-                  {m.title}
-                </h3>
-                <p className="text-xs text-white/35 mb-3">{m.subtitle}</p>
-
-                {/* description */}
-                <p className="text-sm text-white/55 leading-relaxed mb-4 flex-1">
-                  {m.description}
-                </p>
-
-                {/* feature bullets */}
-                <ul className="space-y-2">
-                  {m.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-white/50">
-                      <svg className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${m.iconBg.split(" ")[1]}`} viewBox="0 0 16 16" fill="currentColor">
-                        <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
-                      </svg>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* bottom link arrow */}
-                <div className="mt-5 pt-4 border-t border-white/6 flex items-center gap-1.5 text-xs font-medium text-white/30 group-hover:text-primary transition-colors">
-                  Explore module
-                  <svg className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
 
         {/* bottom CTA */}
         <div className="mt-12 text-center">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 px-8 py-3.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-full transition-all shadow-lg shadow-primary/25"
+            className="btn-primary rounded-full px-8 py-3.5"
           >
             Get Started Free
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

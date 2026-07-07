@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { JichoLogo } from "@/components/brand/JichoMark";
 
 const footerLinks = {
   Products: [
@@ -65,34 +65,44 @@ const socialLinks = [
 
 export function Footer() {
   return (
-    <footer className="bg-ebony-950 border-t border-white/10">
+    <footer className="relative bg-ebony-950 border-t border-white/10">
+      {/* Circuit-grid top border — a thin band of PCB grid fading into the ink */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-28 circuit-grid opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"
+      />
+
       {/* CTA Section */}
-      <div className="max-w-[1680px] mx-auto px-8 py-16">
-        <div className="relative p-12 rounded-3xl bg-gradient-to-r from-primary/20 via-card-dark to-purple-600/20 border border-white/10 overflow-hidden">
+      <div className="relative max-w-[1680px] mx-auto px-8 py-16">
+        <div className="relative p-12 rounded-3xl bg-gradient-to-r from-primary/20 via-card-dark to-secondary/20 border border-white/10 overflow-hidden">
           {/* Background Elements */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 rounded-full blur-[100px]" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600/20 rounded-full blur-[80px]" />
-          
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/20 rounded-full blur-[80px]" />
+
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
             <div>
-              <h3 className="text-3xl lg:text-4xl font-bold text-white mb-4">
+              <h3 className="font-display text-3xl lg:text-4xl font-bold text-white mb-4">
                 Ready to Secure Your Organization?
               </h3>
               <p className="text-xl text-white/60 max-w-2xl">
-                Start your free trial today and get access to Africa&apos;s most comprehensive 
-                cyber threat intelligence platform.
+                Cyber threat intelligence built for organizations across Africa —
+                real-time visibility and actionable alerts. Start a free trial today.
               </p>
             </div>
             <div className="flex flex-wrap gap-4">
               <Link
                 href="/signup"
-                className="px-8 py-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-full transition-all shadow-lg shadow-primary/25 whitespace-nowrap"
+                className="px-8 py-4 bg-primary hover:bg-primary-hover text-ebony-950 font-semibold rounded-full transition-all shadow-lg shadow-primary/25 whitespace-nowrap"
               >
                 Start Free Trial
               </Link>
               <Link
                 href="#demo"
-                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-full border border-white/10 transition-all whitespace-nowrap"
+                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-full border border-white/10 hover:border-secondary/50 transition-all whitespace-nowrap"
               >
                 Request Demo
               </Link>
@@ -102,33 +112,17 @@ export function Footer() {
       </div>
 
       {/* Main Footer */}
-      <div className="max-w-[1680px] mx-auto px-8 py-16 border-t border-white/10">
+      <div className="relative max-w-[1680px] mx-auto px-8 py-16 border-t border-white/10">
         <div className="grid lg:grid-cols-6 gap-12">
           {/* Brand Column */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-3 mb-6">
-              <div className="relative w-10 h-10">
-                <Image
-                  src="/jichosec.png"
-                  alt="JichoSec"
-                  width={40}
-                  height={40}
-                  className="rounded-lg"
-                />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-baseline">
-                  <span className="text-xl font-bold text-white">Jicho</span>
-                  <span className="text-xl font-bold text-primary">Sec</span>
-                </div>
-                <span className="text-[10px] text-white/50 -mt-0.5 tracking-wider">
-                  CYBER INTELLIGENCE
-                </span>
-              </div>
+            <Link href="/" className="inline-flex items-center mb-6" aria-label="JichoSec home">
+              <JichoLogo size={40} wordClassName="text-white" />
             </Link>
             <p className="text-white/50 mb-6 max-w-sm">
-              Africa&apos;s premier cyber threat intelligence platform. Protecting 
-              organizations with real-time threat visibility and actionable security intelligence.
+              Cyber threat intelligence for organizations across Africa. Real-time
+              threat visibility and actionable security intelligence — the watchful
+              eye over African cyberspace.
             </p>
             <div className="flex gap-4">
               {socialLinks.map((social) => (
@@ -137,7 +131,7 @@ export function Footer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors"
+                  className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-secondary border border-transparent hover:border-secondary/30 transition-colors"
                   aria-label={social.name}
                 >
                   {social.icon}
@@ -149,7 +143,7 @@ export function Footer() {
           {/* Link Columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
+              <h4 className="font-display text-sm font-semibold text-white uppercase tracking-wider mb-4">
                 {category}
               </h4>
               <ul className="space-y-3">
@@ -157,7 +151,7 @@ export function Footer() {
                   <li key={link.name}>
                     <Link
                       href={link.href}
-                      className="text-white/50 hover:text-white transition-colors text-sm"
+                      className="text-white/50 hover:text-secondary transition-colors text-sm"
                     >
                       {link.name}
                     </Link>
@@ -170,19 +164,19 @@ export function Footer() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-white/10">
+      <div className="relative border-t border-white/10">
         <div className="max-w-[1680px] mx-auto px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-white/40">
             © {new Date().getFullYear()} JichoSec. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-            <Link href="/privacy" className="text-sm text-white/40 hover:text-white transition-colors">
+            <Link href="/privacy" className="text-sm text-white/40 hover:text-secondary transition-colors">
               Privacy
             </Link>
-            <Link href="/terms" className="text-sm text-white/40 hover:text-white transition-colors">
+            <Link href="/terms" className="text-sm text-white/40 hover:text-secondary transition-colors">
               Terms
             </Link>
-            <Link href="/security" className="text-sm text-white/40 hover:text-white transition-colors">
+            <Link href="/security" className="text-sm text-white/40 hover:text-secondary transition-colors">
               Security
             </Link>
           </div>

@@ -63,11 +63,11 @@ const plans = [
 
 export function Pricing() {
   return (
-    <section id="pricing" className="relative py-24 bg-card-dark">
-      {/* Background */}
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[150px]" />
-      </div>
+    <section id="pricing" className="relative py-24 bg-card-dark overflow-hidden">
+      {/* circuit-board backdrop + ambient glows */}
+      <div className="absolute inset-0 circuit-grid opacity-40 pointer-events-none" />
+      <div className="absolute inset-0 glow-gold pointer-events-none" />
+      <div className="absolute inset-0 glow-cyan pointer-events-none" />
 
       <div className="relative z-10 max-w-[1680px] mx-auto px-8">
         {/* Section Header */}
@@ -75,9 +75,9 @@ export function Pricing() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6">
             <span className="text-sm font-medium text-primary">Pricing</span>
           </div>
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6">
+          <h2 className="font-display text-4xl lg:text-5xl font-bold text-white mb-6">
             Simple, Transparent
-            <span className="text-primary"> Pricing</span>
+            <span className="gradient-text"> Pricing</span>
           </h2>
           <p className="text-xl text-white/50">
             Choose the plan that fits your security needs. All plans include access to our 
@@ -92,20 +92,20 @@ export function Pricing() {
               key={plan.name}
               className={`relative p-8 rounded-2xl border transition-all duration-300 ${
                 plan.popular
-                  ? "bg-gradient-to-b from-primary/10 to-card-dark border-primary/30 scale-105 shadow-2xl shadow-primary/20"
-                  : "bg-ebony-950 border-white/10 hover:border-white/20"
+                  ? "bg-gradient-to-b from-primary/10 to-card-dark border-primary/40 scale-105 shadow-2xl shadow-glow-primary"
+                  : "bg-body-dark border-white/10 hover:border-white/20"
               }`}
             >
               {/* Popular Badge */}
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary rounded-full">
-                  <span className="text-sm font-semibold text-white">Most Popular</span>
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-primary-light to-primary shadow-glow-sm">
+                  <span className="text-sm font-semibold text-body-dark">Most Popular</span>
                 </div>
               )}
 
               {/* Plan Header */}
               <div className="mb-8">
-                <h3 className="text-xl font-semibold text-white mb-2">{plan.name}</h3>
+                <h3 className="font-display text-xl font-semibold text-white mb-2">{plan.name}</h3>
                 <div className="flex items-baseline gap-1 mb-4">
                   <span className={`text-4xl font-bold ${plan.popular ? "text-primary" : "text-white"}`}>
                     {plan.price}
@@ -130,10 +130,8 @@ export function Pricing() {
               {/* CTA Button */}
               <Link
                 href={plan.ctaLink}
-                className={`block w-full py-3.5 rounded-full text-center font-semibold transition-all ${
-                  plan.popular
-                    ? "bg-primary hover:bg-primary-hover text-white shadow-lg shadow-primary/25"
-                    : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                className={`w-full py-3.5 rounded-full ${
+                  plan.popular ? "btn-primary" : "btn-secondary"
                 }`}
               >
                 {plan.cta}

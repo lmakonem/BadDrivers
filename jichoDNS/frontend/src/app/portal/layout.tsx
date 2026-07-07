@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/fetch";
+import { JichoLogo } from "@/components/brand/JichoMark";
 
 // Icons as SVG components
 const DashboardIcon = () => (
@@ -228,11 +229,8 @@ export default function PortalLayout({
       >
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
-          <Link href="/portal" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">JS</span>
-            </div>
-            <span className="text-lg font-semibold text-white">JichoSec</span>
+          <Link href="/portal" className="flex items-center" aria-label="JichoSec">
+            <JichoLogo size={30} wordClassName="text-white" />
           </Link>
           <button
             className="lg:hidden text-gray-400 hover:text-white"

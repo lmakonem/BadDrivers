@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
-import { 
+import { JichoLogo } from "@/components/brand/JichoMark";
+import {
   Book, 
   Code, 
   Zap, 
@@ -24,28 +25,32 @@ const quickLinks = [
     description: "Complete API documentation with endpoints, authentication, and code examples.",
     href: "/docs/api",
     icon: Code,
-    color: "from-blue-500/20 to-blue-600/5"
+    color: "from-primary/20 to-primary/5",
+    iconColor: "text-primary"
   },
   {
     title: "Integration Guides",
     description: "Step-by-step guides for SIEM, SOAR, and security tool integrations.",
     href: "/docs/integration",
     icon: Plug,
-    color: "from-purple-500/20 to-purple-600/5"
+    color: "from-secondary/20 to-secondary/5",
+    iconColor: "text-secondary"
   },
   {
     title: "Python SDK",
     description: "Official Python SDK for seamless integration with your security stack.",
     href: "/docs/integration#python-sdk",
     icon: FileCode,
-    color: "from-green-500/20 to-green-600/5"
+    color: "from-primary/20 to-primary/5",
+    iconColor: "text-primary"
   },
   {
     title: "Webhook Events",
     description: "Real-time threat notifications via webhooks to your systems.",
     href: "/docs/integration#webhooks",
     icon: Zap,
-    color: "from-yellow-500/20 to-yellow-600/5"
+    color: "from-secondary/20 to-secondary/5",
+    iconColor: "text-secondary"
   }
 ];
 
@@ -103,24 +108,28 @@ const platformFeatures = [
 
 export default function DocsPage() {
   return (
-    <main className="min-h-screen bg-ebony-950">
+    <main className="min-h-screen bg-body-dark">
       <Header />
-      
+
       {/* Hero Section */}
       <section className="pt-40 pb-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
-        
+        <div className="absolute inset-0 circuit-grid opacity-60" />
+        <div className="absolute inset-0 glow-gold" />
+        <div className="absolute inset-0 glow-cyan" />
+
         <div className="max-w-[1680px] mx-auto px-8 relative z-10">
           <div className="flex items-center gap-2 text-white/60 mb-6">
             <Link href="/" className="hover:text-white transition-colors">Home</Link>
             <span>/</span>
             <span className="text-white">Documentation</span>
           </div>
-          
+
           <div className="max-w-3xl">
-            <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6">
-              JichoSec Documentation
+            <div className="mb-6">
+              <JichoLogo size={34} />
+            </div>
+            <h1 className="font-display text-4xl lg:text-5xl font-bold text-white mb-6">
+              JichoSec <span className="gradient-text">Documentation</span>
             </h1>
             <p className="text-xl text-white/60 mb-8">
               Everything you need to integrate Africa&apos;s leading cyber threat intelligence 
@@ -128,17 +137,11 @@ export default function DocsPage() {
             </p>
             
             <div className="flex flex-wrap gap-4">
-              <Link 
-                href="/docs/api"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-full transition-all"
-              >
+              <Link href="/docs/api" className="btn-primary">
                 <Code className="w-5 h-5" />
                 API Reference
               </Link>
-              <Link 
-                href="/docs/integration"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full border border-white/10 transition-all"
-              >
+              <Link href="/docs/integration" className="btn-secondary">
                 <Plug className="w-5 h-5" />
                 Integration Guides
               </Link>
@@ -158,7 +161,7 @@ export default function DocsPage() {
                 className="group p-6 rounded-2xl bg-card-dark border border-white/10 hover:border-primary/30 transition-all duration-300"
               >
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${link.color} flex items-center justify-center mb-4`}>
-                  <link.icon className="w-6 h-6 text-white" />
+                  <link.icon className={`w-6 h-6 ${link.iconColor}`} />
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-primary transition-colors">
                   {link.title}
@@ -183,7 +186,7 @@ export default function DocsPage() {
             <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
               <Zap className="w-5 h-5 text-primary" />
             </div>
-            <h2 className="text-3xl font-bold text-white">Getting Started</h2>
+            <h2 className="font-display text-3xl font-bold text-white">Getting Started</h2>
           </div>
           <p className="text-white/60 mb-12 max-w-2xl">
             Get up and running with JichoSec in minutes. Follow these steps to make your first API call.
@@ -222,7 +225,7 @@ export default function DocsPage() {
             <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
               <Book className="w-5 h-5 text-primary" />
             </div>
-            <h2 className="text-3xl font-bold text-white">Platform Overview</h2>
+            <h2 className="font-display text-3xl font-bold text-white">Platform Overview</h2>
           </div>
           <p className="text-white/60 mb-12 max-w-2xl">
             JichoSec provides comprehensive cyber threat intelligence with a focus on African organizations 
@@ -255,7 +258,7 @@ export default function DocsPage() {
                 <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                   <Key className="w-5 h-5 text-primary" />
                 </div>
-                <h2 className="text-3xl font-bold text-white">Authentication</h2>
+                <h2 className="font-display text-3xl font-bold text-white">Authentication</h2>
               </div>
               <p className="text-white/60 mb-6">
                 JichoSec uses API keys for authentication. Include your API key in the 
@@ -339,7 +342,7 @@ export default function DocsPage() {
       <section className="py-20 border-t border-white/10">
         <div className="max-w-[1680px] mx-auto px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-4">Rate Limits by Plan</h2>
+            <h2 className="font-display text-3xl font-bold text-white mb-4">Rate Limits by Plan</h2>
             <p className="text-white/60 max-w-2xl mx-auto">
               Choose the plan that fits your organization&apos;s needs. Upgrade anytime as your requirements grow.
             </p>
@@ -356,7 +359,7 @@ export default function DocsPage() {
             </div>
             
             <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/20 to-card-dark border border-primary/30 text-center relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary rounded-full text-xs font-medium text-white">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary rounded-full text-xs font-semibold text-[#231a02]">
                 Most Popular
               </div>
               <h3 className="text-lg font-semibold text-white mb-2">Pro</h3>
@@ -395,23 +398,16 @@ export default function DocsPage() {
           <div className="p-8 rounded-3xl bg-card-dark border border-white/10">
             <div className="grid md:grid-cols-2 gap-8 items-center">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-4">Need Help?</h2>
+                <h2 className="font-display text-2xl font-bold text-white mb-4">Need Help?</h2>
                 <p className="text-white/60 mb-6">
                   Our security engineering team is here to help you get the most out of JichoSec. 
                   From implementation support to custom integrations, we&apos;ve got you covered.
                 </p>
                 <div className="flex flex-wrap gap-4">
-                  <Link 
-                    href="mailto:support@jichosec.io"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-full transition-all"
-                  >
+                  <Link href="mailto:support@jichosec.io" className="btn-primary">
                     Contact Support
                   </Link>
-                  <Link 
-                    href="https://github.com/jichosec"
-                    target="_blank"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full border border-white/10 transition-all"
-                  >
+                  <Link href="https://github.com/jichosec" target="_blank" className="btn-secondary">
                     GitHub
                   </Link>
                 </div>

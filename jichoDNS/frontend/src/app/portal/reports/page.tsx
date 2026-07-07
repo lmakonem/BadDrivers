@@ -540,7 +540,7 @@ export default function ReportsPage() {
       {/* ── Report Viewer Modal (portalled to body) ────────────────────── */}
       {viewingReport && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 bg-black/80 flex flex-col" style={{ zIndex: 9999 }}>
-          <div className="flex items-center justify-between px-6 py-3 bg-[#191A34] border-b border-white/10">
+          <div className="flex items-center justify-between px-6 py-3 bg-card-dark border-b border-white/10">
             <div className="flex items-center gap-3 min-w-0">
               <h2 className="text-white font-semibold truncate max-w-md">{viewingReport.title}</h2>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${reportTypeColors[viewingReport.type] || ""}`}>
@@ -577,7 +577,7 @@ export default function ReportsPage() {
       {/* ── Generate Report Modal (portalled to body) ────────────────────── */}
       {showGenerateModal && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-          <div className="bg-[#191A34] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-card-dark border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-white/10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white flex items-center gap-2">

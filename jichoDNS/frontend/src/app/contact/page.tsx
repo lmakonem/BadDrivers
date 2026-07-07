@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
+import { JichoMark } from "@/components/brand/JichoMark";
 
 const offices = [
   {
@@ -106,21 +107,23 @@ export default function ContactPage() {
   };
 
   return (
-    <main className="min-h-screen bg-ebony-950">
+    <main className="min-h-screen bg-body-dark">
       <Header />
 
       {/* Hero Section */}
       <section className="relative pt-40 pb-20 overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[150px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-[100px]" />
+        <div className="absolute inset-0 circuit-grid opacity-60" />
+        <div className="absolute inset-0 glow-gold" />
+        <div className="absolute inset-0 glow-cyan" />
 
         <div className="relative z-10 max-w-[1680px] mx-auto px-8">
           <div className="max-w-4xl mx-auto text-center">
-            <span className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
+              <JichoMark size={18} />
               Contact Us
             </span>
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-              Get in Touch
+            <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-6">
+              Get in <span className="gradient-text">Touch</span>
             </h1>
             <p className="text-xl text-white/60 max-w-2xl mx-auto">
               Have questions about our platform? Want to schedule a demo? 
@@ -136,7 +139,7 @@ export default function ContactPage() {
           <div className="grid lg:grid-cols-2 gap-16">
             {/* Contact Form */}
             <div className="bg-card-dark rounded-2xl border border-white/10 p-8 lg:p-12">
-              <h2 className="text-2xl font-bold text-white mb-2">Send us a message</h2>
+              <h2 className="font-display text-2xl font-bold text-white mb-2">Send us a message</h2>
               <p className="text-white/60 mb-8">
                 Fill out the form below and we&apos;ll get back to you within 24 hours.
               </p>
@@ -168,7 +171,7 @@ export default function ContactPage() {
                       value={formData.name}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
                       placeholder="John Doe"
                     />
                   </div>
@@ -183,7 +186,7 @@ export default function ContactPage() {
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
                       placeholder="john@company.com"
                     />
                   </div>
@@ -200,7 +203,7 @@ export default function ContactPage() {
                       name="company"
                       value={formData.company}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors"
                       placeholder="Your Company"
                     />
                   </div>
@@ -214,7 +217,7 @@ export default function ContactPage() {
                       value={formData.subject}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white focus:outline-none focus:border-primary transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white focus:outline-none focus:border-secondary transition-colors"
                     >
                       <option value="">Select a subject</option>
                       {subjects.map((subject) => (
@@ -237,7 +240,7 @@ export default function ContactPage() {
                     onChange={handleChange}
                     required
                     rows={6}
-                    className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-primary transition-colors resize-none"
+                    className="w-full px-4 py-3 rounded-xl bg-card-light border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-secondary transition-colors resize-none"
                     placeholder="Tell us how we can help..."
                   />
                 </div>
@@ -245,7 +248,7 @@ export default function ContactPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full px-8 py-4 bg-primary hover:bg-primary-hover text-white font-semibold rounded-full transition-all shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? "Sending..." : "Send Message"}
                 </button>
@@ -256,7 +259,7 @@ export default function ContactPage() {
             <div className="space-y-8">
               {/* Quick Contact */}
               <div className="bg-card-dark rounded-2xl border border-white/10 p-8">
-                <h3 className="text-xl font-semibold text-white mb-6">Quick Contact</h3>
+                <h3 className="font-display text-xl font-semibold text-white mb-6">Quick Contact</h3>
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -266,7 +269,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Sales Inquiries</p>
-                      <a href="mailto:sales@jichosec.com" className="text-primary hover:underline">
+                      <a href="mailto:sales@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
                         sales@jichosec.com
                       </a>
                     </div>
@@ -281,7 +284,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Technical Support</p>
-                      <a href="mailto:support@jichosec.com" className="text-primary hover:underline">
+                      <a href="mailto:support@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
                         support@jichosec.com
                       </a>
                     </div>
@@ -295,7 +298,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">General Inquiries</p>
-                      <a href="tel:+254201234567" className="text-primary hover:underline">
+                      <a href="tel:+254201234567" className="text-secondary hover:text-secondary-hover transition-colors">
                         +254 20 123 4567
                       </a>
                     </div>
@@ -309,7 +312,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="text-white font-medium">Security Issues</p>
-                      <a href="mailto:security@jichosec.com" className="text-primary hover:underline">
+                      <a href="mailto:security@jichosec.com" className="text-secondary hover:text-secondary-hover transition-colors">
                         security@jichosec.com
                       </a>
                     </div>
@@ -318,7 +321,7 @@ export default function ContactPage() {
               </div>
 
               {/* Response Time */}
-              <div className="bg-gradient-to-br from-primary/10 to-purple-600/10 rounded-2xl border border-white/10 p-8">
+              <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl border border-white/10 p-8">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
                     <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -339,16 +342,14 @@ export default function ContactPage() {
 
               {/* Map Placeholder */}
               <div className="bg-card-dark rounded-2xl border border-white/10 p-8">
-                <h3 className="text-xl font-semibold text-white mb-4">Our Locations</h3>
-                <div className="aspect-video bg-card-light rounded-xl border border-white/10 flex items-center justify-center">
-                  <div className="text-center">
-                    <svg className="w-12 h-12 text-white/30 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"/>
-                      <path d="M2 12h20"/>
-                      <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-                    </svg>
-                    <p className="text-white/40">Interactive Map</p>
-                    <p className="text-white/30 text-sm">Nairobi | Lagos | Johannesburg</p>
+                <h3 className="font-display text-xl font-semibold text-white mb-4">Our Locations</h3>
+                <div className="relative aspect-video bg-card-light rounded-xl border border-white/10 flex items-center justify-center overflow-hidden">
+                  <div className="absolute inset-0 circuit-grid opacity-70" />
+                  <div className="absolute inset-0 glow-cyan" />
+                  <div className="relative z-10 text-center">
+                    <JichoMark size={44} className="mx-auto mb-3" />
+                    <p className="text-white/50">Interactive Map</p>
+                    <p className="text-white/30 text-sm">Nairobi &middot; Lagos &middot; Johannesburg</p>
                   </div>
                 </div>
               </div>
@@ -358,10 +359,10 @@ export default function ContactPage() {
       </section>
 
       {/* Office Locations */}
-      <section className="py-20 bg-card-dark/50">
+      <section className="py-20 bg-card-dark/40">
         <div className="max-w-[1680px] mx-auto px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-white mb-4">
               Visit Our Offices
             </h2>
             <p className="text-white/60 text-lg max-w-2xl mx-auto">
@@ -383,7 +384,7 @@ export default function ContactPage() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-white">{office.city}</h3>
+                    <h3 className="font-display text-xl font-semibold text-white">{office.city}</h3>
                     <p className="text-primary text-sm">{office.type}</p>
                   </div>
                 </div>
@@ -402,7 +403,7 @@ export default function ContactPage() {
                       <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                       </svg>
-                      <a href={`mailto:${office.email}`} className="text-primary hover:underline">
+                      <a href={`mailto:${office.email}`} className="text-secondary hover:text-secondary-hover transition-colors">
                         {office.email}
                       </a>
                     </p>

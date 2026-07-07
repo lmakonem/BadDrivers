@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/fetch";
+import { JichoMark } from "@/components/brand/JichoMark";
 
 // Types
 interface OverviewStats {
@@ -415,12 +416,18 @@ export default function PortalDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* Ambient brand glow — the watchful eye's ambient light */}
+      <div aria-hidden className="glow-gold pointer-events-none absolute inset-x-0 -top-4 h-72" />
+
       {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-gray-400 mt-1">Welcome back! Here&apos;s your security overview.</p>
+      <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <JichoMark size={38} />
+          <div>
+            <h1 className="text-2xl font-bold font-display text-white">Dashboard</h1>
+            <p className="text-gray-400 mt-1">Welcome back! Here&apos;s your security overview.</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">
@@ -446,11 +453,11 @@ export default function PortalDashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-gray-400 text-sm font-medium">Total IOCs</p>
-              <p className="text-3xl font-bold text-white mt-2">
+              <p className="text-3xl font-bold font-display text-white mt-2">
                 {stats?.totalIOCs.toLocaleString()}
               </p>
             </div>
-            <div className="p-3 bg-blue-500/10 rounded-xl">
+            <div className="p-3 bg-secondary/10 text-secondary rounded-xl">
               <DatabaseIcon />
             </div>
           </div>
@@ -475,9 +482,9 @@ export default function PortalDashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-gray-400 text-sm font-medium">Active Alerts</p>
-              <p className="text-3xl font-bold text-white mt-2">{stats?.activeAlerts}</p>
+              <p className="text-3xl font-bold font-display text-white mt-2">{stats?.activeAlerts}</p>
             </div>
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <BellIcon />
             </div>
           </div>
@@ -502,7 +509,7 @@ export default function PortalDashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-gray-400 text-sm font-medium">Risk Score</p>
-              <p className="text-3xl font-bold text-white mt-2">{stats?.riskScore}/100</p>
+              <p className="text-3xl font-bold font-display text-white mt-2">{stats?.riskScore}/100</p>
             </div>
             <div className="p-3 bg-orange-500/10 rounded-xl">
               <ShieldIcon />
@@ -537,11 +544,11 @@ export default function PortalDashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-gray-400 text-sm font-medium">Assets Monitored</p>
-              <p className="text-3xl font-bold text-white mt-2">
+              <p className="text-3xl font-bold font-display text-white mt-2">
                 {stats?.assetsMonitored.toLocaleString()}
               </p>
             </div>
-            <div className="p-3 bg-purple-500/10 rounded-xl">
+            <div className="p-3 bg-secondary/10 text-secondary rounded-xl">
               <ServerIcon />
             </div>
           </div>

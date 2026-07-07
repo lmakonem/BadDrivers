@@ -2,169 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Inter font */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* Fonts are loaded via next/font (Sora + Inter + Geist Mono) in layout.tsx —
+   no render-blocking external @import. */
 
 :root {
-  /* SOCRadar-inspired color scheme */
-  --background: #0d0e1a;
-  --foreground: #ffffff;
-  --primary: #fe4562;
-  --primary-hover: #e63e57;
-  --card-bg: #191A34;
-  --card-bg-light: #2B2C44;
-  --text-muted: #9ca3af;
-  --border-color: rgba(255, 255, 255, 0.1);
+  /* JichoSec — signal-gold on navy ink, network-cyan accent */
+  --background: #080b14;
+  --foreground: #eef2fb;
+  --ink: #080b14;
+  --ink-2: #0c1120;
+  --surface: #111827;
+  --surface-2: #161f33;
+  --primary: #f5b62c;
+  --primary-hover: #e0a41f;
+  --primary-light: #ffcf5e;
+  --cyan: #38e1d0;
+  --card-bg: #111827;
+  --card-bg-light: #161f33;
+  --text-muted: #9fb0c9;
+  --border-color: rgba(159, 176, 201, 0.12);
 }
 
-html {
-  scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-/* SOCRadar-style button */
+/* Headings default to the display face */
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-full transition-all duration-300;
-  box-shadow: 0 4px 20px -5px rgba(254, 69, 98, 0.4);
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all duration-200;
+  color: #231a02;
+  background: linear-gradient(180deg, var(--primary-light), var(--primary));
+  box-shadow: 0 8px 28px -10px rgba(245, 182, 44, 0.55);
 }
-
-.btn-primary:hover {
-  box-shadow: 0 6px 30px -5px rgba(254, 69, 98, 0.6);
-}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 34px -10px rgba(245, 182, 44, 0.7); }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent hover:bg-white/5 text-white font-medium rounded-full border border-white/20 hover:border-white/30 transition-all duration-300;
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent text-white font-semibold rounded-xl border transition-all duration-200;
+  border-color: rgba(159, 176, 201, 0.2);
 }
+.btn-secondary:hover { border-color: var(--cyan); color: var(--cyan); }
 
-/* Card styles matching SOCRadar */
-.card-dark {
-  @apply bg-card-dark border border-white/10 rounded-2xl;
-}
+/* ── Cards ───────────────────────────────────────────────── */
+.card-dark { @apply bg-card-dark border border-white/10 rounded-2xl; }
+.card-light { @apply bg-card-light border border-white/10 rounded-2xl; }
 
-.card-light {
-  @apply bg-card-light border border-white/10 rounded-2xl;
-}
-
-/* Gradient text */
+/* Gradient text — gold to cyan */
 .gradient-text {
-  @apply bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent;
+  background: linear-gradient(100deg, var(--primary-light), var(--cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.gradient-gold {
+  background: linear-gradient(100deg, var(--primary-light), var(--primary-hover));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
-/* Mapbox overrides for dark theme */
-.mapboxgl-popup-content {
-  background: #191A34 !important;
-  color: #ffffff !important;
-  border-radius: 12px !important;
-  padding: 12px !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+/* ── Signature: the Jicho mark animations ────────────────── */
+.jm-sweep { transform-box: fill-box; transform-origin: center; animation: jicho-sweep 4.2s cubic-bezier(0.5, 0.15, 0.35, 1) infinite; }
+.jm-pulse { transform-box: fill-box; transform-origin: center; animation: jm-pulse 3.4s ease-in-out infinite; }
+.jm-static .jm-sweep, .jm-static .jm-pulse { animation: none; }
+@keyframes jicho-sweep { to { transform: rotate(360deg); } }
+@keyframes jm-pulse { 0%, 100% { opacity: 0.18; transform: scale(0.97); } 50% { opacity: 0.5; transform: scale(1.03); } }
+
+/* ── Circuit-board decorative motif ──────────────────────── */
+.circuit-grid { background-image: var(--tw-circuit, linear-gradient(rgba(56,225,208,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(56,225,208,0.05) 1px, transparent 1px)); background-size: 44px 44px; }
+.circuit-trace { stroke-dasharray: 4 4; animation: circuit-flow 3s linear infinite; }
+@keyframes circuit-flow { to { stroke-dashoffset: -24; } }
+
+/* Ambient glows for section backgrounds */
+.glow-gold { background: radial-gradient(600px 340px at 20% 0%, rgba(245,182,44,0.09), transparent 60%); }
+.glow-cyan { background: radial-gradient(560px 320px at 82% 10%, rgba(56,225,208,0.08), transparent 60%); }
+
+/* ── Mapbox / Leaflet dark overrides ─────────────────────── */
+.mapboxgl-popup-content, .leaflet-popup-content-wrapper {
+  background: #111827 !important; color: #eef2fb !important; border-radius: 12px !important;
+  padding: 12px !important; border: 1px solid rgba(159,176,201,0.14) !important;
 }
+.mapboxgl-popup-tip { border-top-color: #111827 !important; }
+.mapboxgl-ctrl-group, .mapboxgl-ctrl-group button { background: #111827 !important; }
+.mapboxgl-ctrl-group { border-radius: 8px !important; }
+.mapboxgl-ctrl-group button:hover { background-color: #161f33 !important; }
 
-.mapboxgl-popup-tip {
-  border-top-color: #191A34 !important;
-}
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: #0c1120; }
+::-webkit-scrollbar-thumb { background: #22304d; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2e3f63; }
+::selection { background: rgba(245, 182, 44, 0.28); }
 
-.mapboxgl-ctrl-group {
-  background: #191A34 !important;
-  border-radius: 8px !important;
-}
+/* ── Animations kept from before ─────────────────────────── */
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-pulse-ring { animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.bg-gradient-radial { background: radial-gradient(circle at center, var(--tw-gradient-from), var(--tw-gradient-to)); }
 
-.mapboxgl-ctrl-group button {
-  background-color: #191A34 !important;
-}
+.section-padding { @apply py-20 lg:py-32; }
+.link-hover { @apply relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all after:duration-300 hover:after:w-full; }
+.glass { @apply bg-white/5 backdrop-blur-md border border-white/10; }
 
-.mapboxgl-ctrl-group button:hover {
-  background-color: #2B2C44 !important;
-}
+/* Threat level colors (refined) */
+.threat-critical { color: #ff5d6b; }
+.threat-high { color: #ff9a4d; }
+.threat-medium { color: #f5cf4a; }
+.threat-low { color: #4bd991; }
+.threat-none { color: #63748f; }
 
-/* Custom scrollbar - SOCRadar style */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+/* Feature / module card hovers */
+.feature-card { @apply relative overflow-hidden transition-all duration-500; }
+.feature-card::before { content: ''; @apply absolute inset-0 bg-gradient-to-br from-primary/0 to-primary/0 transition-all duration-500; }
+.feature-card:hover::before { @apply from-primary/5 to-transparent; }
+.module-panel-item { @apply p-6 rounded-2xl bg-card-dark border border-white/10 transition-all duration-300; }
+.module-panel-item:hover { @apply border-primary/30 shadow-glow-sm; }
 
-::-webkit-scrollbar-track {
-  background: #191A34;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #2B2C44;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3d3e5c;
-}
-
-/* Animations */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(0.8); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-.animate-pulse-ring {
-  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Gradient backgrounds */
-.bg-gradient-radial {
-  background: radial-gradient(circle at center, var(--tw-gradient-from), var(--tw-gradient-to));
-}
-
-/* Section styling */
-.section-padding {
-  @apply py-20 lg:py-32;
-}
-
-/* Link hover effect */
-.link-hover {
-  @apply relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all after:duration-300 hover:after:w-full;
-}
-
-/* Glass effect */
-.glass {
-  @apply bg-white/5 backdrop-blur-md border border-white/10;
-}
-
-/* Threat level colors */
-.threat-critical { color: #ef4444; }
-.threat-high { color: #f97316; }
-.threat-medium { color: #eab308; }
-.threat-low { color: #22c55e; }
-.threat-none { color: #6b7280; }
-
-/* Feature card hover */
-.feature-card {
-  @apply relative overflow-hidden transition-all duration-500;
-}
-
-.feature-card::before {
-  content: '';
-  @apply absolute inset-0 bg-gradient-to-br from-primary/0 to-primary/0 transition-all duration-500;
-}
-
-.feature-card:hover::before {
-  @apply from-primary/5 to-transparent;
-}
-
-/* Module panel item (SOCRadar style) */
-.module-panel-item {
-  @apply p-6 rounded-2xl bg-card-dark border border-white/10 transition-all duration-300;
-}
-
-.module-panel-item:hover {
-  @apply border-primary/30 shadow-glow-sm;
+@media (prefers-reduced-motion: reduce) {
+  *, .jm-sweep, .jm-pulse, .circuit-trace, .animate-float { animation: none !important; }
+  html { scroll-behavior: auto; }
 }

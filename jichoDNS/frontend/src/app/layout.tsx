@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Sora, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
 });
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
@@ -34,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-gray-100`}
+        className={`${sora.variable} ${inter.variable} ${geistMono.variable} antialiased bg-body-dark text-slate-100`}
       >
         <Providers>{children}</Providers>
       </body>

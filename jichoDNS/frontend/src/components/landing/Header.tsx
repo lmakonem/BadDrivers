@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Menu, X, ChevronDown } from "lucide-react";
+import { JichoMark } from "@/components/brand/JichoMark";
 
 // ── All 6 product modules ────────────────────────────────────────────────────
 const PRODUCTS = [
@@ -192,20 +192,15 @@ export function Header() {
         <div className="max-w-[1680px] mx-auto px-8 h-[68px] flex items-center justify-between">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 shrink-0">
-            <div className="relative w-10 h-10">
-              <Image src="/jichosec.png" alt="JichoSec" width={40} height={40} className="rounded-lg" />
-            </div>
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+            <JichoMark size={38} className="transition-transform group-hover:scale-105" />
             <div className="flex flex-col justify-center">
-              <div className="flex items-baseline gap-0.5 leading-none">
-                <span className="text-[22px] font-black text-white tracking-tight">Jicho</span>
-                <span className="text-[22px] font-black text-primary tracking-tight">Sec</span>
+              <div className="flex items-baseline gap-0.5 leading-none font-display">
+                <span className="text-[22px] font-bold text-white tracking-tight">jicho</span>
+                <span className="text-[22px] font-bold text-primary tracking-tight">Sec</span>
               </div>
-              <span className="text-[9px] font-semibold text-white/40 tracking-[0.18em] uppercase mt-0.5">
-                Cyber Intelligence
-              </span>
-              <span className="text-[9px] text-white/25 leading-tight mt-0.5 max-w-[180px] hidden xl:block">
-                Africa&apos;s premier cyber threat intelligence platform
+              <span className="text-[9px] font-semibold text-white/40 tracking-[0.2em] uppercase mt-1">
+                Africa&apos;s Watchful Eye
               </span>
             </div>
           </Link>
