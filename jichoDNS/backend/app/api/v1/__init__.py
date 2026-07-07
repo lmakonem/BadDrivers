@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_tier
 from app.api.v1.endpoints import (
     admin,
     alerts_api,
@@ -67,7 +67,7 @@ router.include_router(
 )
 router.include_router(
     darkweb.router, prefix="/darkweb", tags=["Dark Web Monitoring"],
-    dependencies=_auth,
+    dependencies=[*_auth, Depends(require_tier("professional"))],
 )
 router.include_router(
     reports.router, prefix="/reports", tags=["Threat Reports"],
@@ -75,15 +75,15 @@ router.include_router(
 )
 router.include_router(
     asm.router, prefix="/asm", tags=["Attack Surface Management"],
-    dependencies=_auth,
+    dependencies=[*_auth, Depends(require_tier("enterprise"))],
 )
 router.include_router(
     brand.router, prefix="/brand", tags=["Brand Protection"],
-    dependencies=_auth,
+    dependencies=[*_auth, Depends(require_tier("professional"))],
 )
 router.include_router(
     intel.router, prefix="/intel", tags=["Intelligence"],
-    dependencies=_auth,
+    dependencies=[*_auth, Depends(require_tier("professional"))],
 )
 router.include_router(
     search.router, prefix="/search", tags=["Search"],
@@ -99,7 +99,7 @@ router.include_router(
 )
 router.include_router(
     darkweb_intel.router, prefix="/darkweb-intel", tags=["Dark Web Intel"],
-    dependencies=_auth,
+    dependencies=[*_auth, Depends(require_tier("professional"))],
 )
 router.include_router(
     misp.router, prefix="/misp", tags=["MISP"],

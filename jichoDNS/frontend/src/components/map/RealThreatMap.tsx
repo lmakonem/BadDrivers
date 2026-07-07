@@ -93,20 +93,18 @@ export default function RealThreatMap({
     return "";
   }, [apiBaseUrl]);
 
-  // WebSocket URL — derives from API URL or current origin
+  // WebSocket URL — derives from API URL or current origin.
+  // The /ws/iocs stream is intentionally PUBLIC: it must carry NO credential.
+  // Never append a token query param here — that would leak the JWT into the
+  // URL (browser history, proxy/access logs, Referer). Connect to the bare path.
   const wsUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
-    let base: string;
     if (effectiveApiUrl) {
-      base = effectiveApiUrl.replace(/^http/, "ws") + "/api/v1/ws/iocs";
-    } else {
-      // Same-origin: build WS URL from current page location
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      base = `${proto}//${window.location.host}/api/v1/ws/iocs`;
+      return effectiveApiUrl.replace(/^http/, "ws") + "/api/v1/ws/iocs";
     }
-    const token = localStorage.getItem("jichodns_access_token");
-    if (token) return `${base}?token=${encodeURIComponent(token)}`;
-    return base;
+    // Same-origin: build WS URL from current page location
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/api/v1/ws/iocs`;
   }, [effectiveApiUrl]);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -129,6 +127,8 @@ export default function RealThreatMap({
     animationId: 0,
     ws: null as WebSocket | null,
     wsReconnectTimeout: null as ReturnType<typeof setTimeout> | null,
+    wsReconnectAttempts: 0,   // for exponential backoff
+    wsMounted: true,          // false after unmount — blocks zombie reconnects
     selectedCountries:
       selectedCountries && selectedCountries.length > 0
         ? selectedCountries
@@ -219,17 +219,33 @@ export default function RealThreatMap({
   // Connect to WebSocket for real-time updates
   const connectWebSocket = useCallback(() => {
     if (!wsUrl) return;
-    
-    // Clean up existing connection
-    if (stateRef.current.ws) {
-      stateRef.current.ws.close();
+    // Don't (re)connect after the component has unmounted
+    if (!stateRef.current.wsMounted) return;
+
+    // Tear down any existing socket WITHOUT letting its handlers fire —
+    // otherwise the old socket's onclose would schedule a second reconnect
+    // loop and we'd get compounding reconnect storms.
+    const existing = stateRef.current.ws;
+    if (existing) {
+      existing.onopen = null;
+      existing.onmessage = null;
+      existing.onerror = null;
+      existing.onclose = null;
+      try { existing.close(); } catch { /* ignore */ }
     }
-    
+    // Cancel any pending reconnect timer before opening a fresh socket
+    if (stateRef.current.wsReconnectTimeout) {
+      clearTimeout(stateRef.current.wsReconnectTimeout);
+      stateRef.current.wsReconnectTimeout = null;
+    }
+
     const ws = new WebSocket(wsUrl);
     stateRef.current.ws = ws;
-    
+
     ws.onopen = () => {
       console.log("WebSocket connected");
+      // A clean open resets the backoff sequence
+      stateRef.current.wsReconnectAttempts = 0;
       setIsLoading(false);
       setError(null);
       // If we already have replay data loaded, keep replaying — don't block
@@ -281,10 +297,26 @@ export default function RealThreatMap({
       if (stateRef.current.allIndicators.length > 0) {
         setConnectionStatus("replay");
       }
-      // Reconnect quietly in background
+      // Guard: never reschedule after unmount (zombie reconnect)
+      if (!stateRef.current.wsMounted) return;
+
+      // Exponential backoff with jitter, capped, with a max-retry ceiling.
+      // Replay keeps the map alive, so giving up on live reconnects is fine.
+      const MAX_RECONNECT_ATTEMPTS = 8;
+      const attempt = stateRef.current.wsReconnectAttempts;
+      if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn(
+          `WebSocket reconnect cap reached (${MAX_RECONNECT_ATTEMPTS}); staying in replay mode`,
+        );
+        return;
+      }
+      stateRef.current.wsReconnectAttempts = attempt + 1;
+      // 1s, 2s, 4s, … capped at 30s, plus up to 30% random jitter
+      const backoff = Math.min(30000, 1000 * 2 ** attempt);
+      const delay = backoff + Math.random() * 0.3 * backoff;
       stateRef.current.wsReconnectTimeout = setTimeout(() => {
         connectWebSocket();
-      }, 10000);
+      }, delay);
     };
     
     ws.onerror = (err) => {
@@ -295,6 +327,10 @@ export default function RealThreatMap({
   }, [wsUrl]);
 
   useEffect(() => {
+    // (Re)arm the socket lifecycle for this mount
+    stateRef.current.wsMounted = true;
+    stateRef.current.wsReconnectAttempts = 0;
+
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
@@ -582,12 +618,22 @@ export default function RealThreatMap({
 
     // Cleanup
     return () => {
+      // Block any in-flight or scheduled reconnect from resurrecting the socket
+      stateRef.current.wsMounted = false;
       cancelAnimationFrame(stateRef.current.animationId);
-      if (stateRef.current.ws) {
-        stateRef.current.ws.close();
-      }
       if (stateRef.current.wsReconnectTimeout) {
         clearTimeout(stateRef.current.wsReconnectTimeout);
+        stateRef.current.wsReconnectTimeout = null;
+      }
+      if (stateRef.current.ws) {
+        // Detach handlers first so close() can't schedule a zombie reconnect
+        const sock = stateRef.current.ws;
+        sock.onopen = null;
+        sock.onmessage = null;
+        sock.onerror = null;
+        sock.onclose = null;
+        try { sock.close(); } catch { /* ignore */ }
+        stateRef.current.ws = null;
       }
       if (stateRef.current.liveTimeout) {
         clearTimeout(stateRef.current.liveTimeout);

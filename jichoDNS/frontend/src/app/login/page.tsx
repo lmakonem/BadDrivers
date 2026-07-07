@@ -85,7 +85,12 @@ function LoginForm() {
 
     try {
       await login(formData.email, formData.password);
-      const next = searchParams.get("next") || "/portal";
+      // Sanitize the post-login redirect to a same-site path only: require a
+      // single leading slash NOT followed by another slash or backslash. This
+      // rejects protocol-relative ("//evil.tld", "/\evil.tld") and absolute
+      // ("https://evil.tld") URLs, preventing an open redirect via ?next=.
+      const rawNext = searchParams.get("next");
+      const next = rawNext && /^\/(?![/\\])/.test(rawNext) ? rawNext : "/portal";
       router.push(next);
     } catch (err: unknown) {
       const message =

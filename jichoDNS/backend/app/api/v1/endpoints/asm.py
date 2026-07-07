@@ -30,8 +30,8 @@ from app.services.attack_surface import AttackSurfaceManager, AssetType, ChangeT
 from app.services.elasticsearch import es_service
 from app.services.asm_enterprise import ASMEnterpriseService
 
-# Tiers that have access to ASM features
-ASM_TIERS = {"professional", "enterprise"}
+# Tiers that have access to ASM features — enterprise-locked to match the UI
+ASM_TIERS = {"enterprise"}
 
 
 def _require_asm_tier(user: User) -> None:
@@ -41,7 +41,7 @@ def _require_asm_tier(user: User) -> None:
     if user.tier not in ASM_TIERS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Attack Surface Management requires a Professional or Enterprise subscription.",
+            detail="Attack Surface Management requires an Enterprise subscription.",
         )
 
 

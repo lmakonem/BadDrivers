@@ -9,11 +9,10 @@ import asyncio
 import json
 import logging
 from typing import Set
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query as QueryParam
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
 from app.core.config import settings
-from app.core.security import decode_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -129,16 +128,16 @@ async def ensure_subscriber_running():
 
 
 @router.websocket("/ws/iocs")
-async def websocket_iocs(
-    websocket: WebSocket,
-    token: str = QueryParam(default=""),
-):
+async def websocket_iocs(websocket: WebSocket):
     """
     WebSocket endpoint for real-time IOC streaming.
-    
-    Accepts an optional JWT token as query parameter: /ws/iocs?token=<jwt>
-    Public access allowed so the landing-page threat map works for everyone.
-    
+
+    Intentionally PUBLIC — no authentication. This stream powers the
+    landing-page live threat map, which must work for anonymous visitors.
+    It broadcasts only already-public threat-feed IOCs, so no credential is
+    required or accepted (do NOT add a token query param — that would leak
+    the JWT into URLs, logs, and proxies for no security benefit).
+
     Clients receive:
     - {"type": "connected", "message": "Connected to JichoDNS IOC stream"}
     - {"type": "new_iocs", "indicators": [...], "source": "urlhaus", "count": 10}

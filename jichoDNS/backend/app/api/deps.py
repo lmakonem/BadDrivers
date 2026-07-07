@@ -76,6 +76,41 @@ async def get_current_admin(
     return current_user
 
 
+# ── Subscription tier gating ──────────────────────────────────────────────────
+# Tier ordering: free < professional < enterprise. Admins bypass all tier gates.
+TIER_RANK = {
+    "free": 0,
+    "professional": 1,
+    "enterprise": 2,
+}
+
+
+def require_tier(min_tier: str):
+    """
+    Build a FastAPI dependency that requires the current user's subscription
+    tier to be at least ``min_tier`` (or the user to be an admin).
+
+    Tier rank: free(0) < professional(1) < enterprise(2). Unknown/None tiers
+    are treated as free. Admins always pass. Raises 403 otherwise.
+    """
+    required_rank = TIER_RANK.get(min_tier, 0)
+
+    async def _tier_dependency(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if current_user.is_admin:
+            return current_user
+        user_rank = TIER_RANK.get(current_user.tier or "free", 0)
+        if user_rank < required_rank:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Upgrade to {min_tier} to access this.",
+            )
+        return current_user
+
+    return _tier_dependency
+
+
 async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),

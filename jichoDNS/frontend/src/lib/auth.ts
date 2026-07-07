@@ -27,9 +27,13 @@ export function getRefreshToken(): string | null {
 export function setTokens(access: string, refresh: string): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, access);
   localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
-  // Also set a cookie so Next.js middleware can read it (httpOnly=false is
-  // intentional — middleware runs on the edge and needs to read the cookie).
-  document.cookie = `${ACCESS_TOKEN_KEY}=${access}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  // Also set a cookie so Next.js middleware can read it. httpOnly is left off
+  // deliberately — the edge middleware currently reads this cookie from JS to
+  // gate routes. `Secure` restricts it to HTTPS so the token never rides an
+  // http connection. TODO: the eventual fix is a full httpOnly migration where
+  // the backend sets the auth cookie via Set-Cookie (httpOnly + Secure) and the
+  // middleware relies on that instead of a JS-readable value.
+  document.cookie = `${ACCESS_TOKEN_KEY}=${access}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
 }
 
 export function clearTokens(): void {
@@ -156,6 +160,41 @@ async function fetchMe(accessToken: string): Promise<AuthUser> {
   });
   if (!res.ok) throw new Error("Failed to fetch user profile");
   return res.json();
+}
+
+/**
+ * Result of validating the current session against the server.
+ * - `ok`: the token is valid; `user` is the fresh server profile (cache updated).
+ * - `unauthorized`: a definitive 401 — the token is bad/expired and callers
+ *   should clear the session.
+ * - `error`: a transient failure (network error / 5xx) — callers should keep
+ *   the session and fall back to the cached user.
+ */
+export type MeResult =
+  | { status: "ok"; user: AuthUser }
+  | { status: "unauthorized" }
+  | { status: "error" };
+
+/**
+ * Validate an access token against GET /api/v1/auth/me and refresh the user
+ * cache on success. Unlike `fetchMe`, this never throws — it maps the outcome
+ * to a discriminated result so callers can tell a definitive 401 apart from a
+ * transient network/server error.
+ */
+export async function checkMe(accessToken: string): Promise<MeResult> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 401) return { status: "unauthorized" };
+    if (!res.ok) return { status: "error" };
+    const user = (await res.json()) as AuthUser;
+    setCachedUser(user);
+    return { status: "ok", user };
+  } catch {
+    // fetch() rejects only on network-level failure — treat as transient.
+    return { status: "error" };
+  }
 }
 
 export function logout(): void {

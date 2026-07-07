@@ -62,7 +62,8 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Email verification is not configured yet — show a helpful message
+    // There is no automated password-reset flow yet, so we don't send an email.
+    // Show an honest confirmation that routes the user to support instead.
     setSubmitted(true);
   };
 
@@ -85,18 +86,17 @@ export default function ForgotPasswordPage() {
             <div className="text-center">
               <div className="w-16 h-16 mx-auto rounded-full bg-primary/15 flex items-center justify-center mb-6">
                 <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <h2 className="font-display text-2xl font-bold text-white mb-2">Check Your Email</h2>
+              <h2 className="font-display text-2xl font-bold text-white mb-2">Contact support to reset</h2>
               <p className="text-white/50 mb-6">
-                If an account exists for <strong className="text-white">{email}</strong>, we&apos;ll
-                send password reset instructions shortly.
+                Self-service password reset isn&apos;t available yet. To reset the
+                password for <strong className="text-white">{email}</strong>, email
+                our team and we&apos;ll verify you and restore access.
               </p>
               <p className="text-white/40 text-sm mb-6">
-                Email delivery is being set up. If you don&apos;t receive an email,
-                please contact <a href="mailto:support@defendanddetect.com" className="text-primary hover:underline">support@defendanddetect.com</a> for
-                assistance.
+                Reach us at <a href="mailto:support@defendanddetect.com" className="text-primary hover:underline">support@defendanddetect.com</a>.
               </p>
               <Link href="/login" className="btn-primary">
                 Back to Login
@@ -106,7 +106,8 @@ export default function ForgotPasswordPage() {
             <>
               <h2 className="font-display text-3xl font-bold text-white mb-2">Reset Password</h2>
               <p className="text-white/50 mb-8">
-                Enter your email address and we&apos;ll send you instructions to reset your password.
+                Self-service reset isn&apos;t available yet. Enter your email and
+                we&apos;ll show you how to get back into your account.
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-5">
@@ -126,7 +127,7 @@ export default function ForgotPasswordPage() {
                   type="submit"
                   className="btn-primary w-full py-3.5 text-base"
                 >
-                  Send Reset Link
+                  Continue
                 </button>
               </form>
 

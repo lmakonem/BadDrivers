@@ -15,6 +15,8 @@ import {
   login as authLogin,
   register as authRegister,
   clearTokens,
+  checkMe,
+  refreshAccessToken,
 } from "./auth";
 
 interface AuthContextValue {
@@ -36,14 +38,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Hydrate from localStorage on mount
+  // On mount, validate any stored token against the server before painting the
+  // portal — this avoids the "logged-in-but-stale / first-call-401" symptom
+  // where the UI trusts a cached user that the server has since rejected.
+  // `loading` stays true until validation resolves so nothing renders a stale
+  // user in the meantime.
   useEffect(() => {
-    const token = getAccessToken();
-    if (token) {
+    let cancelled = false;
+
+    async function hydrate() {
+      const token = getAccessToken();
+      if (!token) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Kept only as a fallback for transient failures — never painted while
+      // `loading` is still true.
       const cached = getCachedUser();
-      setUser(cached);
+
+      // Validate the token. On a definitive 401, try one refresh + retry.
+      let result = await checkMe(token);
+      if (result.status === "unauthorized") {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          result = await checkMe(refreshed);
+        }
+      }
+
+      if (cancelled) return;
+
+      if (result.status === "ok") {
+        // checkMe already refreshed the cached user.
+        setUser(result.user);
+      } else if (result.status === "error") {
+        // Transient network/server error — tolerate it and fall back to cache
+        // rather than logging the user out.
+        setUser(cached);
+      } else {
+        // Definitive 401 even after a refresh attempt — clear the session.
+        clearTokens();
+        setUser(null);
+      }
+      setLoading(false);
     }
-    setLoading(false);
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
