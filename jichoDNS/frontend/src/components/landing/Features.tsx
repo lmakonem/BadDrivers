@@ -106,7 +106,7 @@ const modules: Array<{
 
 export function Features() {
   return (
-    <section id="features" className="py-24 lg:py-32">
+    <section id="features" className="py-16 lg:py-24">
       <div className="max-w-[1200px] mx-auto px-6 lg:px-8">
 
         {/* section head — small green label + big left-aligned white title */}

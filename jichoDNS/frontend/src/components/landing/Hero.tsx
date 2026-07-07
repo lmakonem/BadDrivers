@@ -38,7 +38,7 @@ const TYPE_BG: Record<string, string> = {
 // No orbiting chips, no dashed scanner rings — flat, spacious, opsec-style.
 function HeroEye() {
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[440px] lg:max-w-[560px]">
+    <div className="relative mx-auto aspect-square w-full max-w-[380px] lg:max-w-[480px]">
       {/* one soft radial glow — oversized so the right column reads as composed, not empty */}
       <div
         aria-hidden="true"
@@ -150,7 +150,7 @@ export function Hero() {
           Split: copy left, calm eye right. Lots of negative space.
          ════════════════════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden">
-        <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-28 lg:pt-32 pb-12 lg:pb-16">
+        <div className="relative z-10 mx-auto max-w-[1200px] px-6 lg:px-8 pt-28 lg:pt-32 pb-6 lg:pb-8">
           <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] items-center gap-8 lg:gap-10">
 
             {/* LEFT — copy */}
@@ -195,7 +195,7 @@ export function Hero() {
           Live threat map + console. All WebSocket/console logic preserved.
          ════════════════════════════════════════════════════════════════════ */}
       <section id="live" className="relative">
-        <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pt-4 lg:pt-8 pb-[clamp(4rem,8vw,7.5rem)]">
+        <div className="mx-auto max-w-[1200px] px-6 lg:px-8 pb-16 lg:pb-24">
 
           {/* section head — green uppercase label + big Space Grotesk title */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-10 lg:mb-12">
