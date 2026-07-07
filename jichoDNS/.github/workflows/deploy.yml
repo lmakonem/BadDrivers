@@ -74,7 +74,14 @@ jobs:
     # succeeded. `needs` already blocks on success; the explicit `success()`
     # documents intent and survives future `if:` edits.
     needs: test
-    if: success() && github.ref == 'refs/heads/main'
+    # MANUAL-ONLY: production now runs on an INTERNAL VM (VM 119, reached via a
+    # jump host on a non-standard SSH port) that GitHub-hosted runners cannot
+    # reach, and the legacy DEPLOY_HOST (23.150.68.201) was decommissioned.
+    # So a push to main runs the blocking test suite but does NOT auto-deploy;
+    # deploys are performed manually (rsync + restart / image rebuild) or via an
+    # explicit `workflow_dispatch` run once DEPLOY_HOST + SSH are re-pointed at
+    # the current infra. This prevents merges from firing a broken/misdirected deploy.
+    if: success() && github.event_name == 'workflow_dispatch'
     # Binds this job to the repo's Production environment. Add a MANUAL APPROVAL
     # gate in Settings > Environments > production > Required reviewers
     # (GitHub does not allow declaring reviewers in YAML). See ops action.
