@@ -199,11 +199,11 @@ export function Hero() {
 
           {/* section head — green uppercase label + big Space Grotesk title */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-10 lg:mb-12">
-            <div className="max-w-[760px]">
+            <div className="min-w-0">
               <span className="inline-block font-display text-[0.8rem] font-medium uppercase tracking-[0.16em] text-primary mb-4">
                 See it live
               </span>
-              <h2 className="font-display font-bold text-white leading-[1.12] tracking-tight text-[clamp(1.9rem,3.5vw,2.75rem)]">
+              <h2 className="font-display font-bold text-white leading-[1.12] tracking-tight text-[clamp(1.9rem,3.2vw,2.6rem)] whitespace-normal lg:whitespace-nowrap">
                 Africa&apos;s threats, resolving in real time.
               </h2>
             </div>
