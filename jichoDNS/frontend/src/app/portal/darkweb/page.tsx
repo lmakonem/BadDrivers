@@ -21,14 +21,6 @@ interface WatchMatch extends DWItem {
   matched_terms: string[];
 }
 
-interface Stats {
-  total_threats: number;
-  misp_intel: number;
-  new_last_24h: number;
-  by_type: Record<string, number>;
-  by_source: Record<string, number>;
-}
-
 interface Watchlist {
   id: number;
   name: string;
@@ -69,21 +61,10 @@ interface CrawlResult {
   tags: string[];
 }
 
-type Tab = "feed" | "crawl" | "credentials" | "watchlist" | "monitoring";
+type Tab = "crawl" | "credentials" | "watchlist" | "monitoring";
 
 export default function DarkWebPage() {
-  const [tab, setTab] = useState<Tab>("feed");
-
-  // Feed
-  const [items, setItems] = useState<DWItem[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [filterType, setFilterType] = useState("");
-  const [filterSource, setFilterSource] = useState("");
-  const [feedSearch, setFeedSearch] = useState("");
+  const [tab, setTab] = useState<Tab>("crawl");
 
   // Credentials
   const [creds, setCreds] = useState<CredItem[]>([]);
@@ -113,31 +94,6 @@ export default function DarkWebPage() {
   const [newType, setNewType] = useState<"keyword" | "brand" | "domain">("keyword");
 
   // ── Data fetching ──────────────────────────────────────────────────────
-
-  const fetchFeed = useCallback(async () => {
-    setLoading(true);
-    let url = `/api/v1/darkweb-intel/feed?page=${page}&page_size=30`;
-    if (filterType) url += `&threat_type=${filterType}`;
-    if (filterSource) url += `&source=${filterSource}`;
-    if (feedSearch.length >= 2) url += `&search=${encodeURIComponent(feedSearch)}`;
-    try {
-      const res = await apiFetch(url);
-      if (res.ok) {
-        const d = await res.json();
-        setItems(d.items || []);
-        setTotal(d.total || 0);
-        setTotalPages(d.pages || 1);
-      }
-    } catch { /* */ }
-    setLoading(false);
-  }, [page, filterType, filterSource, feedSearch]);
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/v1/darkweb-intel/stats`);
-      if (res.ok) setStats(await res.json());
-    } catch { /* */ }
-  }, []);
 
   const fetchCredentials = useCallback(async () => {
     setCredLoading(true);
@@ -200,15 +156,11 @@ export default function DarkWebPage() {
 
   // Auto-load ALL data on mount so tab counts are accurate
   useEffect(() => {
-    fetchStats();
     fetchWatchData();
     fetchCredentials();
     fetchCrawlResults();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Refetch feed when page/filters change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchFeed(); }, [page, filterType, filterSource]);
   // Refetch tab data when switching tabs with pagination
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === "credentials" && credPage > 1) fetchCredentials(); }, [credPage]);
@@ -266,7 +218,7 @@ export default function DarkWebPage() {
         <div>
           <p className="section-label mb-1">Dark Web Intelligence</p>
           <h1 className="font-display text-2xl font-bold text-white">Dark Web Monitoring</h1>
-          <p className="text-slate-400 mt-1">C2 infrastructure, phishing, MISP intel, credential leaks</p>
+          <p className="text-slate-400 mt-1">Tor &amp; .onion crawl results, breach credential leaks, and watchlist alerts</p>
         </div>
         <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-body-dark font-medium rounded-[10px] transition-colors flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -274,28 +226,26 @@ export default function DarkWebPage() {
         </button>
       </div>
 
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {[
-            { label: "Dark Web Threats", value: stats.total_threats, color: "text-primary" },
-            { label: "MISP Intel", value: stats.misp_intel, color: "text-secondary" },
-            { label: "Phishing", value: stats.by_type?.phishing || 0, color: "text-orange-400" },
-            { label: "C2 Servers", value: stats.by_type?.c2 || 0, color: "text-red-400" },
-            { label: "Watch Alerts", value: watchMatches.length, color: "text-white" },
-          ].map((s) => (
-            <div key={s.label} className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-3">
-              <p className={`text-xl font-bold ${s.color}`}>{(s.value || 0).toLocaleString()}</p>
-              <p className="text-xs text-slate-400">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Stats — genuine dark web metrics only (crawl posts, breach creds,
+          watch alerts, monitored terms). Clearnet C2/phishing/MISP counts
+          live on the dashboard, not here. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Dark Web Posts", value: crawlTotal, color: "text-primary" },
+          { label: "Credential Leaks", value: credTotal, color: "text-secondary" },
+          { label: "Watch Alerts", value: watchMatches.length, color: watchMatches.length > 0 ? "text-red-400" : "text-white" },
+          { label: "Monitored Terms", value: allTerms.length, color: "text-white" },
+        ].map((s) => (
+          <div key={s.label} className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-3">
+            <p className={`text-xl font-bold ${s.color}`}>{(s.value || 0).toLocaleString()}</p>
+            <p className="text-xs text-slate-400">{s.label}</p>
+          </div>
+        ))}
+      </div>
 
       {/* Tab bar — inside the sticky container so it scrolls with header */}
       <div className="-mx-4 px-4 lg:-mx-8 lg:px-8 flex gap-1 border-b border-[#1E2A3D] overflow-x-auto">
         {([
-          { id: "feed" as Tab, label: "Threat Feed", ct: total },
           { id: "crawl" as Tab, label: "Dark Web Crawl", ct: crawlTotal },
           { id: "credentials" as Tab, label: "Credential Leaks", ct: credTotal },
           { id: "watchlist" as Tab, label: "Watch Alerts", ct: watchMatches.length },
@@ -308,84 +258,6 @@ export default function DarkWebPage() {
         ))}
       </div>
       </div>{/* end sticky header */}
-
-      {/* ═══ FEED TAB ═══ */}
-      {tab === "feed" && (
-        <div className="space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            <input type="text" value={feedSearch} onChange={(e) => setFeedSearch(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { setPage(1); fetchFeed(); } }}
-              placeholder="Search C2 IPs, phishing URLs, MISP indicators..."
-              className="flex-1 min-w-[200px] px-4 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-primary/60 text-sm" />
-            <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
-              className="px-3 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white text-sm cursor-pointer focus:outline-none focus:border-primary/60">
-              <option value="" className="bg-card-dark">All Types</option>
-              <option value="c2" className="bg-card-dark">C2</option>
-              <option value="phishing" className="bg-card-dark">Phishing</option>
-              <option value="botnet" className="bg-card-dark">Botnet</option>
-            </select>
-            <select value={filterSource} onChange={(e) => { setFilterSource(e.target.value); setPage(1); }}
-              className="px-3 py-2 bg-white/5 border border-[#1E2A3D] rounded-[10px] text-white text-sm cursor-pointer focus:outline-none focus:border-primary/60">
-              <option value="" className="bg-card-dark">All Sources</option>
-              <option value="misp" className="bg-card-dark">MISP (AfISAC)</option>
-              <option value="phishtank" className="bg-card-dark">PhishTank</option>
-              <option value="openphish" className="bg-card-dark">OpenPhish</option>
-              <option value="sslbl" className="bg-card-dark">SSLBL</option>
-              <option value="feodotracker" className="bg-card-dark">FeodoTracker</option>
-            </select>
-            <button onClick={() => { setPage(1); fetchFeed(); }} className="px-4 py-2 bg-primary hover:bg-primary-hover text-body-dark rounded-[10px] text-sm font-medium transition-colors">Search</button>
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>
-          ) : items.length === 0 ? (
-            <div className="text-center py-16 bg-card-dark border border-[#1E2A3D] rounded-[14px]">
-              <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              <h3 className="text-lg text-white mb-2">No dark web threats found</h3>
-              <p className="text-slate-400 text-sm">No indicators match your current filters. Try widening the type or source, or clearing your search.</p>
-            </div>
-          ) : (
-            <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="text-left text-xs text-slate-400 border-b border-[#1E2A3D] bg-[#0f1629]">
-                      <th className="px-4 py-3 font-medium">Indicator</th>
-                      <th className="px-4 py-3 font-medium">Type</th>
-                      <th className="px-4 py-3 font-medium">Source</th>
-                      <th className="px-4 py-3 font-medium">Country</th>
-                      <th className="px-4 py-3 font-medium">Risk</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {items.map((it, i) => (
-                      <tr key={i} className="hover:bg-white/[0.02]">
-                        <td className="px-4 py-2.5"><p className="text-white text-sm font-mono truncate max-w-sm" title={it.indicator}>{it.indicator}</p>
-                          {it.misp_event_id ? <span className="text-xs text-secondary">MISP #{it.misp_event_id}</span> : null}</td>
-                        <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded font-medium ${tc(it.threat_type)}`}>{it.threat_type}</span></td>
-                        <td className="px-4 py-2.5 text-sm text-slate-400">{it.source}</td>
-                        <td className="px-4 py-2.5 text-sm text-slate-400">{it.country_code || "—"}</td>
-                        <td className="px-4 py-2.5"><div className="flex items-center gap-1"><div className="w-10 h-1.5 bg-white/10 rounded-full overflow-hidden"><div className={`h-full rounded-full ${it.risk_score >= 80 ? "bg-red-500" : it.risk_score >= 60 ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${it.risk_score}%` }} /></div><span className="text-xs text-slate-400">{it.risk_score}</span></div></td>
-                        <td className="px-4 py-2.5 text-xs text-slate-500">{it.created_at ? new Date(it.created_at).toLocaleDateString() : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-[#1E2A3D] bg-card-dark sticky bottom-0">
-                  <p className="text-sm text-slate-400">Page {page}/{totalPages} ({total.toLocaleString()} total)</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="px-3 py-1 text-sm bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white rounded-lg">Prev</button>
-                    <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="px-3 py-1 text-sm bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white rounded-lg">Next</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ═══ DARK WEB CRAWL TAB ═══ */}
       {tab === "crawl" && (

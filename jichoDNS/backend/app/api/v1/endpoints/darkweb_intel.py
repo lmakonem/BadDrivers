@@ -346,51 +346,84 @@ async def watchlist_matches(
     if not es_service.client:
         return {"matches": [], "total": 0, "watchlist_terms": all_terms}
 
-    # Search dark web data for watchlist terms
-    should_clauses = []
-    for term in all_terms[:20]:
-        should_clauses.append({"match_phrase": {"indicator": term}})
-        should_clauses.append({"match_phrase": {"tags": term}})
+    # Match watchlist terms against GENUINE dark web data — Tor/.onion crawl
+    # posts and breach credential exposures — NOT the clearnet IOC feed. (The
+    # clearnet C2/phishing/MISP indicators live on the dashboard + search.)
+    terms = [t for t in all_terms[:20] if t]
+    matches: List[dict] = []
 
+    # 1) Dark web crawl posts.
     try:
-        es_result = await es_service.client.search(
-            index="iocs",
-            body={
-                "query": {
-                    "bool": {
-                        "must": [_darkweb_filter()],
-                        "should": should_clauses,
-                        "minimum_should_match": 1,
-                    }
+        if await es_service.client.indices.exists(index="darkweb_posts"):
+            should = []
+            for term in terms:
+                for field in ("title", "body_text", "domains_found", "emails_found", "onion_links"):
+                    should.append({"match_phrase": {field: term}})
+            res = await es_service.client.search(
+                index="darkweb_posts",
+                body={
+                    "query": {"bool": {"should": should, "minimum_should_match": 1}},
+                    "sort": [{"discovered_at": {"order": "desc"}}],
+                    "size": limit,
                 },
-                "sort": [{"created_at": {"order": "desc"}}],
-                "size": limit,
-                "_source": [
-                    "indicator", "indicator_type", "threat_type", "source",
-                    "risk_score", "country_code", "tags", "created_at",
-                ],
-            },
-        )
-
-        matches = []
-        for hit in es_result["hits"]["hits"]:
-            item = hit["_source"]
-            matched = [
-                t for t in all_terms
-                if t.lower() in (item.get("indicator", "") + " " + " ".join(item.get("tags", []))).lower()
-            ]
-            item["matched_terms"] = matched
-            item["_score"] = hit["_score"]
-            matches.append(item)
-
-        return {
-            "matches": matches,
-            "total": es_result["hits"]["total"]["value"],
-            "watchlist_terms": all_terms,
-        }
+            )
+            for hit in res["hits"]["hits"]:
+                s = hit["_source"]
+                blob = " ".join(
+                    str(s.get(f, "")) for f in ("title", "body_text", "url", "domains_found", "emails_found")
+                ).lower()
+                matches.append({
+                    "indicator": s.get("title") or s.get("url") or "(dark web post)",
+                    "threat_type": "darkweb_post",
+                    "source": s.get("source") or "dark web",
+                    "matched_terms": [t for t in all_terms if t.lower() in blob],
+                    "created_at": s.get("discovered_at"),
+                })
     except Exception as e:
-        logger.error(f"Watchlist match error: {e}")
-        return {"matches": [], "total": 0, "watchlist_terms": all_terms}
+        logger.warning(f"Dark web post watchlist match error: {e}")
+
+    # 2) Breach credential exposures (scoped to the caller's owned domains).
+    try:
+        exists = await es_service.client.indices.exists(index="credential_exposures")
+        allowed = None
+        if exists and not current_user.is_admin:
+            allowed = await get_owned_domains(current_user, db)
+        if exists and (current_user.is_admin or allowed):
+            must = []
+            if allowed is not None:
+                must.append({"terms": {"domain": sorted(allowed)}})
+            res = await es_service.client.search(
+                index="credential_exposures",
+                body={
+                    "query": {
+                        "bool": {
+                            "must": must,
+                            "should": [{"terms": {"domain": [t.lower() for t in terms]}}],
+                            "minimum_should_match": 1,
+                        }
+                    },
+                    "sort": [{"discovered_at": {"order": "desc"}}],
+                    "size": limit,
+                },
+            )
+            for hit in res["hits"]["hits"]:
+                s = redact_credential(hit["_source"])
+                blob = (str(s.get("email", "")) + " " + str(s.get("domain", ""))).lower()
+                matches.append({
+                    "indicator": s.get("email") or s.get("domain") or "(credential)",
+                    "threat_type": "credential_leak",
+                    "source": s.get("source_name") or s.get("source") or "breach",
+                    "matched_terms": [t for t in all_terms if t.lower() in blob],
+                    "created_at": s.get("discovered_at"),
+                })
+    except Exception as e:
+        logger.warning(f"Credential watchlist match error: {e}")
+
+    return {
+        "matches": matches[:limit],
+        "total": len(matches),
+        "watchlist_terms": all_terms,
+    }
 
 
 @router.get("/crawl-results")
