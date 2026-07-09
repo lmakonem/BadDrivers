@@ -197,6 +197,14 @@ celery_app.conf.beat_schedule = {
         "schedule": timedelta(minutes=30),
     },
 
+    # === BRAND MONITOR SCAN (every 3 hours) ===
+    # Detect registered typosquats + IOC-feed hits + credential leaks per brand
+    # monitor and write brand_alerts.
+    "scan-brand-monitors": {
+        "task": "app.worker.scan_brand_monitors",
+        "schedule": timedelta(hours=3),
+    },
+
     # === MAINTENANCE ===
     "aggregate-regions": {
         "task": "app.worker.aggregate_region_scores",
@@ -1277,3 +1285,45 @@ def asm_scheduled_rescan():
         return {"clients_dispatched": dispatched, "clients_skipped": skipped}
 
     return run_async(_rescan())
+
+
+# =============================================================================
+# Brand monitor scan (every 3 hours)
+# =============================================================================
+
+@celery_app.task(name="app.worker.scan_brand_monitors", soft_time_limit=1500, time_limit=1740)
+def scan_brand_monitors():
+    """
+    Scan every active brand monitor for registered typosquats, IOC-feed hits,
+    and credential leaks, writing brand_alerts (deterministic ids -> upsert).
+    """
+    return run_async(_scan_brand_monitors())
+
+
+async def _scan_brand_monitors():
+    import time
+    from app.services.elasticsearch import es_service
+    from app.services.brand_protection import BrandProtectionService
+    from app.services.brand_scan import scan_all_brand_monitors
+
+    start = time.monotonic()
+    logger.info("Starting brand monitor scan...")
+    brand_svc = BrandProtectionService()
+    try:
+        await es_service.connect()
+        await brand_svc.connect()  # ensures brand_alerts mapping exists
+        result = await scan_all_brand_monitors(es_service.client, brand_svc)
+        duration = time.monotonic() - start
+        await _record_feed_health("brand_scan", True, result.get("total_alerts", 0), duration)
+        logger.info(f"Brand scan complete: {result} in {duration:.1f}s")
+        return {**result, "duration_seconds": duration}
+    except Exception as e:
+        logger.error(f"Brand scan error: {e}", exc_info=True)
+        await _record_feed_health("brand_scan", False, 0, time.monotonic() - start, str(e))
+        return {"error": str(e), "duration_seconds": time.monotonic() - start}
+    finally:
+        try:
+            await brand_svc.close()
+        except Exception:
+            pass
+        await es_service.close()

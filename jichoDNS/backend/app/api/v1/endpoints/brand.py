@@ -17,6 +17,7 @@ from elasticsearch import NotFoundError
 
 from app.api.deps import get_current_user
 from app.core.ownership import bare_domain
+from app.core.brand_util import GENERIC_IOC_WORDS, registrable_base
 from app.models.user import User
 from app.services.brand_protection import (
     BrandProtectionService,
@@ -570,40 +571,10 @@ async def get_brand_stats(current_user: User = Depends(get_current_user)):
 # Credential Leaks — per brand monitor (live query against credential_exposures)
 # =============================================================================
 
-# Generic words whose IOC matches are false positives (too broad)
-_GENERIC_IOC_WORDS = {
-    "orange", "telecom", "telkom", "openserve", "mobile", "airtel", "mtn",
-    "vodacom", "standard", "first", "national", "bank", "blue", "red",
-    # generic subdomain labels that must never become brand IOC search terms
-    "admin", "mail", "portal", "staging", "financing", "autodiscover", "api",
-    "app", "cdn", "dev", "www", "webmail", "remote", "vpn", "smtp", "test",
-}
-
-# Two-part public suffixes common in African ccTLDs, so we can extract the
-# registrable brand label instead of a subdomain label.
-_TWO_PART_SUFFIXES = {
-    "co.ke", "or.ke", "go.ke", "ac.ke", "co.za", "org.za", "gov.za", "ac.za",
-    "co.tz", "or.tz", "ac.tz", "go.tz", "co.ug", "ac.ug", "go.ug", "com.ng",
-    "gov.ng", "org.ng", "edu.ng", "com.gh", "gov.gh", "gov.cd", "co.zm",
-    "co.zw", "org.zw", "com.eg", "gov.eg", "com.dz", "co.ma", "com.tn",
-    "co.mz", "co.ao", "co.bw", "co.rw", "co.mw", "co.ci", "com.sn",
-}
-
-
-def _registrable_base(domain: str) -> str:
-    """
-    Registrable brand label of a domain (the SLD before the public suffix):
-    safaricom.co.ke -> safaricom, admin.fpi-rdc.cd -> fpi-rdc, www.bmoi.mg -> bmoi.
-    Collapses subdomains to the brand so generic subdomain labels
-    (admin/mail/portal/...) never become IOC search terms.
-    """
-    d = bare_domain(domain)
-    parts = [p for p in d.split(".") if p]
-    if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_PART_SUFFIXES:
-        return parts[-3]
-    if len(parts) >= 2:
-        return parts[-2]
-    return parts[0] if parts else ""
+# Brand-domain helpers (registrable base + generic-word denylist) live in
+# app.core.brand_util so the scanner (services/brand_scan.py) shares them.
+_GENERIC_IOC_WORDS = GENERIC_IOC_WORDS
+_registrable_base = registrable_base
 
 @router.get("/monitors/{monitor_id}/credentials")
 async def get_brand_credentials(
