@@ -142,6 +142,17 @@ class Settings(BaseSettings):
                     "(the development placeholder is not allowed). Generate one with: "
                     'python -c "import secrets; print(secrets.token_urlsafe(64))"'
                 )
+            # The admin session cookie (sqladmin) must be signed with a key
+            # DISTINCT from the JWT SECRET_KEY, so the JWT key can be rotated to
+            # revoke leaked tokens without invalidating every admin panel session
+            # — and so a single key leak does not compromise both auth systems.
+            if not self.SESSION_SECRET_KEY or self.SESSION_SECRET_KEY == self.SECRET_KEY:
+                raise ValueError(
+                    "SESSION_SECRET_KEY must be set in production to a strong value "
+                    "distinct from SECRET_KEY (it signs the admin session cookie; "
+                    "keeping it separate lets the JWT key rotate independently). "
+                    'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+                )
             # Billing is only active when a Stripe secret key is present; when it is,
             # the webhook MUST be signature-verified (fail-closed).
             if self.STRIPE_SECRET_KEY and not self.STRIPE_WEBHOOK_SECRET:

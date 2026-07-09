@@ -196,6 +196,10 @@ async def update_submission_status(
         raise HTTPException(404, "Submission not found")
     sub.status = new_status
     await db.flush()
+    logger.warning(
+        "admin.submission_status actor=%s(%s) submission=%s -> %s",
+        _admin.id, _admin.email, submission_id, new_status,
+    )
     return {"success": True, "submission_id": submission_id, "status": new_status}
 
 
@@ -212,6 +216,10 @@ async def promote_to_admin(
         raise HTTPException(404, "User not found")
     user.is_admin = True
     await db.flush()
+    logger.warning(
+        "admin.promote actor=%s(%s) target_user=%s granted_admin",
+        _admin.id, _admin.email, user_id,
+    )
     return {"success": True, "user_id": user_id, "is_admin": True}
 
 
@@ -229,6 +237,11 @@ async def update_user_tier(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
+    old_tier = user.tier
     user.tier = tier
     await db.flush()
+    logger.warning(
+        "admin.tier actor=%s(%s) target_user=%s %s -> %s",
+        _admin.id, _admin.email, user_id, old_tier, tier,
+    )
     return {"success": True, "user_id": user_id, "tier": tier}

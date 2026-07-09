@@ -77,6 +77,9 @@ services:
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
+      # so the JWT key can rotate independently. Required in production.
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # External APIs
@@ -107,7 +110,11 @@ services:
         condition: service_healthy
     networks:
       - jichodns-network
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --proxy-headers + --forwarded-allow-ips: trust X-Forwarded-Proto/For from the
+    # reverse proxy (Cloudflare tunnel via the docker bridge gateway) so redirects
+    # are https and client IPs are correct. Dev trusts only loopback; prod sets
+    # FORWARDED_ALLOW_IPS to its bridge gateway (e.g. 172.18.0.1) in .env.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}
 
   worker:
     build:
@@ -119,6 +126,9 @@ services:
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
+      # so the JWT key can rotate independently. Required in production.
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # External APIs
@@ -154,6 +164,9 @@ services:
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
+      # so the JWT key can rotate independently. Required in production.
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
       - ./backend:/app
