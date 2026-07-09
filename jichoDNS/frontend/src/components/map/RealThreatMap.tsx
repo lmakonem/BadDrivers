@@ -35,12 +35,15 @@ interface ThreatIndicator {
   tags: string[];
 }
 
-interface Attack {
+// A single geolocated IOC rendered as an ORIGIN "ping" on the map.
+// IOCs carry only an origin country (geo of the indicator) — they have no
+// victim/target field — so we never invent a destination. The map shows
+// where malicious activity ORIGINATES, not a fabricated attack path.
+interface Signal {
   id: number;
-  sourceCoord: { lat: number; lon: number };
-  targetCoord: { lat: number; lon: number };
-  sourceName: string;
-  targetName: string;
+  coord: { lat: number; lon: number };
+  originName: string;
+  originCode: string;
   color: string;
   progress: number;
   type: string;
@@ -48,9 +51,8 @@ interface Attack {
 }
 
 interface RealThreatMapProps {
-  onAttack?: (attack: {
-    source: { name: string; code: string };
-    target: { name: string; code: string };
+  onSignal?: (event: {
+    origin: { name: string; code: string };
     threatType: string;
     color: string;
     timestamp: Date;
@@ -60,8 +62,7 @@ interface RealThreatMapProps {
   onStatsUpdate?: (stats: {
     total: number;
     byType: Record<string, number>;
-    bySource: Record<string, number>;
-    byTarget: Record<string, number>;
+    byOrigin: Record<string, number>;
   }) => void;
   onConnectionStatus?: (status: "connecting" | "connected" | "disconnected" | "replay") => void;
   selectedCountries?: string[];
@@ -69,7 +70,7 @@ interface RealThreatMapProps {
 }
 
 export default function RealThreatMap({
-  onAttack,
+  onSignal,
   onStatsUpdate,
   onConnectionStatus,
   selectedCountries,
@@ -116,13 +117,12 @@ export default function RealThreatMap({
 
   const stateRef = useRef({
     map: null as L.Map | null,
-    attacks: [] as Attack[],
-    attackId: 0,
+    signals: [] as Signal[],
+    signalId: 0,
     stats: {
       total: 0,
       byType: {} as Record<string, number>,
-      bySource: {} as Record<string, number>,
-      byTarget: {} as Record<string, number>,
+      byOrigin: {} as Record<string, number>,
     },
     animationId: 0,
     ws: null as WebSocket | null,
@@ -133,7 +133,6 @@ export default function RealThreatMap({
       selectedCountries && selectedCountries.length > 0
         ? selectedCountries
         : AFRICAN_TARGETS,
-    onAttack,
     onStatsUpdate,
     onConnectionStatus,
     pendingIndicators: [] as ThreatIndicator[],
@@ -143,11 +142,12 @@ export default function RealThreatMap({
     setConnectionStatus: null as ((status: "connecting" | "connected" | "disconnected" | "replay") => void) | null,
     isLiveMode: true,  // Start in live mode, fall back to replay if no data
     liveTimeout: null as ReturnType<typeof setTimeout> | null,  // Timer for fallback to replay
+    onSignal,
   });
 
   // Keep callbacks and selected countries fresh
   useEffect(() => {
-    stateRef.current.onAttack = onAttack;
+    stateRef.current.onSignal = onSignal;
     stateRef.current.onStatsUpdate = onStatsUpdate;
     stateRef.current.onConnectionStatus = onConnectionStatus;
     stateRef.current.setConnectionStatus = setConnectionStatus;
@@ -155,7 +155,7 @@ export default function RealThreatMap({
       selectedCountries && selectedCountries.length > 0
         ? selectedCountries
         : AFRICAN_TARGETS;
-  }, [onAttack, onStatsUpdate, onConnectionStatus, selectedCountries]);
+  }, [onSignal, onStatsUpdate, onConnectionStatus, selectedCountries]);
 
   // Notify connection status changes
   useEffect(() => {
@@ -165,15 +165,17 @@ export default function RealThreatMap({
     stateRef.current.connectionStatus = connectionStatus;
   }, [connectionStatus]);
 
-  // Fetch ALL indicators for the replay pool (loaded in background)
+  // Fetch indicators for the replay pool (loaded in background)
   const fetchAllIndicators = useCallback(async () => {
     try {
-      // Fetch ALL indicators with geo data from last 24 hours (no limit)
+      // The public feed handler caps limit<=500 and since_minutes<=1440 (24h).
+      // Requesting beyond either cap returns HTTP 422 and the map loads 0 IOCs,
+      // so we stay strictly within the ceiling here.
       const token = typeof window !== "undefined" ? localStorage.getItem("jichodns_access_token") : null;
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const response = await fetch(
-        `${effectiveApiUrl}/api/v1/indicators/live/feed?limit=10000&since_minutes=10080`,
+        `${effectiveApiUrl}/api/v1/indicators/live/feed?limit=500&since_minutes=1440`,
         { headers },
       );
 
@@ -182,36 +184,33 @@ export default function RealThreatMap({
       }
 
       const data = await response.json();
-      
-      // Assign a country to indicators missing geo data so the map animates
-      const globalCodes = Object.keys(COUNTRY_COORDS);
-      const indicators: ThreatIndicator[] = (data.indicators || []).map(
-        (ind: ThreatIndicator) => {
-          if (!ind.country_code) {
-            ind.country_code = globalCodes[Math.floor(Math.random() * globalCodes.length)];
-          }
-          return ind;
-        }
+
+      // Keep only IOCs we can actually geolocate. Un-geolocated indicators are
+      // excluded from the map rather than being dropped at a random country —
+      // we never fabricate an origin.
+      const indicators: ThreatIndicator[] = (data.indicators || []).filter(
+        (ind: ThreatIndicator) => ind.country_code && COUNTRY_COORDS[ind.country_code],
       );
 
       // Reverse to show newest first when replaying
       indicators.reverse();
-      
+
       setTotalIndicators(indicators.length);
       stateRef.current.allIndicators = indicators;
       stateRef.current.currentReplayIndex = 0;
-      
+
       // Data is loaded — show the map and start replay immediately
       setIsLoading(false);
       setError(null);
       stateRef.current.isLiveMode = false;
       setConnectionStatus("replay");
-      
-      console.log(`Loaded ${indicators.length} indicators for replay pool`);
-      
+
+      console.log(`Loaded ${indicators.length} geolocated indicators for replay pool`);
+
     } catch (err) {
       console.error("Failed to fetch indicators for replay:", err);
-      // Even on error, stop loading so the map renders
+      // Even on error, stop loading so the map renders. The replay pool stays
+      // empty and the live WebSocket feed remains the source of activity.
       setIsLoading(false);
     }
   }, [effectiveApiUrl]);
@@ -368,28 +367,21 @@ export default function RealThreatMap({
     window.addEventListener("resize", resizeCanvas);
     map.on("move zoom", resizeCanvas);
 
-    // Create attack from real indicator
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const createAttackFromIndicator = (indicator: ThreatIndicator, _isReplay: boolean = false): Attack | null => {
-      const sourceCode = indicator.country_code;
-      if (!sourceCode || !COUNTRY_COORDS[sourceCode]) return null;
+    // Build an origin ping from a real indicator. Returns null when the
+    // indicator has no usable origin geo — we never fabricate a location,
+    // and there is no victim/target to invent.
+    const createSignal = (indicator: ThreatIndicator): Signal | null => {
+      const originCode = indicator.country_code;
+      if (!originCode || !COUNTRY_COORDS[originCode]) return null;
+      const origin = COUNTRY_COORDS[originCode];
 
-      // Pick a random African target from selected countries
-      const targets = stateRef.current.selectedCountries;
-      const targetCode = targets[Math.floor(Math.random() * targets.length)];
-      const target = COUNTRY_COORDS[targetCode];
-      const source = COUNTRY_COORDS[sourceCode];
-
-      if (!target) return null;
-
-      stateRef.current.attackId++;
+      stateRef.current.signalId++;
 
       return {
-        id: stateRef.current.attackId,
-        sourceCoord: { lat: source.lat, lon: source.lon },
-        targetCoord: { lat: target.lat, lon: target.lon },
-        sourceName: source.name,
-        targetName: target.name,
+        id: stateRef.current.signalId,
+        coord: { lat: origin.lat, lon: origin.lon },
+        originName: origin.name,
+        originCode,
         color: THREAT_COLORS[indicator.threat_type] || THREAT_COLORS.unknown,
         progress: 0,
         type: indicator.threat_type,
@@ -429,35 +421,23 @@ export default function RealThreatMap({
       
       if (!indicator) return false;
 
-      const attack = createAttackFromIndicator(indicator, !isLive);
-      if (attack) {
-        stateRef.current.attacks.push(attack);
+      const signal = createSignal(indicator);
+      if (signal) {
+        stateRef.current.signals.push(signal);
 
-        // Update stats
+        // Update stats — threat type + ORIGIN country only (no invented victim)
         const stats = stateRef.current.stats;
         stats.total++;
-        stats.byType[attack.type] = (stats.byType[attack.type] || 0) + 1;
-        stats.bySource[attack.sourceName] =
-          (stats.bySource[attack.sourceName] || 0) + 1;
-        stats.byTarget[attack.targetName] =
-          (stats.byTarget[attack.targetName] || 0) + 1;
+        stats.byType[signal.type] = (stats.byType[signal.type] || 0) + 1;
+        stats.byOrigin[signal.originName] =
+          (stats.byOrigin[signal.originName] || 0) + 1;
 
         // Notify callbacks
-        if (stateRef.current.onAttack) {
-          stateRef.current.onAttack({
-            source: {
-              name: attack.sourceName,
-              code: indicator.country_code || "",
-            },
-            target: {
-              name: attack.targetName,
-              code:
-                Object.entries(COUNTRY_COORDS).find(
-                  ([, v]) => v.name === attack.targetName
-                )?.[0] || "",
-            },
-            threatType: attack.type,
-            color: attack.color,
+        if (stateRef.current.onSignal) {
+          stateRef.current.onSignal({
+            origin: { name: signal.originName, code: signal.originCode },
+            threatType: signal.type,
+            color: signal.color,
             timestamp: new Date(),
             indicator,
             isReplay: !isLive,
@@ -467,89 +447,51 @@ export default function RealThreatMap({
           stateRef.current.onStatsUpdate({ ...stats });
         }
       }
-      
+
       return isLive;
     };
 
-    // Draw attack arc
-    const drawAttack = (attack: Attack) => {
-      const srcPt = map.latLngToContainerPoint([
-        attack.sourceCoord.lat,
-        attack.sourceCoord.lon,
-      ]);
-      const tgtPt = map.latLngToContainerPoint([
-        attack.targetCoord.lat,
-        attack.targetCoord.lon,
+    // Draw an ORIGIN ping — an expanding, fading ring plus a glowing core dot
+    // at the IOC's country of origin. No arc, no destination: the visual
+    // asserts only "activity observed from here", never a directed attack.
+    const drawSignal = (signal: Signal) => {
+      const pt = map.latLngToContainerPoint([
+        signal.coord.lat,
+        signal.coord.lon,
       ]);
 
-      const midX = (srcPt.x + tgtPt.x) / 2;
-      const midY = (srcPt.y + tgtPt.y) / 2;
-      const dist = Math.sqrt(
-        Math.pow(tgtPt.x - srcPt.x, 2) + Math.pow(tgtPt.y - srcPt.y, 2)
-      );
-      const arcHeight = Math.min(dist * 0.3, 120);
-      const ctrlPt = { x: midX, y: midY - arcHeight };
+      const t = Math.min(signal.progress, 1);
+      const alphaHex = Math.round(Math.max(0, 1 - t) * 255)
+        .toString(16)
+        .padStart(2, "0");
 
-      const t = Math.min(attack.progress, 1);
-      const curX =
-        (1 - t) * (1 - t) * srcPt.x +
-        2 * (1 - t) * t * ctrlPt.x +
-        t * t * tgtPt.x;
-      const curY =
-        (1 - t) * (1 - t) * srcPt.y +
-        2 * (1 - t) * t * ctrlPt.y +
-        t * t * tgtPt.y;
-
-      // Trail
+      // Expanding ring that fades as it grows
+      const radius = 6 + t * 34;
       ctx.beginPath();
-      ctx.moveTo(srcPt.x, srcPt.y);
-      ctx.quadraticCurveTo(ctrlPt.x, ctrlPt.y, curX, curY);
-      const grad = ctx.createLinearGradient(srcPt.x, srcPt.y, curX, curY);
-      grad.addColorStop(0, attack.color + "00");
-      grad.addColorStop(0.6, attack.color + "88");
-      grad.addColorStop(1, attack.color);
-      ctx.strokeStyle = grad;
+      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = signal.color + alphaHex;
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Projectile
-      ctx.beginPath();
-      ctx.arc(curX, curY, 5, 0, Math.PI * 2);
-      ctx.fillStyle = attack.color;
-      ctx.fill();
-
       // Glow
       ctx.beginPath();
-      ctx.arc(curX, curY, 10, 0, Math.PI * 2);
-      const glow = ctx.createRadialGradient(curX, curY, 0, curX, curY, 10);
-      glow.addColorStop(0, attack.color + "aa");
-      glow.addColorStop(1, attack.color + "00");
+      ctx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
+      const glow = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 10);
+      glow.addColorStop(0, signal.color + "aa");
+      glow.addColorStop(1, signal.color + "00");
       ctx.fillStyle = glow;
       ctx.fill();
 
-      // Impact
-      if (attack.progress > 0.9 && attack.progress < 1.2) {
-        const impactProgress = (attack.progress - 0.9) / 0.3;
-        const impactSize = impactProgress * 35;
-        ctx.beginPath();
-        ctx.arc(tgtPt.x, tgtPt.y, impactSize, 0, Math.PI * 2);
-        const impactGrad = ctx.createRadialGradient(
-          tgtPt.x,
-          tgtPt.y,
-          0,
-          tgtPt.x,
-          tgtPt.y,
-          impactSize
-        );
-        impactGrad.addColorStop(0, attack.color + "88");
-        impactGrad.addColorStop(1, attack.color + "00");
-        ctx.fillStyle = impactGrad;
-        ctx.fill();
-      }
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = signal.color;
+      ctx.fill();
     };
 
-    // Draw target markers (only for selected countries)
-    const drawTargets = (phase: number) => {
+    // Draw JichoSec's monitored African focus regions (highlight only — these
+    // markers are NOT claimed to be under attack; they mark coverage).
+    const drawMonitoredRegions = (phase: number) => {
       stateRef.current.selectedCountries.forEach((code) => {
         const coord = COUNTRY_COORDS[code];
         if (!coord) return;
@@ -584,7 +526,7 @@ export default function RealThreatMap({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const phase = (Date.now() / 400) % (Math.PI * 2);
-      drawTargets(phase);
+      drawMonitoredRegions(phase);
 
       // Process indicators - faster for live data (100ms), slower for replay (300ms)
       const hasPendingLive = stateRef.current.pendingIndicators.length > 0;
@@ -595,16 +537,16 @@ export default function RealThreatMap({
         lastProcessTime = currentTime;
       }
 
-      // Update attacks
-      const activeAttacks: Attack[] = [];
-      for (const attack of stateRef.current.attacks) {
-        attack.progress += 0.008;
-        if (attack.progress < 1.3) {
-          drawAttack(attack);
-          activeAttacks.push(attack);
+      // Advance origin pings; drop them once fully expanded/faded
+      const activeSignals: Signal[] = [];
+      for (const signal of stateRef.current.signals) {
+        signal.progress += 0.008;
+        if (signal.progress < 1) {
+          drawSignal(signal);
+          activeSignals.push(signal);
         }
       }
-      stateRef.current.attacks = activeAttacks;
+      stateRef.current.signals = activeSignals;
 
       stateRef.current.animationId = requestAnimationFrame(animate);
     };

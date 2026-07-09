@@ -28,9 +28,9 @@ async def public_indicator_stats():
             body={
                 "size": 0,
                 "aggs": {
-                    "by_threat_type": {"terms": {"field": "threat_type.keyword", "size": 10}},
-                    "by_source": {"terms": {"field": "source.keyword", "size": 20}},
-                    "by_country": {"terms": {"field": "country_code.keyword", "size": 60}},
+                    "by_threat_type": {"terms": {"field": "threat_type", "size": 10}},
+                    "by_source": {"terms": {"field": "source", "size": 20}},
+                    "by_country": {"terms": {"field": "country_code", "size": 60}},
                 },
             },
         )

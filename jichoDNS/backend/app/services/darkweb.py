@@ -537,8 +537,10 @@ class DarkWebMonitor:
         results["leaks"].extend(dehashed_results)
         results["sources_checked"].append("dehashed")
         
-        # Generate demo data if no results and demo mode
-        if not results["leaks"] and include_demo:
+        # Generate demo data only when mock data is explicitly allowed. In
+        # production (ALLOW_MOCK_DATA=false) return real (possibly empty)
+        # results instead of fabricated leaks.
+        if not results["leaks"] and include_demo and settings.ALLOW_MOCK_DATA:
             demo_leaks = self._generate_demo_leaks(domain, email)
             results["leaks"].extend(demo_leaks)
             results["is_demo"] = True
@@ -677,8 +679,9 @@ class DarkWebMonitor:
         )
         results["mentions"].extend(es_results)
         
-        # Generate demo data if no results
-        if not results["mentions"]:
+        # Generate demo data only when mock data is explicitly allowed;
+        # production returns real (possibly empty) results, never fabrications.
+        if not results["mentions"] and settings.ALLOW_MOCK_DATA:
             demo_mentions = self._generate_demo_mentions(keywords)
             results["mentions"].extend(demo_mentions)
             results["is_demo"] = True
@@ -793,12 +796,16 @@ class DarkWebMonitor:
             "scan_time": datetime.utcnow().isoformat(),
         }
         
-        # Demo data generation
-        demo_pastes = self._generate_demo_pastes(keywords)
-        results["pastes_found"] = demo_pastes
-        results["total_found"] = len(demo_pastes)
-        results["is_demo"] = True
-        
+        # Synthetic demo data only when explicitly allowed; production returns
+        # an empty result set rather than fabricated paste hits.
+        if settings.ALLOW_MOCK_DATA:
+            demo_pastes = self._generate_demo_pastes(keywords)
+            results["pastes_found"] = demo_pastes
+            results["total_found"] = len(demo_pastes)
+            results["is_demo"] = True
+        else:
+            results["total_found"] = 0
+
         return results
     
     # =========================================================================
@@ -838,8 +845,9 @@ class DarkWebMonitor:
         leaks = await self._get_recent_leaks_es(cutoff, limit)
         results["leaks"] = leaks
         
-        # Generate demo data if empty
-        if not results["breaches"]:
+        # Generate demo data only when mock data is explicitly allowed;
+        # production returns real (possibly empty) breaches, never fabrications.
+        if not results["breaches"] and settings.ALLOW_MOCK_DATA:
             results["breaches"] = self._generate_demo_breaches()
             results["is_demo"] = True
         
@@ -1000,8 +1008,10 @@ class DarkWebMonitor:
         # Combine results
         all_breaches = local_results + hibp_results
         
-        if not all_breaches:
-            # Generate demo exposure for demo mode
+        if not all_breaches and settings.ALLOW_MOCK_DATA:
+            # Generate demo exposure only in explicit mock mode. In production
+            # (ALLOW_MOCK_DATA=false) this must never fabricate an is_exposed
+            # verdict for a real person's email.
             all_breaches = self._generate_demo_exposure(email)
             results["is_demo"] = True
         
@@ -1250,10 +1260,12 @@ class DarkWebMonitor:
             await es_service.connect()
 
         if not es_service.client:
-            # Return demo alerts
-            results["alerts"] = self._generate_demo_alerts()
-            results["is_demo"] = True
-            results["total"] = len(results["alerts"])
+            # Only surface synthetic demo alerts when mock data is explicitly
+            # allowed; in production return an empty (but real) result set.
+            if settings.ALLOW_MOCK_DATA:
+                results["alerts"] = self._generate_demo_alerts()
+                results["is_demo"] = True
+                results["total"] = len(results["alerts"])
             return results
 
         try:
@@ -1306,10 +1318,12 @@ class DarkWebMonitor:
             
         except Exception as e:
             logger.error(f"Get alerts error: {e}")
-            results["alerts"] = self._generate_demo_alerts()
-            results["is_demo"] = True
-            results["total"] = len(results["alerts"])
-        
+            # Fall back to synthetic demo alerts only in explicit mock mode.
+            if settings.ALLOW_MOCK_DATA:
+                results["alerts"] = self._generate_demo_alerts()
+                results["is_demo"] = True
+                results["total"] = len(results["alerts"])
+
         return results
     
     async def create_alert(

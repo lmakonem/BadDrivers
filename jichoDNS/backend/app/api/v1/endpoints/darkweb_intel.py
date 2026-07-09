@@ -40,23 +40,23 @@ def _darkweb_filter():
         "bool": {
             "should": [
                 # MISP data = curated dark web intel
-                {"term": {"source.keyword": "misp"}},
+                {"term": {"source": "misp"}},
                 # C2 servers from any source
-                {"term": {"threat_type.keyword": "c2"}},
+                {"term": {"threat_type": "c2"}},
                 # Phishing from specialized feeds
                 {
                     "bool": {
                         "must": [
-                            {"term": {"threat_type.keyword": "phishing"}},
-                            {"terms": {"source.keyword": ["phishtank", "openphish"]}},
+                            {"term": {"threat_type": "phishing"}},
+                            {"terms": {"source": ["phishtank", "openphish"]}},
                         ]
                     }
                 },
                 # Botnet infrastructure
-                {"term": {"threat_type.keyword": "botnet"}},
+                {"term": {"threat_type": "botnet"}},
                 # SSL blocklist = malicious certificates
-                {"term": {"source.keyword": "sslbl"}},
-                {"term": {"source.keyword": "feodotracker"}},
+                {"term": {"source": "sslbl"}},
+                {"term": {"source": "feodotracker"}},
             ],
             "minimum_should_match": 1,
             "filter": [{"term": {"active": True}}],
@@ -87,9 +87,9 @@ async def darkweb_feed(
     # Additional filters narrow within dark web data
     extra_filters = []
     if threat_type:
-        extra_filters.append({"term": {"threat_type.keyword": threat_type}})
+        extra_filters.append({"term": {"threat_type": threat_type}})
     if source:
-        extra_filters.append({"term": {"source.keyword": source}})
+        extra_filters.append({"term": {"source": source}})
     if search:
         extra_filters.append({
             "multi_match": {
@@ -150,10 +150,10 @@ async def darkweb_stats(
                 "size": 0,
                 "query": _darkweb_filter(),
                 "aggs": {
-                    "by_type": {"terms": {"field": "threat_type.keyword", "size": 10}},
-                    "by_source": {"terms": {"field": "source.keyword", "size": 20}},
-                    "by_country": {"terms": {"field": "country_code.keyword", "size": 20}},
-                    "misp_count": {"filter": {"term": {"source.keyword": "misp"}}},
+                    "by_type": {"terms": {"field": "threat_type", "size": 10}},
+                    "by_source": {"terms": {"field": "source", "size": 20}},
+                    "by_country": {"terms": {"field": "country_code", "size": 20}},
+                    "misp_count": {"filter": {"term": {"source": "misp"}}},
                     "recent_24h": {"filter": {"range": {"created_at": {"gte": "now-24h"}}}},
                 },
             },

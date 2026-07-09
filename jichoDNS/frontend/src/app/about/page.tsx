@@ -38,7 +38,7 @@ const capabilities = [
   {
     title: "Threat Intelligence",
     description:
-      "37,000+ indicators aggregated from 15+ premium and open-source feeds — C2, malware, and phishing with full context.",
+      "150,000+ indicators aggregated from 14 threat feeds — C2, malware, and phishing with full context.",
     icon: (
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     ),
@@ -79,9 +79,9 @@ const capabilities = [
     ),
   },
   {
-    title: "AI Threat Reports",
+    title: "Threat Intelligence Reports",
     description:
-      "Vertex AI-powered executive briefings, incident summaries, and IOC deep-dives generated from your own threat data.",
+      "Templated executive briefings, incident summaries, and IOC deep-dives generated from your own threat data with deterministic rules — no black-box ML.",
     icon: (
       <>
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -122,7 +122,7 @@ const coverage = [
   {
     title: "Regional DNS Measurement",
     description:
-      "RIPE Atlas integration provides real-time DNS measurements from African vantage points for regional context.",
+      "On our roadmap: real-time DNS measurement from African vantage points via RIPE Atlas, for regional context.",
   },
 ];
 

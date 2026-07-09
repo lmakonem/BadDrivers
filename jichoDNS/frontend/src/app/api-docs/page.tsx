@@ -95,7 +95,7 @@ export default function APIDocsPage() {
               <p className="text-lg text-white/70 leading-relaxed">
                 The JichoSec API gives your security team programmatic access to
                 Africa&apos;s most comprehensive threat intelligence platform.
-                Query over 100,000 indicators of compromise in real time, pull
+                Query over 150,000 indicators of compromise in real time, pull
                 enriched IOC feeds into your SIEM or SOAR, and automate domain
                 analysis with our ML-powered classification engine &mdash; all through
                 a clean REST interface with JSON responses and JWT authentication.
@@ -170,7 +170,7 @@ export default function APIDocsPage() {
                     href="/signup?plan=pro"
                     className="px-8 py-3 bg-primary hover:bg-primary-hover text-white font-semibold rounded-full transition-colors shadow-lg shadow-primary/25"
                   >
-                    Start Free Trial
+                    Get Started
                   </Link>
                   <Link
                     href="/login"

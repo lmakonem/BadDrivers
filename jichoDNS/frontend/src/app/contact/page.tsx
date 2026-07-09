@@ -5,39 +5,6 @@ import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
 import { JichoMark } from "@/components/brand/JichoMark";
 
-const offices = [
-  {
-    city: "Nairobi",
-    country: "Kenya",
-    type: "Global Headquarters",
-    address: "Westlands Business Park, Tower B, 14th Floor",
-    addressLine2: "Waiyaki Way, Westlands",
-    addressLine3: "Nairobi, Kenya",
-    phone: "+254 20 123 4567",
-    email: "nairobi@jichosec.com",
-  },
-  {
-    city: "Lagos",
-    country: "Nigeria",
-    type: "West Africa Hub",
-    address: "Landmark Towers, 5th Floor",
-    addressLine2: "Plot 5B Water Corporation Road",
-    addressLine3: "Victoria Island, Lagos, Nigeria",
-    phone: "+234 1 234 5678",
-    email: "lagos@jichosec.com",
-  },
-  {
-    city: "Johannesburg",
-    country: "South Africa",
-    type: "Southern Africa Hub",
-    address: "The Campus, Building 2",
-    addressLine2: "57 Sloane Street, Bryanston",
-    addressLine3: "Johannesburg, South Africa",
-    phone: "+27 11 234 5678",
-    email: "johannesburg@jichosec.com",
-  },
-];
-
 const subjects = [
   "General Inquiry",
   "Sales & Pricing",
@@ -293,20 +260,6 @@ export default function ContactPage() {
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                       <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-white font-medium">General Inquiries</p>
-                      <a href="tel:+254201234567" className="text-primary hover:text-primary-hover transition-colors">
-                        +254 20 123 4567
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                       </svg>
                     </div>
@@ -340,77 +293,20 @@ export default function ContactPage() {
                 </p>
               </div>
 
-              {/* Map Placeholder */}
+              {/* Regional Focus */}
               <div className="bg-card-dark rounded-2xl border border-white/10 p-8">
-                <h3 className="font-display text-xl font-semibold text-white mb-4">Our Locations</h3>
+                <h3 className="font-display text-xl font-semibold text-white mb-4">Regional Focus</h3>
                 <div className="relative aspect-video bg-card-light rounded-xl border border-white/10 flex items-center justify-center overflow-hidden">
                   <div className="absolute inset-0 circuit-grid opacity-70" />
                   <div className="absolute inset-0 glow-cyan" />
                   <div className="relative z-10 text-center">
                     <JichoMark size={60} className="mx-auto mb-3" />
-                    <p className="text-white/50">Interactive Map</p>
-                    <p className="text-white/30 text-sm">Nairobi &middot; Lagos &middot; Johannesburg</p>
+                    <p className="text-white/50">Africa-focused threat intelligence</p>
+                    <p className="text-white/30 text-sm">Monitoring the continent&apos;s threat landscape</p>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Office Locations */}
-      <section className="py-20 bg-card-dark/40">
-        <div className="max-w-[1680px] mx-auto px-8">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-white mb-4">
-              Visit Our Offices
-            </h2>
-            <p className="text-white/60 text-lg max-w-2xl mx-auto">
-              We&apos;d love to meet you in person. Visit any of our offices across Africa.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {offices.map((office) => (
-              <div
-                key={office.city}
-                className="bg-card-dark rounded-2xl border border-white/10 p-8 hover:border-primary/30 transition-colors"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-                      <circle cx="12" cy="10" r="3"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-display text-xl font-semibold text-white">{office.city}</h3>
-                    <p className="text-primary text-sm">{office.type}</p>
-                  </div>
-                </div>
-                <div className="space-y-3 text-white/60">
-                  <p>{office.address}</p>
-                  <p>{office.addressLine2}</p>
-                  <p>{office.addressLine3}</p>
-                  <div className="pt-4 space-y-2 border-t border-white/10">
-                    <p className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-                      </svg>
-                      <span className="text-white/80">{office.phone}</span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                      </svg>
-                      <a href={`mailto:${office.email}`} className="text-primary hover:text-primary-hover transition-colors">
-                        {office.email}
-                      </a>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>

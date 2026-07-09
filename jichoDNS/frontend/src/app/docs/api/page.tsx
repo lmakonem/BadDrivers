@@ -4,11 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
-import { 
-  Key, 
-  Lock, 
-  Gauge, 
-  Code, 
+import {
+  Key,
+  Gauge,
+  Code,
   Copy, 
   Check,
   ChevronRight,
@@ -111,27 +110,27 @@ const endpoints = [
 
 const codeExamples: Record<string, Record<CodeLanguage, string>> = {
   authentication: {
-    curl: `curl -X GET "https://api.jichosec.io/v1/indicators" \\
-  -H "Authorization: Bearer js_live_abc123xyz789" \\
+    curl: `curl -X GET "https://jichosec.defendanddetect.com/api/v1/indicators" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \\
   -H "Content-Type: application/json"`,
     python: `import requests
 
-API_KEY = "js_live_abc123xyz789"
-BASE_URL = "https://api.jichosec.io/v1"
+ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"
+BASE_URL = "https://jichosec.defendanddetect.com/api/v1"
 
 headers = {
-    "Authorization": f"Bearer {API_KEY}",
+    "Authorization": f"Bearer {ACCESS_TOKEN}",
     "Content-Type": "application/json"
 }
 
 response = requests.get(f"{BASE_URL}/indicators", headers=headers)
 data = response.json()`,
-    javascript: `const API_KEY = 'js_live_abc123xyz789';
-const BASE_URL = 'https://api.jichosec.io/v1';
+    javascript: `const ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN';
+const BASE_URL = 'https://jichosec.defendanddetect.com/api/v1';
 
 const response = await fetch(\`\${BASE_URL}/indicators\`, {
   headers: {
-    'Authorization': \`Bearer \${API_KEY}\`,
+    'Authorization': \`Bearer \${ACCESS_TOKEN}\`,
     'Content-Type': 'application/json'
   }
 });
@@ -139,13 +138,13 @@ const response = await fetch(\`\${BASE_URL}/indicators\`, {
 const data = await response.json();`
   },
   listIndicators: {
-    curl: `curl -X GET "https://api.jichosec.io/v1/indicators?type=domain&threat_type=phishing&limit=50" \\
-  -H "Authorization: Bearer js_live_abc123xyz789"`,
+    curl: `curl -X GET "https://jichosec.defendanddetect.com/api/v1/indicators?type=domain&threat_type=phishing&limit=50" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"`,
     python: `import requests
 
 response = requests.get(
-    "https://api.jichosec.io/v1/indicators",
-    headers={"Authorization": f"Bearer {API_KEY}"},
+    "https://jichosec.defendanddetect.com/api/v1/indicators",
+    headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
     params={
         "type": "domain",
         "threat_type": "phishing",
@@ -163,8 +162,8 @@ for ioc in indicators:
 });
 
 const response = await fetch(
-  \`https://api.jichosec.io/v1/indicators?\${params}\`,
-  { headers: { 'Authorization': \`Bearer \${API_KEY}\` } }
+  \`https://jichosec.defendanddetect.com/api/v1/indicators?\${params}\`,
+  { headers: { 'Authorization': \`Bearer \${ACCESS_TOKEN}\` } }
 );
 
 const { data: indicators } = await response.json();
@@ -173,8 +172,8 @@ indicators.forEach(ioc => {
 });`
   },
   analyzeDomain: {
-    curl: `curl -X POST "https://api.jichosec.io/v1/analysis/domain" \\
-  -H "Authorization: Bearer js_live_abc123xyz789" \\
+    curl: `curl -X POST "https://jichosec.defendanddetect.com/api/v1/analysis/domain" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "domain": "suspicious-site.example.com",
@@ -183,9 +182,9 @@ indicators.forEach(ioc => {
     python: `import requests
 
 response = requests.post(
-    "https://api.jichosec.io/v1/analysis/domain",
+    "https://jichosec.defendanddetect.com/api/v1/analysis/domain",
     headers={
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json"
     },
     json={
@@ -198,10 +197,10 @@ result = response.json()
 print(f"Risk Score: {result['risk_score']}")
 print(f"Threat Type: {result['threat_type']}")
 print(f"DGA Score: {result['dga_score']}")`,
-    javascript: `const response = await fetch('https://api.jichosec.io/v1/analysis/domain', {
+    javascript: `const response = await fetch('https://jichosec.defendanddetect.com/api/v1/analysis/domain', {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${API_KEY}\`,
+    'Authorization': \`Bearer \${ACCESS_TOKEN}\`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
@@ -215,8 +214,8 @@ console.log(\`Risk Score: \${result.risk_score}\`);
 console.log(\`Threat Type: \${result.threat_type}\`);`
   },
   bulkLookup: {
-    curl: `curl -X POST "https://api.jichosec.io/v1/indicators/bulk" \\
-  -H "Authorization: Bearer js_live_abc123xyz789" \\
+    curl: `curl -X POST "https://jichosec.defendanddetect.com/api/v1/indicators/bulk" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "indicators": [
@@ -234,9 +233,9 @@ indicators_to_check = [
 ]
 
 response = requests.post(
-    "https://api.jichosec.io/v1/indicators/bulk",
+    "https://jichosec.defendanddetect.com/api/v1/indicators/bulk",
     headers={
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json"
     },
     json={"indicators": indicators_to_check}
@@ -252,10 +251,10 @@ for item in results:
   'evil-phishing-site.net'
 ];
 
-const response = await fetch('https://api.jichosec.io/v1/indicators/bulk', {
+const response = await fetch('https://jichosec.defendanddetect.com/api/v1/indicators/bulk', {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${API_KEY}\`,
+    'Authorization': \`Bearer \${ACCESS_TOKEN}\`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({ indicators: indicatorsToCheck })
@@ -374,7 +373,7 @@ export default function APIDocsPage() {
             <div className="flex items-center gap-6 text-sm">
               <div className="flex items-center gap-2 text-white/60">
                 <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                Base URL: <code className="text-white bg-white/10 px-2 py-0.5 rounded">https://api.jichosec.io</code>
+                Base URL: <code className="text-white bg-white/10 px-2 py-0.5 rounded">https://jichosec.defendanddetect.com/api/v1</code>
               </div>
               <div className="text-white/60">
                 Version: <code className="text-white bg-white/10 px-2 py-0.5 rounded">v1</code>
@@ -411,53 +410,45 @@ export default function APIDocsPage() {
               </div>
               
               <p className="text-white/60 mb-6">
-                JichoSec uses API keys to authenticate requests. You can manage your API keys from 
-                your dashboard at <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-sm">Settings &gt; API Keys</code>.
+                JichoSec authenticates requests with short-lived JWT bearer tokens. Log in with your
+                account credentials via the <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-sm">POST /auth/login</code> endpoint
+                to receive an access token, then send it on every request. Self-service API keys are on
+                our roadmap and not yet available.
               </p>
 
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Bearer Token</h3>
+                  <h3 className="text-lg font-semibold text-white mb-2">Obtain a Token</h3>
                   <p className="text-white/60 text-sm mb-3">
-                    Include your API key in the Authorization header as a Bearer token:
+                    Exchange your account credentials for a JWT access token:
                   </p>
                   <code className="block bg-card-light rounded-lg p-3 text-sm text-white/80 font-mono">
-                    Authorization: Bearer js_live_your_api_key
+                    POST /auth/login
                   </code>
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">API Key Types</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-card-dark border border-white/10">
-                      <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                        <span className="text-green-400 text-xs font-bold">L</span>
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">Live Keys <code className="text-xs bg-white/10 px-1.5 py-0.5 rounded ml-2">js_live_*</code></p>
-                        <p className="text-white/50 text-sm">Production keys with full access. Use in production environments.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-card-dark border border-white/10">
-                      <div className="w-8 h-8 rounded bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
-                        <span className="text-yellow-400 text-xs font-bold">T</span>
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">Test Keys <code className="text-xs bg-white/10 px-1.5 py-0.5 rounded ml-2">js_test_*</code></p>
-                        <p className="text-white/50 text-sm">Sandbox keys for development. Returns mock data, no rate limits.</p>
-                      </div>
-                    </div>
-                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Bearer Token</h3>
+                  <p className="text-white/60 text-sm mb-3">
+                    Include the access token in the Authorization header as a Bearer token:
+                  </p>
+                  <code className="block bg-card-light rounded-lg p-3 text-sm text-white/80 font-mono">
+                    Authorization: Bearer YOUR_ACCESS_TOKEN
+                  </code>
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    OAuth 2.0 (Enterprise)
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <h3 className="text-lg font-semibold text-amber-200 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Roadmap — not yet available
                   </h3>
                   <p className="text-white/60 text-sm">
-                    Enterprise plans support OAuth 2.0 for enhanced security with token refresh 
-                    and scoped access. Contact sales for setup assistance.
+                    Self-service API keys (<code className="text-xs bg-white/10 px-1.5 py-0.5 rounded">js_live_*</code>
+                    <span className="mx-1">/</span>
+                    <code className="text-xs bg-white/10 px-1.5 py-0.5 rounded">js_test_*</code>), OAuth 2.0 with
+                    scoped access and token refresh, and IP whitelisting are planned but not implemented today.
+                    Until they ship, all access uses JWT bearer tokens obtained from{" "}
+                    <code className="text-white bg-white/10 px-1 rounded">/auth/login</code>.
                   </p>
                 </div>
               </div>
@@ -484,7 +475,7 @@ export default function APIDocsPage() {
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
             <div>
               <p className="text-white/60 mb-6">
-                Rate limits are applied per API key. When you exceed your rate limit, 
+                Rate limits are applied per account. When you exceed your rate limit,
                 the API returns a <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-sm">429 Too Many Requests</code> response.
               </p>
 
@@ -523,9 +514,12 @@ export default function APIDocsPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-white mb-4">Rate Limit Headers</h3>
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                Rate Limit Headers
+                <span className="text-xs font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">Roadmap</span>
+              </h3>
               <p className="text-white/60 text-sm mb-4">
-                Every response includes headers to track your usage:
+                Planned — not yet returned. Once shipped, responses will include headers to track your usage:
               </p>
               <div className="bg-card-light rounded-xl p-4 font-mono text-sm space-y-2">
                 <div className="flex justify-between">
@@ -778,7 +772,7 @@ export default function APIDocsPage() {
                     </tr>
                     <tr className="border-b border-white/5">
                       <td className="py-3 px-4"><code className="text-yellow-400">401</code></td>
-                      <td className="py-3 px-4 text-white/60">Unauthorized - Invalid API key</td>
+                      <td className="py-3 px-4 text-white/60">Unauthorized - Invalid or expired token</td>
                     </tr>
                     <tr className="border-b border-white/5">
                       <td className="py-3 px-4"><code className="text-yellow-400">403</code></td>
@@ -808,11 +802,10 @@ export default function APIDocsPage() {
 {`{
   "success": false,
   "error": {
-    "code": "invalid_api_key",
-    "message": "The API key provided is invalid or expired.",
+    "code": "invalid_token",
+    "message": "The access token provided is invalid or expired.",
     "details": {
-      "key_prefix": "js_live_abc...",
-      "suggestion": "Generate a new API key from your dashboard."
+      "suggestion": "Obtain a new token via POST /auth/login."
     }
   },
   "request_id": "req_7x9k2mf8n3"
@@ -825,7 +818,7 @@ export default function APIDocsPage() {
                 <ul className="text-white/60 text-sm space-y-1">
                   <li>- Include <code className="text-white bg-white/10 px-1 rounded">request_id</code> when contacting support</li>
                   <li>- Check the <code className="text-white bg-white/10 px-1 rounded">details</code> object for actionable suggestions</li>
-                  <li>- Enable verbose logging in development with test keys</li>
+                  <li>- Enable verbose logging in development to inspect request/response payloads</li>
                 </ul>
               </div>
             </div>

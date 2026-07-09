@@ -16,6 +16,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.ownership import bare_domain, get_owned_domains, redact_credential
 from app.models.user import User
@@ -149,7 +150,10 @@ async def search_leaks(
         results = await darkweb_service.search_leaks(
             domain=domain or "",
             email=email,
-            include_demo=True,
+            # Only inject synthetic demo leaks in explicit mock mode; in
+            # production (ALLOW_MOCK_DATA=false) return real, possibly-empty
+            # results instead of fabricated credentials.
+            include_demo=settings.ALLOW_MOCK_DATA,
         )
 
         leaks = [redact_credential(dict(leak)) for leak in results.get("leaks", [])]

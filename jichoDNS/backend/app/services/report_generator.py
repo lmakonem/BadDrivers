@@ -170,14 +170,14 @@ async def _fetch_ioc_stats(date_range: str) -> dict:
                 "size": 0,
                 "query": {"range": {"created_at": {"gte": f"now-{date_range}"}}},
                 "aggs": {
-                    "total": {"value_count": {"field": "indicator.keyword"}},
-                    "by_type": {"terms": {"field": "threat_type.keyword", "size": 10}},
-                    "by_source": {"terms": {"field": "source.keyword", "size": 15}},
-                    "by_country": {"terms": {"field": "country_code.keyword", "size": 20}},
-                    "by_indicator_type": {"terms": {"field": "indicator_type.keyword", "size": 10}},
+                    "total": {"value_count": {"field": "indicator"}},
+                    "by_type": {"terms": {"field": "threat_type", "size": 10}},
+                    "by_source": {"terms": {"field": "source", "size": 15}},
+                    "by_country": {"terms": {"field": "country_code", "size": 20}},
+                    "by_indicator_type": {"terms": {"field": "indicator_type", "size": 10}},
                     "high_confidence": {
                         "filter": {"range": {"confidence": {"gte": 0.8}}},
-                        "aggs": {"count": {"value_count": {"field": "indicator.keyword"}}},
+                        "aggs": {"count": {"value_count": {"field": "indicator"}}},
                     },
                 },
             },
@@ -204,11 +204,11 @@ async def _fetch_darkweb_stats() -> dict:
             body={
                 "size": 0,
                 "query": {"bool": {"should": [
-                    {"term": {"source.keyword": "misp"}},
-                    {"term": {"threat_type.keyword": "c2"}},
-                    {"terms": {"source.keyword": ["phishtank", "openphish", "sslbl", "feodotracker"]}},
+                    {"term": {"source": "misp"}},
+                    {"term": {"threat_type": "c2"}},
+                    {"terms": {"source": ["phishtank", "openphish", "sslbl", "feodotracker"]}},
                 ], "minimum_should_match": 1}},
-                "aggs": {"by_source": {"terms": {"field": "source.keyword", "size": 10}}},
+                "aggs": {"by_source": {"terms": {"field": "source", "size": 10}}},
             },
         )
         stats["total"] = r["hits"]["total"]["value"]

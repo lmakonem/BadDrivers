@@ -76,12 +76,12 @@ export function Footer() {
               </h3>
               <p className="text-lg text-[#94A3B8] max-w-2xl">
                 Cyber threat intelligence built for organizations across Africa —
-                real-time visibility and actionable alerts. Start a free trial today.
+                real-time visibility and actionable alerts. Get started today.
               </p>
             </div>
             <div className="flex flex-wrap gap-4">
               <Link href="/signup" className="btn-primary whitespace-nowrap">
-                Start Free Trial
+                Get Started Free
               </Link>
               <Link href="#demo" className="btn-secondary whitespace-nowrap">
                 Request Demo

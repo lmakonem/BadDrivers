@@ -1,8 +1,10 @@
 """
 Credential leak search and monitoring endpoints.
 
-Searches the credential_exposures ES index and also generates synthetic
-breach data from IOC feeds that contain email/credential indicators.
+Searches the credential_exposures ES index. In production
+(ALLOW_MOCK_DATA=false) fabricated seed breaches (source=breach_database)
+are excluded from every read path; a phishing-IOC fallback supplies
+credential-harvesting URLs when no real exposure data exists.
 """
 
 import logging
@@ -12,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.ownership import get_owned_domains, redact_credential
 from app.models.user import User
@@ -20,6 +23,15 @@ from app.services.elasticsearch import es_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _prod_synthetic_must_not() -> list:
+    """In production (ALLOW_MOCK_DATA=false) never serve the fabricated seed
+    breach corpus (source=breach_database). Empty in demo mode so
+    ALLOW_MOCK_DATA=true still showcases the sample data."""
+    if settings.ALLOW_MOCK_DATA:
+        return []
+    return [{"term": {"source": "breach_database"}}]
 
 
 async def _ensure_cred_index():
@@ -107,7 +119,7 @@ async def search_credentials(
                     return empty
                 must.append({"terms": {"domain": sorted(owned)}})
 
-            query = {"bool": {"must": must}} if must else {"match_all": {}}
+            query = {"bool": {"must": must, "must_not": _prod_synthetic_must_not()}}
 
             result = await es_service.client.search(
                 index="credential_exposures",
@@ -142,8 +154,8 @@ async def search_credentials(
     # NOT C2 IPs — only URLs that contain login/credential patterns
     try:
         must = [
-            {"term": {"threat_type.keyword": "phishing"}},
-            {"term": {"indicator_type.keyword": "url"}},
+            {"term": {"threat_type": "phishing"}},
+            {"term": {"indicator_type": "url"}},
         ]
         if q:
             must.append({
@@ -216,12 +228,13 @@ async def credential_stats(
     if not es_service.client:
         return {"total": 0}
 
-    scope_query = {"match_all": {}}
+    scope_bool = {"must_not": _prod_synthetic_must_not()}
     if not current_user.is_admin:
         owned = await get_owned_domains(current_user, db)
         if not owned:
             return {"total": 0, "source": "credential_exposures"}
-        scope_query = {"bool": {"filter": [{"terms": {"domain": sorted(owned)}}]}}
+        scope_bool["filter"] = [{"terms": {"domain": sorted(owned)}}]
+    scope_query = {"bool": scope_bool}
 
     try:
         agg = await es_service.client.search(
@@ -260,10 +273,10 @@ async def credential_stats(
             index="iocs",
             body={
                 "size": 0,
-                "query": {"terms": {"threat_type.keyword": ["phishing", "c2"]}},
+                "query": {"terms": {"threat_type": ["phishing", "c2"]}},
                 "aggs": {
-                    "by_source": {"terms": {"field": "source.keyword", "size": 10}},
-                    "by_type": {"terms": {"field": "threat_type.keyword", "size": 5}},
+                    "by_source": {"terms": {"field": "source", "size": 10}},
+                    "by_type": {"terms": {"field": "threat_type", "size": 5}},
                 },
             },
         )

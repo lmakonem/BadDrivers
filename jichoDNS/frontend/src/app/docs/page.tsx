@@ -63,23 +63,25 @@ const gettingStartedSteps = [
   },
   {
     step: 2,
-    title: "Generate API Key",
-    description: "Navigate to Settings > API Keys and generate your first API key. Keep this secure - it provides access to your account.",
-    code: null
+    title: "Obtain an Access Token",
+    description: "Authentication uses JWT bearer tokens. Log in with your account credentials via the auth endpoint to receive a short-lived access token, then send it as a Bearer token on every request. (Self-service API keys are on our roadmap and not yet available.)",
+    code: `curl -X POST "https://jichosec.defendanddetect.com/api/v1/auth/login" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email": "you@example.com", "password": "YOUR_PASSWORD"}'`
   },
   {
     step: 3,
     title: "Make Your First Request",
-    description: "Test your API key with a simple health check request:",
-    code: `curl -X GET "https://api.jichosec.io/v1/health" \\
-  -H "Authorization: Bearer YOUR_API_KEY"`
+    description: "Test your access token with a simple health check request:",
+    code: `curl -X GET "https://jichosec.defendanddetect.com/api/v1/health" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"`
   },
   {
     step: 4,
     title: "Query Threat Intelligence",
     description: "Start querying our threat intelligence database for IOCs:",
-    code: `curl -X GET "https://api.jichosec.io/v1/indicators?type=domain&limit=10" \\
-  -H "Authorization: Bearer YOUR_API_KEY"`
+    code: `curl -X GET "https://jichosec.defendanddetect.com/api/v1/indicators?type=domain&limit=10" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"`
   }
 ];
 
@@ -87,7 +89,7 @@ const platformFeatures = [
   {
     icon: Shield,
     title: "Threat Intelligence Feeds",
-    description: "Access aggregated threat data from 15+ premium and open-source feeds, including Abuse.ch, PhishTank, and AlienVault OTX. Our feeds are updated every 15 minutes with new IOCs."
+    description: "Access aggregated threat data from 14 premium and open-source feeds, including Abuse.ch, PhishTank, and AlienVault OTX. Our feeds are updated every 15 minutes with new IOCs."
   },
   {
     icon: Globe,
@@ -97,12 +99,12 @@ const platformFeatures = [
   {
     icon: Terminal,
     title: "DNS Analysis Engine",
-    description: "Advanced DNS threat detection using ML-powered analysis. Detect DGA domains, DNS tunneling, and exfiltration attempts with our proprietary scoring algorithms."
+    description: "DNS threat detection using deterministic entropy and DGA heuristics. Flag algorithmically-generated domains, DNS tunneling, and exfiltration attempts with transparent, rule-based scoring."
   },
   {
     icon: Clock,
-    title: "Real-Time Monitoring",
-    description: "RIPE Atlas integration provides real-time DNS measurements from African vantage points, giving you visibility into regional DNS infrastructure and threats."
+    title: "Regional DNS Measurement (Roadmap)",
+    description: "On our roadmap: DNS measurement from African vantage points via RIPE Atlas, for visibility into regional DNS infrastructure and threats. Not yet available."
   }
 ];
 
@@ -261,30 +263,36 @@ export default function DocsPage() {
                 <h2 className="font-display text-3xl font-bold text-white">Authentication</h2>
               </div>
               <p className="text-white/60 mb-6">
-                JichoSec uses API keys for authentication. Include your API key in the 
-                Authorization header of all requests.
+                JichoSec uses JWT bearer tokens for authentication. Log in to obtain an access
+                token, then include it in the Authorization header of all requests.
               </p>
-              
+
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
                   <div>
                     <p className="text-white font-medium">Bearer Token Authentication</p>
-                    <p className="text-white/50 text-sm">Pass your API key as a Bearer token in the Authorization header.</p>
+                    <p className="text-white/50 text-sm">Pass your JWT access token as a Bearer token in the Authorization header.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                  <Clock className="w-5 h-5 text-amber-400 mt-0.5" />
                   <div>
-                    <p className="text-white font-medium">OAuth 2.0 Support</p>
-                    <p className="text-white/50 text-sm">Enterprise plans support OAuth 2.0 for enhanced security.</p>
+                    <p className="text-white font-medium">
+                      OAuth 2.0 Support
+                      <span className="text-xs font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full ml-2">Roadmap</span>
+                    </p>
+                    <p className="text-white/50 text-sm">Planned — OAuth 2.0 is not yet available.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                  <Clock className="w-5 h-5 text-amber-400 mt-0.5" />
                   <div>
-                    <p className="text-white font-medium">IP Whitelisting</p>
-                    <p className="text-white/50 text-sm">Restrict API access to specific IP addresses (Pro & Enterprise).</p>
+                    <p className="text-white font-medium">
+                      IP Whitelisting
+                      <span className="text-xs font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full ml-2">Roadmap</span>
+                    </p>
+                    <p className="text-white/50 text-sm">Planned — restricting API access to specific IP addresses is not yet available.</p>
                   </div>
                 </div>
               </div>
@@ -303,8 +311,8 @@ export default function DocsPage() {
                 <p className="text-white/60 text-sm mb-4">Example Request</p>
                 <pre className="text-sm overflow-x-auto">
                   <code className="text-white/80">
-{`curl -X GET "https://api.jichosec.io/v1/indicators" \\
-  -H "Authorization: Bearer js_live_abc123..." \\
+{`curl -X GET "https://jichosec.defendanddetect.com/api/v1/indicators" \\
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \\
   -H "Content-Type: application/json"`}
                   </code>
                 </pre>
@@ -396,7 +404,7 @@ export default function DocsPage() {
       <section className="py-20 border-t border-white/10">
         <div className="max-w-[1680px] mx-auto px-8">
           <div className="p-8 rounded-3xl bg-card-dark border border-white/10">
-            <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div className="max-w-2xl">
               <div>
                 <h2 className="font-display text-2xl font-bold text-white mb-4">Need Help?</h2>
                 <p className="text-white/60 mb-6">
@@ -410,24 +418,6 @@ export default function DocsPage() {
                   <Link href="https://github.com/jichosec" target="_blank" className="btn-secondary">
                     GitHub
                   </Link>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-card-light border border-white/10">
-                  <p className="text-2xl font-bold text-white">24/7</p>
-                  <p className="text-white/50 text-sm">Enterprise Support</p>
-                </div>
-                <div className="p-4 rounded-xl bg-card-light border border-white/10">
-                  <p className="text-2xl font-bold text-white">&lt;4hr</p>
-                  <p className="text-white/50 text-sm">Response Time</p>
-                </div>
-                <div className="p-4 rounded-xl bg-card-light border border-white/10">
-                  <p className="text-2xl font-bold text-white">99.9%</p>
-                  <p className="text-white/50 text-sm">API Uptime SLA</p>
-                </div>
-                <div className="p-4 rounded-xl bg-card-light border border-white/10">
-                  <p className="text-2xl font-bold text-white">SOC 2</p>
-                  <p className="text-white/50 text-sm">Type II Certified</p>
                 </div>
               </div>
             </div>

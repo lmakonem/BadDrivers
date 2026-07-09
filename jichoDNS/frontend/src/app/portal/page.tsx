@@ -11,12 +11,6 @@ interface OverviewStats {
   activeAlerts: number;
   riskScore: number;
   assetsMonitored: number;
-  trends: {
-    iocs: number;
-    alerts: number;
-    risk: number;
-    assets: number;
-  };
 }
 
 interface IOCStats {
@@ -72,12 +66,6 @@ const defaultStats: OverviewStats = {
   activeAlerts: 0,
   riskScore: 0,
   assetsMonitored: 0,
-  trends: {
-    iocs: 0,
-    alerts: 0,
-    risk: 0,
-    assets: 0,
-  },
 };
 
 // Generate alerts from real IOC data
@@ -201,18 +189,6 @@ const formatTimeAgo = (timestamp: string) => {
 };
 
 // Icons
-const TrendUpIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-  </svg>
-);
-
-const TrendDownIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-  </svg>
-);
-
 const ShieldIcon = () => (
   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -367,15 +343,9 @@ export default function PortalDashboard() {
       // Set combined stats
       setStats({
         totalIOCs: iocData.total || 0,
-        activeAlerts: activeAlerts || Object.keys(iocData.by_threat_type || {}).length,
+        activeAlerts,
         riskScore,
-        assetsMonitored: asmData?.total_assets || Object.keys(iocData.by_source || {}).length,
-        trends: {
-          iocs: 12.5, // Could calculate from historical data
-          alerts: -8.3,
-          risk: 5.2,
-          assets: 3.1,
-        },
+        assetsMonitored: asmData?.total_assets || 0,
       });
       
       // Generate alerts from IOC data
@@ -461,20 +431,6 @@ export default function PortalDashboard() {
               <DatabaseIcon />
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-4">
-            {stats && stats.trends.iocs > 0 ? (
-              <span className="flex items-center text-green-400 text-sm">
-                <TrendUpIcon />
-                <span className="ml-1">{stats.trends.iocs}%</span>
-              </span>
-            ) : (
-              <span className="flex items-center text-red-400 text-sm">
-                <TrendDownIcon />
-                <span className="ml-1">{Math.abs(stats?.trends.iocs || 0)}%</span>
-              </span>
-            )}
-            <span className="text-slate-500 text-sm">vs last week</span>
-          </div>
         </div>
 
         {/* Active Alerts */}
@@ -487,20 +443,6 @@ export default function PortalDashboard() {
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <BellIcon />
             </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4">
-            {stats && stats.trends.alerts < 0 ? (
-              <span className="flex items-center text-green-400 text-sm">
-                <TrendDownIcon />
-                <span className="ml-1">{Math.abs(stats.trends.alerts)}%</span>
-              </span>
-            ) : (
-              <span className="flex items-center text-red-400 text-sm">
-                <TrendUpIcon />
-                <span className="ml-1">{stats?.trends.alerts}%</span>
-              </span>
-            )}
-            <span className="text-slate-500 text-sm">vs last week</span>
           </div>
         </div>
 
@@ -522,20 +464,6 @@ export default function PortalDashboard() {
                 style={{ width: `${stats?.riskScore}%` }}
               />
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              {stats && stats.trends.risk > 0 ? (
-                <span className="flex items-center text-red-400 text-sm">
-                  <TrendUpIcon />
-                  <span className="ml-1">{stats.trends.risk}%</span>
-                </span>
-              ) : (
-                <span className="flex items-center text-green-400 text-sm">
-                  <TrendDownIcon />
-                  <span className="ml-1">{Math.abs(stats?.trends.risk || 0)}%</span>
-                </span>
-              )}
-              <span className="text-slate-500 text-sm">vs last week</span>
-            </div>
           </div>
         </div>
 
@@ -551,20 +479,6 @@ export default function PortalDashboard() {
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
               <ServerIcon />
             </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4">
-            {stats && stats.trends.assets > 0 ? (
-              <span className="flex items-center text-green-400 text-sm">
-                <TrendUpIcon />
-                <span className="ml-1">{stats.trends.assets}%</span>
-              </span>
-            ) : (
-              <span className="flex items-center text-red-400 text-sm">
-                <TrendDownIcon />
-                <span className="ml-1">{Math.abs(stats?.trends.assets || 0)}%</span>
-              </span>
-            )}
-            <span className="text-slate-500 text-sm">vs last week</span>
           </div>
         </div>
       </div>

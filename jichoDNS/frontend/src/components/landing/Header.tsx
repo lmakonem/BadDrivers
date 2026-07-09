@@ -17,7 +17,7 @@ const PRODUCTS = [
     href: "/portal",
     anchorHref: "#threat-intelligence",
     description: "Aggregated IOC feeds — malicious domains, IPs, URLs, hashes — enriched with GeoIP and MITRE ATT&CK context.",
-    badge: "12 feeds",
+    badge: "14 feeds",
     tone: ACCENT,
     subItems: [
       { label: "IOC Search & Lookup", href: "/portal",   desc: "Query domains, IPs, URLs, hashes" },
@@ -340,7 +340,7 @@ export function Header() {
                 </Link>
                 <Link href="/signup" onClick={() => setMobileMenuOpen(false)}
                   className="block text-center py-3 bg-primary hover:bg-primary-hover text-body-dark rounded-full font-semibold text-[14px]">
-                  Start Free Trial
+                  Start Free
                 </Link>
               </div>
             </div>

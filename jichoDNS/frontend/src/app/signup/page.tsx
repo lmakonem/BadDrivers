@@ -9,7 +9,7 @@ import { JichoLogo, JichoMark } from "@/components/brand/JichoMark";
 /* Decorative circuit-board brand panel — the animated eye over a PCB grid + gold glow. */
 function BrandPanel() {
   const perks = [
-    "Access to 37,000+ threat indicators",
+    "Access to 150,000+ threat indicators",
     "Real-time threat map visualization",
     "API access for SIEM integration",
   ];

@@ -59,10 +59,10 @@ async def get_alerts_feed(
                 },
                 "aggs": {
                     "by_threat": {
-                        "terms": {"field": "threat_type.keyword", "size": 10},
+                        "terms": {"field": "threat_type", "size": 10},
                         "aggs": {
                             "recent": {"top_hits": {"size": 1, "sort": [{"created_at": "desc"}]}},
-                            "count": {"value_count": {"field": "indicator.keyword"}},
+                            "count": {"value_count": {"field": "indicator"}},
                         },
                     }
                 },

@@ -180,19 +180,25 @@ export default function SettingsPage() {
 
       {/* Notifications */}
       <div className="bg-card-dark border border-[#1E2A3D] rounded-[14px] p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Notifications</h2>
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-lg font-semibold text-white">Notifications</h2>
+          <span className="text-xs text-slate-400 bg-[#152032] border border-[#1E2A3D] px-2 py-0.5 rounded">Coming soon</span>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          Notification delivery isn&apos;t available yet — these preferences are not active.
+        </p>
         <div className="space-y-3">
           {[
-            { label: "Email alerts for critical threats", defaultOn: true },
-            { label: "Weekly threat summary digest", defaultOn: true },
-            { label: "New data breach notifications", defaultOn: true },
-            { label: "Brand monitoring alerts", defaultOn: false },
-            { label: "API usage warnings", defaultOn: false },
-          ].map((item) => (
-            <label key={item.label}
+            "Email alerts for critical threats",
+            "Weekly threat summary digest",
+            "New data breach notifications",
+            "Brand monitoring alerts",
+            "API usage warnings",
+          ].map((label) => (
+            <label key={label}
               className="flex items-center justify-between p-3 bg-[#0D131F] border border-[#1E2A3D] rounded-xl cursor-not-allowed opacity-70">
-              <span className="text-sm text-white">{item.label}</span>
-              <input type="checkbox" defaultChecked={item.defaultOn} disabled
+              <span className="text-sm text-white">{label}</span>
+              <input type="checkbox" checked={false} disabled readOnly
                 className="w-5 h-5 rounded border-white/20 bg-white/10 text-primary focus:ring-primary/50" />
             </label>
           ))}

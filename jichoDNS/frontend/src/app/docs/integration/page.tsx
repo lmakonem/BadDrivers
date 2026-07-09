@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
-import { 
-  Plug, 
+import {
+  Plug,
   ChevronRight,
   Server,
   Webhook,
@@ -16,7 +16,8 @@ import {
   Zap,
   Package,
   CheckCircle,
-  FileCode
+  FileCode,
+  AlertTriangle
 } from "lucide-react";
 
 function CodeBlock({ code, language, title }: { code: string; language: string; title?: string }) {
@@ -93,6 +94,23 @@ export default function IntegrationPage() {
         <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px]" />
         
         <div className="max-w-[1680px] mx-auto px-8 relative z-10">
+          {/* Roadmap notice — these integrations are not yet available */}
+          <div className="flex items-start gap-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5 mb-10">
+            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 font-semibold">Roadmap — not yet available</p>
+              <p className="text-white/70 text-sm mt-1 leading-relaxed">
+                The SIEM apps (Splunk, QRadar, Sentinel), SOAR playbooks, webhook event stream,
+                and Python SDK described on this page are <span className="text-white/90 font-medium">planned
+                integrations</span>, not shippable features today. JichoSec currently exposes a REST
+                API at{" "}
+                <code className="text-amber-200">https://jichosec.defendanddetect.com/api/v1</code>{" "}
+                authenticated with JWT bearer tokens. Treat everything below as a preview of where
+                we&apos;re headed — endpoints, package names, and auth details will change before release.
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-center gap-2 text-white/60 mb-6">
             <Link href="/" className="hover:text-white transition-colors">Home</Link>
             <ChevronRight className="w-4 h-4" />
@@ -100,7 +118,7 @@ export default function IntegrationPage() {
             <ChevronRight className="w-4 h-4" />
             <span className="text-white">Integration Guides</span>
           </div>
-          
+
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
@@ -111,8 +129,9 @@ export default function IntegrationPage() {
               </h1>
             </div>
             <p className="text-xl text-white/60 mb-8">
-              Connect JichoSec with your security stack. From SIEM platforms to custom 
-              applications, we provide the tools you need for seamless integration.
+              A preview of how JichoSec will connect to your security stack. From SIEM platforms to
+              custom applications, these guides describe the integrations we are building — none are
+              generally available yet.
             </p>
 
             <div className="flex flex-wrap gap-4">
@@ -267,7 +286,7 @@ qradar = QRadarAPI(QRADAR_HOST, QRADAR_TOKEN)
 
 # Fetch IOCs from JichoSec
 response = requests.get(
-    "https://api.jichosec.io/v1/indicators",
+    "https://jichosec.defendanddetect.com/api/v1/indicators",
     headers={"Authorization": f"Bearer {JICHOSEC_API_KEY}"},
     params={"type": "ip", "risk_score_min": 70, "limit": 1000}
 )
@@ -433,7 +452,7 @@ def jichosec_lookup_indicator(indicator: str) -> dict:
         Threat intelligence data including risk score and threat type
     """
     api_key = demisto.params().get('api_key')
-    base_url = "https://api.jichosec.io/v1"
+    base_url = "https://jichosec.defendanddetect.com/api/v1"
     
     headers = {
         "Authorization": f"Bearer {api_key}",

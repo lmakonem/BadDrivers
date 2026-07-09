@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.models.user import User
 from app.services.elasticsearch import es_service
 from app.services.report_generator import (
@@ -188,6 +189,10 @@ def _build_sample(rtype: str) -> dict:
 
 
 def _get_sample_if_exists(report_id: str) -> Optional[dict]:
+    # Demo/sample reports are showcase-only content; never resolve them in
+    # production (ALLOW_MOCK_DATA=false) so no synthetic report leaks to users.
+    if not settings.ALLOW_MOCK_DATA:
+        return None
     for rtype, sid in _SAMPLE_IDS.items():
         if report_id == sid:
             return _build_sample(rtype)
@@ -231,7 +236,11 @@ async def list_sample_reports():
     """
     Return all 5 sample/demo reports (no ES required).
     These showcase the platform's report capabilities with realistic static data.
+    Gated by ALLOW_MOCK_DATA: in production this returns an empty list so no
+    synthetic report is presented to users.
     """
+    if not settings.ALLOW_MOCK_DATA:
+        return {"reports": [], "total": 0}
     samples = []
     for rtype in ["threat_intelligence", "executive_briefing", "ioc_analysis",
                    "incident_summary", "dark_web_exposure"]:
@@ -248,6 +257,8 @@ async def list_sample_reports():
 @router.get("/samples/{report_type}/html")
 async def view_sample_html(report_type: str):
     """View a sample report as rendered HTML."""
+    if not settings.ALLOW_MOCK_DATA:
+        raise HTTPException(status_code=404, detail="Sample reports are not available.")
     rtype = _resolve_type(report_type)
     if rtype not in VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Use: {', '.join(VALID_TYPES)}")
@@ -258,6 +269,8 @@ async def view_sample_html(report_type: str):
 @router.get("/samples/{report_type}/download")
 async def download_sample(report_type: str):
     """Download a sample report as an HTML file."""
+    if not settings.ALLOW_MOCK_DATA:
+        raise HTTPException(status_code=404, detail="Sample reports are not available.")
     rtype = _resolve_type(report_type)
     if rtype not in VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Use: {', '.join(VALID_TYPES)}")

@@ -23,12 +23,14 @@ interface ConsoleEntry {
   indicator: string; source: string; country: string; risk: number;
 }
 
+// Colors mirror components/map/RealThreatMap.tsx THREAT_COLORS so the console,
+// the map dots, and the legend all agree (c2 = purple, phishing = orange).
 const TYPE_COLOR: Record<string, string> = {
-  c2: "text-primary", malware: "text-red-400", phishing: "text-orange-400",
+  c2: "text-purple-400", malware: "text-red-400", phishing: "text-orange-400",
   ddos: "text-secondary", bruteforce: "text-yellow-400",
 };
 const TYPE_BG: Record<string, string> = {
-  c2: "bg-primary/10 border-primary/25", malware: "bg-red-500/10 border-red-500/25",
+  c2: "bg-purple-500/10 border-purple-500/25", malware: "bg-red-500/10 border-red-500/25",
   phishing: "bg-orange-500/10 border-orange-500/25", ddos: "bg-secondary/10 border-secondary/25",
   bruteforce: "bg-yellow-500/10 border-yellow-500/25",
 };
@@ -94,7 +96,7 @@ export function Hero() {
             indicator: String(ioc.indicator ?? ""),
             source: String(ioc.source ?? "feed"),
             country: String(ioc.country_code ?? "??"),
-            risk: Number(ioc.risk_score ?? Math.floor(Math.random() * 40 + 60)),
+            risk: Number(ioc.risk_score ?? 0),
           }));
           replayPool.sort(() => Math.random() - 0.5);
           demoTimer = setInterval(() => {
@@ -126,7 +128,7 @@ export function Hero() {
                 indicator: String(ioc.indicator ?? ""),
                 source: String(ioc.source ?? "feed"),
                 country: String(ioc.country_code ?? ioc.country ?? "??"),
-                risk: Number(ioc.risk_score ?? Math.floor(Math.random()*40+60)),
+                risk: Number(ioc.risk_score ?? 0),
               }));
             }
           } catch { /* ignore */ }
@@ -172,7 +174,7 @@ export function Hero() {
 
               <div className="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-4">
                 <Link href="/signup" className="btn-primary group whitespace-nowrap">
-                  Start Free Trial
+                  Get Started
                   <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </Link>
                 <Link href="#demo" className="btn-secondary group whitespace-nowrap">
@@ -240,7 +242,7 @@ export function Hero() {
               </div>
 
               <div className="absolute bottom-4 left-4 z-20 flex items-center gap-3 px-3 py-2 rounded-xl bg-body-dark/90 backdrop-blur border border-[#1E2A3D]">
-                {[["bg-primary","C2"],["bg-red-500","Malware"],["bg-orange-500","Phishing"],["bg-secondary","DDoS"]].map(([c,l]) => (
+                {[["bg-purple-500","C2"],["bg-red-500","Malware"],["bg-orange-500","Phishing"],["bg-secondary","DDoS"]].map(([c,l]) => (
                   <div key={l} className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full ${c}`} />
                     <span className="text-[11px] text-slate-400">{l}</span>

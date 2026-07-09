@@ -19,7 +19,7 @@ from uuid import uuid4
 import httpx
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import settings
 from app.core.net_guard import resolve_public_ips, resolve_public_ips_sync, SSRFError
@@ -100,7 +100,31 @@ class Asset(BaseModel):
     @classmethod
     def validate_risk_score(cls, v: float) -> float:
         return max(0.0, min(100.0, v))
-    
+
+    @staticmethod
+    def compute_id(client_id: Optional[int], asset_type: str, value: str) -> str:
+        """
+        Deterministic Elasticsearch document id for an asset.
+
+        Keyed on client + type + normalised value so that re-scanning the same
+        real-world asset upserts the SAME document instead of inserting a new
+        random-UUID doc every run. This is the root-cause fix for ASM
+        asset-count inflation (assets were previously indexed under uuid4() ids,
+        so every re-scan re-inserted every asset and the same asset accumulated
+        up to ~230x). Mirrors the finding dedup-key scheme in
+        asm_enterprise.make_finding().
+        """
+        norm = (value or "").strip().lower()
+        return hashlib.md5(f"{client_id}:{asset_type}:{norm}".encode()).hexdigest()
+
+    @model_validator(mode="after")
+    def _assign_deterministic_id(self) -> "Asset":
+        # Overwrite the uuid default with a deterministic, upsert-safe id so that
+        # internal references (parent_id / affected_asset_id, which read
+        # asset.id) and the stored ES _id stay consistent across scans.
+        self.id = Asset.compute_id(self.client_id, self.type.value, self.value)
+        return self
+
     def to_es_doc(self) -> Dict[str, Any]:
         """Convert to Elasticsearch document."""
         return {
@@ -1608,12 +1632,21 @@ class AttackSurfaceManager:
             return
         
         try:
-            # Store assets
+            # Store assets — deterministic id (Asset.compute_id) + upsert so a
+            # re-scan updates the existing doc instead of inserting a duplicate.
+            # doc_as_upsert merges, preserving enrichment fields (tech_stack,
+            # ti_tagged, ...) written by ASMEnterpriseService between scans.
+            # NOTE: indices written before this fix still hold the old
+            # random-uuid duplicates; a one-time reindex/dedupe of the
+            # asm_client_*_assets indices is required to correct already-stored
+            # counts (handled out-of-band, not by this scan path).
             for asset in result.assets:
-                await self.es_client.index(
+                await self.es_client.update(
                     index=self.assets_index,
                     id=asset.id,
-                    document=asset.to_es_doc(),
+                    doc=asset.to_es_doc(),
+                    doc_as_upsert=True,
+                    retry_on_conflict=3,
                 )
             
             # Store vulnerabilities
@@ -1837,32 +1870,44 @@ class AttackSurfaceManager:
         try:
             # ── Asset aggregations ────────────────────────────────────────────
             try:
+                # Counts are computed from a DE-DUPLICATED basis (cardinality of
+                # the normalised asset value) rather than raw doc_count. Pre-fix
+                # indices still hold duplicate asset docs (same asset stored under
+                # many random-uuid ids); counting distinct values keeps
+                # total_assets / total_open_ports accurate even before the
+                # one-time reindex/dedupe of asm_client_*_assets is run.
+                _distinct = {"cardinality": {"field": "value.keyword"}}
                 assets_agg = await self.es_client.search(
                     index=self.assets_index,
                     size=0,
-                    track_total_hits=True,
                     aggs={
-                        "by_type": {"terms": {"field": "type", "size": 20}},
+                        "distinct_assets": _distinct,
+                        "by_type": {
+                            "terms": {"field": "type", "size": 20},
+                            "aggs": {"distinct": _distinct},
+                        },
                         "high_risk": {
-                            "filter": {"range": {"risk_score": {"gte": 70}}}
+                            "filter": {"range": {"risk_score": {"gte": 70}}},
+                            "aggs": {"distinct": _distinct},
                         },
                         "avg_risk": {"avg": {"field": "risk_score"}},
                         "open_ports": {
-                            "filter": {"term": {"type": "port"}}
+                            "filter": {"term": {"type": "port"}},
+                            "aggs": {"distinct": _distinct},
                         },
                     },
                 )
-                total_raw = assets_agg["hits"]["total"]
-                summary["total_assets"] = total_raw["value"] if isinstance(total_raw, dict) else int(total_raw)
+                aggs = assets_agg["aggregations"]
+                summary["total_assets"] = int(aggs["distinct_assets"]["value"])
                 summary["by_type"] = {
-                    b["key"]: b["doc_count"]
-                    for b in assets_agg["aggregations"]["by_type"]["buckets"]
+                    b["key"]: b["distinct"]["value"]
+                    for b in aggs["by_type"]["buckets"]
                 }
-                summary["high_risk_assets"] = assets_agg["aggregations"]["high_risk"]["doc_count"]
+                summary["high_risk_assets"] = aggs["high_risk"]["distinct"]["value"]
                 summary["average_risk_score"] = round(
-                    assets_agg["aggregations"]["avg_risk"]["value"] or 0.0, 2
+                    aggs["avg_risk"]["value"] or 0.0, 2
                 )
-                summary["total_open_ports"] = assets_agg["aggregations"]["open_ports"]["doc_count"]
+                summary["total_open_ports"] = aggs["open_ports"]["distinct"]["value"]
             except Exception:
                 pass  # assets index may not exist yet for new clients
 

@@ -1135,6 +1135,12 @@ class ASMEnterpriseService:
         if not domains:
             return []
 
+        # Deterministic asset id — MUST match AttackSurfaceManager's scheme
+        # (Asset.compute_id) so HTTP/tech-stack enrichment upserts onto the SAME
+        # asset doc created during discovery instead of spawning a phantom
+        # duplicate keyed on a different id.
+        from app.services.attack_surface import Asset
+
         results = await asyncio.gather(
             *[http_fingerprint(d) for d in domains[:50]],  # cap at 50 concurrent
             return_exceptions=True,
@@ -1149,9 +1155,10 @@ class ASMEnterpriseService:
             if not result.get("reachable"):
                 continue
 
+            asset_id = Asset.compute_id(self.client_id, "domain", domain)
+
             # Create findings for missing security headers
             for hf in result.get("header_findings", []):
-                asset_id = hashlib.md5(domain.encode()).hexdigest()
                 finding = make_finding(
                     client_id=self.client_id,
                     asset_id=asset_id,
@@ -1166,9 +1173,9 @@ class ASMEnterpriseService:
                 )
                 await self.upsert_finding(finding)
 
-            # Update asset with tech stack
+            # Update asset with tech stack (same deterministic asset_id as above,
+            # so this merges onto the discovery asset doc rather than duplicating)
             try:
-                asset_id = hashlib.md5(domain.encode()).hexdigest()
                 await self.es.update(
                     index=self.assets_index,
                     id=asset_id,

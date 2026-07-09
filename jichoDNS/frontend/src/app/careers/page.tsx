@@ -35,7 +35,7 @@ const benefits = [
       </svg>
     ),
     title: "Remote-First",
-    description: "Work from anywhere in Africa. We have team members across 12 countries.",
+    description: "Work from anywhere in Africa. Collaborate on your schedule, wherever you are.",
   },
   {
     icon: (
@@ -293,9 +293,8 @@ export default function CareersPage() {
                   from across Africa can do their best work, regardless of where they live.
                 </p>
                 <p>
-                  We move fast, take ownership, and celebrate wins together. Our team includes 
-                  former security researchers from global tech companies, SOC analysts from 
-                  major African banks, and engineers who&apos;ve scaled systems to billions of requests.
+                  We move fast, take ownership, and celebrate wins together. We&apos;re a small,
+                  focused team building for the long term — and growing deliberately.
                 </p>
                 <p>
                   If you&apos;re passionate about cybersecurity and want to make a real impact on 
@@ -356,7 +355,9 @@ export default function CareersPage() {
               Open Positions
             </h2>
             <p className="text-white/60 text-lg max-w-2xl mx-auto">
-              Join us in building Africa&apos;s leading threat intelligence platform
+              These roles are illustrative of the team we&apos;re building. We&apos;re not
+              actively recruiting for every position at all times — send an application and
+              we&apos;ll reach out when there&apos;s a match.
             </p>
           </div>
 

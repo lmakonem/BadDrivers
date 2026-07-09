@@ -34,20 +34,20 @@ interface ThreatIndicator {
   ip_address?: string;
 }
 
-interface Attack {
-  source: { name: string; code?: string };
-  target: { name: string; code?: string };
+// A single observed IOC, identified by its ORIGIN country. IOCs have no
+// victim/target, so we never render a directed source->target attack.
+interface Signal {
+  origin: { name: string; code?: string };
   threatType: string;
   color: string;
   timestamp: Date;
   indicator?: ThreatIndicator;
 }
 
-interface AttackStats {
+interface Stats {
   total: number;
   byType: Record<string, number>;
-  bySource: Record<string, number>;
-  byTarget: Record<string, number>;
+  byOrigin: Record<string, number>;
 }
 
 const THREAT_LABELS: Record<string, string> = {
@@ -67,14 +67,13 @@ const THREAT_COLORS: Record<string, string> = {
 };
 
 export function ThreatMapLive() {
-  const [recentAttacks, setRecentAttacks] = useState<Attack[]>([]);
-  const [stats, setStats] = useState<AttackStats>({
+  const [recentSignals, setRecentSignals] = useState<Signal[]>([]);
+  const [stats, setStats] = useState<Stats>({
     total: 0,
     byType: {},
-    bySource: {},
-    byTarget: {},
+    byOrigin: {},
   });
-  const [attacksPerMinute, setAttacksPerMinute] = useState(0);
+  const [indicatorsPerMinute, setIndicatorsPerMinute] = useState(0);
   const [startTime] = useState(Date.now());
   
   // Country filter state
@@ -114,25 +113,25 @@ export function ThreatMapLive() {
     return `${selectedCountries.length} Countries`;
   };
 
-  // Handle new attack
-  const handleAttack = useCallback((attack: Attack) => {
-    setRecentAttacks((prev) => {
-      const updated = [attack, ...prev].slice(0, 15);
+  // Handle new signal (observed IOC)
+  const handleSignal = useCallback((signal: Signal) => {
+    setRecentSignals((prev) => {
+      const updated = [signal, ...prev].slice(0, 15);
       return updated;
     });
   }, []);
 
   // Handle stats update
-  const handleStatsUpdate = useCallback((newStats: AttackStats) => {
+  const handleStatsUpdate = useCallback((newStats: Stats) => {
     setStats(newStats);
   }, []);
 
-  // Calculate attacks per minute
+  // Calculate indicators per minute
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsedMinutes = (Date.now() - startTime) / 60000;
       if (elapsedMinutes > 0) {
-        setAttacksPerMinute(Math.round(stats.total / elapsedMinutes));
+        setIndicatorsPerMinute(Math.round(stats.total / elapsedMinutes));
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -158,9 +157,9 @@ export function ThreatMapLive() {
   return (
     <div className="relative w-full h-screen bg-gray-950">
       {/* Real Threat Map */}
-      <RealThreatMap 
-        onAttack={handleAttack} 
-        onStatsUpdate={handleStatsUpdate} 
+      <RealThreatMap
+        onSignal={handleSignal}
+        onStatsUpdate={handleStatsUpdate}
         selectedCountries={selectedCountries}
         apiBaseUrl=""
       />
@@ -182,13 +181,13 @@ export function ThreatMapLive() {
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2 bg-gray-900/80 px-3 py-1.5 rounded-lg border border-gray-800">
               <Activity className="w-4 h-4 text-green-500" />
-              <span className="text-green-400 font-mono">{attacksPerMinute}</span>
-              <span className="text-gray-500">/min</span>
+              <span className="text-green-400 font-mono">{indicatorsPerMinute}</span>
+              <span className="text-gray-500">IOCs/min</span>
             </div>
             <div className="flex items-center gap-2 bg-gray-900/80 px-3 py-1.5 rounded-lg border border-gray-800">
               <Zap className="w-4 h-4 text-yellow-500" />
               <span className="text-yellow-400 font-mono">{stats.total.toLocaleString()}</span>
-              <span className="text-gray-500">attacks</span>
+              <span className="text-gray-500">indicators</span>
             </div>
           </div>
         </div>
@@ -199,7 +198,7 @@ export function ThreatMapLive() {
         <div className="p-3 border-b border-gray-800">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-blue-400" />
-            Attack Statistics
+            Indicator Activity
           </h3>
         </div>
         
@@ -222,11 +221,11 @@ export function ThreatMapLive() {
           </div>
         </div>
 
-        {/* Top Sources */}
+        {/* Top Origin Countries — real geo of the observed indicators */}
         <div className="p-3 border-b border-gray-800">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">Top Attack Sources</h4>
+          <h4 className="text-xs font-medium text-gray-400 mb-2">Top Origin Countries</h4>
           <div className="space-y-1.5">
-            {getTopItems(stats.bySource, 5).map(([country, count]) => (
+            {getTopItems(stats.byOrigin, 5).map(([country, count]) => (
               <div key={country} className="flex items-center justify-between">
                 <span className="text-xs text-gray-300">{country}</span>
                 <span className="text-xs font-mono text-red-400">{count}</span>
@@ -235,20 +234,7 @@ export function ThreatMapLive() {
           </div>
         </div>
 
-        {/* Top Targets */}
-        <div className="p-3 border-b border-gray-800">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">Top Targets</h4>
-          <div className="space-y-1.5">
-            {getTopItems(stats.byTarget, 5).map(([country, count]) => (
-              <div key={country} className="flex items-center justify-between">
-                <span className="text-xs text-gray-300">{country}</span>
-                <span className="text-xs font-mono text-green-400">{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Country Filter Section */}
+        {/* Monitored Regions Section */}
         <div className="p-3">
           {/* Filter Toggle Button */}
           <button
@@ -257,7 +243,7 @@ export function ThreatMapLive() {
           >
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-medium text-gray-400">Filter Countries</span>
+              <span className="text-xs font-medium text-gray-400">Monitored Regions</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-cyan-400">{getFilterButtonText()}</span>
@@ -351,37 +337,34 @@ export function ThreatMapLive() {
         <div className="p-3 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
             <Shield className="w-4 h-4 text-red-400" />
-            Live Attack Feed
+            Live Indicator Feed
           </h3>
           <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="divide-y divide-gray-800/50">
-            {recentAttacks.map((attack, index) => (
+            {recentSignals.map((signal, index) => (
               <div
-                key={`${attack.timestamp.getTime()}-${index}`}
+                key={`${signal.timestamp.getTime()}-${index}`}
                 className="p-3 hover:bg-gray-800/50 transition-colors animate-fadeIn"
               >
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <span
                     className="px-2 py-0.5 rounded text-xs font-medium"
                     style={{
-                      backgroundColor: `${attack.color}22`,
-                      color: attack.color,
+                      backgroundColor: `${signal.color}22`,
+                      color: signal.color,
                     }}
                   >
-                    {THREAT_LABELS[attack.threatType] || attack.threatType}
+                    {THREAT_LABELS[signal.threatType] || signal.threatType}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {formatTimeAgo(attack.timestamp)}
+                    {formatTimeAgo(signal.timestamp)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-red-400 font-medium">{attack.source.name}</span>
-                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                  <span className="text-green-400 font-medium">{attack.target.name}</span>
+                  <span className="text-gray-500 text-xs">origin</span>
+                  <span className="text-red-400 font-medium">{signal.origin.name}</span>
                 </div>
               </div>
             ))}
@@ -405,12 +388,12 @@ export function ThreatMapLive() {
         </div>
       </div>
 
-      {/* Raw Attack Logs Console - Bottom Center */}
+      {/* Raw IOC Log Console - Bottom Center */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[1000px] z-[500] bg-black/95 backdrop-blur-sm rounded-lg border border-gray-800 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-900/80 border-b border-gray-800">
           <div className="flex items-center gap-2">
             <Terminal className="w-3.5 h-3.5 text-green-500" />
-            <span className="text-xs font-mono text-green-400">ATTACK_LOG</span>
+            <span className="text-xs font-mono text-green-400">IOC_LOG</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-red-500" />
@@ -419,21 +402,21 @@ export function ThreatMapLive() {
           </div>
         </div>
         <div className="h-32 overflow-y-auto custom-scrollbar p-2 font-mono text-xs">
-          {recentAttacks.slice(0, 20).map((attack, index) => {
-            const ind = attack.indicator;
-            const timestamp = attack.timestamp.toISOString().split('T')[1].split('.')[0];
+          {recentSignals.slice(0, 20).map((signal, index) => {
+            const ind = signal.indicator;
+            const timestamp = signal.timestamp.toISOString().split('T')[1].split('.')[0];
             return (
-              <div 
-                key={`log-${attack.timestamp.getTime()}-${index}`}
+              <div
+                key={`log-${signal.timestamp.getTime()}-${index}`}
                 className="py-0.5 hover:bg-gray-900/50 animate-fadeIn"
               >
                 <span className="text-gray-600">[{timestamp}]</span>
                 {" "}
-                <span className="text-yellow-500">{attack.threatType.toUpperCase()}</span>
+                <span className="text-yellow-500">{signal.threatType.toUpperCase()}</span>
                 {" "}
-                <span className="text-red-400">{attack.source.code || attack.source.name}</span>
-                <span className="text-gray-600">{" -> "}</span>
-                <span className="text-green-400">{attack.target.code || attack.target.name}</span>
+                <span className="text-gray-500">origin</span>
+                {" "}
+                <span className="text-red-400">{signal.origin.code || signal.origin.name}</span>
                 {ind && (
                   <>
                     {" "}
@@ -463,7 +446,7 @@ export function ThreatMapLive() {
               </div>
             );
           })}
-          {recentAttacks.length === 0 && (
+          {recentSignals.length === 0 && (
             <div className="text-gray-600 py-2">
               <span className="text-green-500">$</span> Waiting for threat data...
               <span className="animate-pulse">_</span>

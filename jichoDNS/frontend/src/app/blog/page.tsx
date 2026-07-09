@@ -3,21 +3,21 @@ import { Footer } from "@/components/landing/Footer";
 import Link from "next/link";
 
 const categories = [
-  { name: "Threat Intelligence", count: 24 },
-  { name: "Mobile Money Fraud", count: 12 },
-  { name: "Phishing", count: 18 },
-  { name: "Malware Analysis", count: 9 },
-  { name: "Industry News", count: 15 },
-  { name: "Product Updates", count: 8 },
-  { name: "Research", count: 11 },
+  { name: "Threat Intelligence" },
+  { name: "Mobile Money Fraud" },
+  { name: "Phishing" },
+  { name: "Malware Analysis" },
+  { name: "Industry News" },
+  { name: "Product Updates" },
+  { name: "Research" },
 ];
 
 const featuredPost = {
   title: "The Rise of Mobile Money Fraud in East Africa: A 2026 Analysis",
   excerpt:
-    "Our threat research team analyzed over 50,000 phishing campaigns targeting M-Pesa, Airtel Money, and other mobile money platforms. Here's what we found and how organizations can protect their customers.",
-  author: "Dr. Amani Okonkwo",
-  role: "CEO & Co-Founder",
+    "A look at phishing campaigns targeting M-Pesa, Airtel Money, and other mobile money platforms — and how organizations can protect their customers.",
+  author: "JichoSec Research",
+  role: "Threat Research",
   date: "March 15, 2026",
   readTime: "12 min read",
   category: "Research",
@@ -29,9 +29,9 @@ const blogPosts = [
   {
     title: "Detecting Domain Generation Algorithms in African Botnet Infrastructure",
     excerpt:
-      "How our ML models identify DGA domains with 97% accuracy, and what this means for detecting C2 infrastructure targeting African organizations.",
-    author: "Fatima Hassan",
-    role: "CTO",
+      "How ML models identify DGA domains, and what this means for detecting C2 infrastructure targeting African organizations.",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "March 10, 2026",
     readTime: "8 min read",
     category: "Threat Intelligence",
@@ -41,19 +41,19 @@ const blogPosts = [
     title: "Inside the 'Lagos Phishers': Tracking a Nigerian Cybercrime Group",
     excerpt:
       "A deep dive into the tactics, techniques, and procedures of a prolific phishing group targeting financial institutions across West Africa.",
-    author: "Lindiwe Ndlovu",
-    role: "Head of Threat Research",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "March 5, 2026",
     readTime: "15 min read",
     category: "Research",
     href: "#",
   },
   {
-    title: "New Typosquatting Campaign Targets Major African Banks",
+    title: "How Typosquatting Campaigns Target African Banks",
     excerpt:
-      "We identified 200+ lookalike domains impersonating Standard Bank, Equity Bank, and GTBank. Here's how to protect your organization and customers.",
-    author: "Kwame Asante",
-    role: "VP of Engineering",
+      "How lookalike domains impersonate major African banks — and how to protect your organization and customers.",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "February 28, 2026",
     readTime: "6 min read",
     category: "Phishing",
@@ -63,8 +63,8 @@ const blogPosts = [
     title: "Integrating JichoSec with Your SIEM: A Technical Guide",
     excerpt:
       "Step-by-step instructions for integrating our threat intelligence feeds with Splunk, Microsoft Sentinel, and Elastic Security.",
-    author: "Thandiwe Moyo",
-    role: "Head of Customer Success",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "February 20, 2026",
     readTime: "10 min read",
     category: "Product Updates",
@@ -74,8 +74,8 @@ const blogPosts = [
     title: "Q1 2026 African Threat Landscape Report",
     excerpt:
       "Key findings from our quarterly analysis of cyber threats across the continent, including emerging trends and regional hotspots.",
-    author: "JichoSec Research Team",
-    role: "Threat Intelligence",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "February 15, 2026",
     readTime: "20 min read",
     category: "Research",
@@ -85,8 +85,8 @@ const blogPosts = [
     title: "Understanding DNS-Based Data Exfiltration in African Enterprises",
     excerpt:
       "How attackers use DNS tunneling to steal data, and how our platform detects these stealthy exfiltration techniques in real-time.",
-    author: "Fatima Hassan",
-    role: "CTO",
+    author: "JichoSec Research",
+    role: "Threat Research",
     date: "February 8, 2026",
     readTime: "11 min read",
     category: "Threat Intelligence",
@@ -116,8 +116,8 @@ export default function BlogPage() {
               </span>
             </h1>
             <p className="text-xl text-white/60 max-w-2xl mx-auto">
-              Expert analysis, research reports, and security insights from 
-              Africa&apos;s leading threat intelligence team
+              Sample articles previewing the analysis and research we&apos;ll publish.
+              Our blog launches soon.
             </p>
           </div>
         </div>
@@ -193,7 +193,6 @@ export default function BlogPage() {
                           <span className="group-hover:text-primary transition-colors">
                             {category.name}
                           </span>
-                          <span className="text-sm text-white/40">{category.count}</span>
                         </Link>
                       </li>
                     ))}
@@ -292,8 +291,10 @@ export default function BlogPage() {
 
               {/* Load More */}
               <div className="mt-12 text-center">
-                <button className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full border border-white/10 transition-colors">
-                  Load More Articles
+                <button
+                  disabled
+                  className="px-8 py-3 bg-white/5 text-white/40 font-medium rounded-full border border-white/10 cursor-not-allowed">
+                  More articles coming soon
                 </button>
               </div>
             </div>
