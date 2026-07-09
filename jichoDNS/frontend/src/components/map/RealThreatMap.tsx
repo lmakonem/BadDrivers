@@ -19,6 +19,16 @@ const THREAT_COLORS: Record<string, string> = {
   unknown: "#6b7280",
 };
 
+// JichoSec's African monitoring vantage. Every arc runs from an IOC's REAL
+// origin to THIS fixed sensor — the honest claim is "malicious infrastructure
+// observed by our African sensors", never a fabricated victim/target country.
+const MONITORING_VANTAGE = {
+  lat: -1.2864,
+  lon: 36.8172,
+  name: "Nairobi",
+  label: "JichoSec Sensor · Nairobi",
+};
+
 interface ThreatIndicator {
   indicator: string;
   indicator_type: string;
@@ -35,10 +45,10 @@ interface ThreatIndicator {
   tags: string[];
 }
 
-// A single geolocated IOC rendered as an ORIGIN "ping" on the map.
-// IOCs carry only an origin country (geo of the indicator) — they have no
-// victim/target field — so we never invent a destination. The map shows
-// where malicious activity ORIGINATES, not a fabricated attack path.
+// A single geolocated IOC. Rendered as an arc from its REAL origin country to
+// JichoSec's fixed monitoring sensor (MONITORING_VANTAGE). IOCs have no
+// victim/target field, so we never invent a per-threat destination — the arc's
+// endpoint is always OUR sensor ("observed by us"), never a fabricated victim.
 interface Signal {
   id: number;
   coord: { lat: number; lon: number };
@@ -451,42 +461,95 @@ export default function RealThreatMap({
       return isLive;
     };
 
-    // Draw an ORIGIN ping — an expanding, fading ring plus a glowing core dot
-    // at the IOC's country of origin. No arc, no destination: the visual
-    // asserts only "activity observed from here", never a directed attack.
+    // Quadratic bezier point (origin → control → sensor) at parameter u∈[0,1].
+    const qbez = (
+      o: { x: number; y: number },
+      c: { x: number; y: number },
+      v: { x: number; y: number },
+      u: number,
+    ) => {
+      const m = 1 - u;
+      return {
+        x: m * m * o.x + 2 * m * u * c.x + u * u * v.x,
+        y: m * m * o.y + 2 * m * u * c.y + u * u * v.y,
+      };
+    };
+
+    // Draw an animated arc from the IOC's REAL origin to JichoSec's fixed
+    // monitoring sensor. The arc asserts "malicious infrastructure observed by
+    // our African sensors" — the destination is OUR sensor, not an invented
+    // victim. Origin ping at the source, a traveling head, arrival ping at the sensor.
     const drawSignal = (signal: Signal) => {
-      const pt = map.latLngToContainerPoint([
-        signal.coord.lat,
-        signal.coord.lon,
+      const o = map.latLngToContainerPoint([signal.coord.lat, signal.coord.lon]);
+      const v = map.latLngToContainerPoint([
+        MONITORING_VANTAGE.lat,
+        MONITORING_VANTAGE.lon,
       ]);
-
       const t = Math.min(signal.progress, 1);
-      const alphaHex = Math.round(Math.max(0, 1 - t) * 255)
-        .toString(16)
-        .padStart(2, "0");
 
-      // Expanding ring that fades as it grows
-      const radius = 6 + t * 34;
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = signal.color + alphaHex;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      // Control point lifted perpendicular to the origin→sensor line for curvature.
+      const dx = v.x - o.x;
+      const dy = v.y - o.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const lift = Math.min(150, dist * 0.28);
+      const ctrl = {
+        x: (o.x + v.x) / 2 - (dy / dist) * lift,
+        y: (o.y + v.y) / 2 + (dx / dist) * lift,
+      };
 
-      // Glow
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
-      const glow = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 10);
-      glow.addColorStop(0, signal.color + "aa");
-      glow.addColorStop(1, signal.color + "00");
-      ctx.fillStyle = glow;
-      ctx.fill();
+      // Comet trail: draw the arc from a fading tail up to the traveling head.
+      const head = t;
+      const tail = Math.max(0, t - 0.55);
+      const steps = 26;
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < steps; i++) {
+        const p0 = qbez(o, ctrl, v, tail + (head - tail) * (i / steps));
+        const p1 = qbez(o, ctrl, v, tail + (head - tail) * ((i + 1) / steps));
+        const a = Math.round((i / steps) * 210)
+          .toString(16)
+          .padStart(2, "0");
+        ctx.strokeStyle = signal.color + a;
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      }
 
-      // Core dot
+      // Origin: brief expanding ring + core dot ("observed from here").
+      if (t < 0.5) {
+        const ot = t / 0.5;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, 4 + ot * 16, 0, Math.PI * 2);
+        ctx.strokeStyle =
+          signal.color + Math.round((1 - ot) * 180).toString(16).padStart(2, "0");
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+      ctx.arc(o.x, o.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = signal.color;
       ctx.fill();
+
+      // Traveling head glow.
+      const hp = qbez(o, ctrl, v, head);
+      const g = ctx.createRadialGradient(hp.x, hp.y, 0, hp.x, hp.y, 7);
+      g.addColorStop(0, signal.color + "ee");
+      g.addColorStop(1, signal.color + "00");
+      ctx.beginPath();
+      ctx.fillStyle = g;
+      ctx.arc(hp.x, hp.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Arrival ping at the sensor as the head lands (fades over progress 0.92→1.25).
+      if (signal.progress >= 0.92) {
+        const at = Math.min(1, (signal.progress - 0.92) / 0.33);
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, 6 + at * 20, 0, Math.PI * 2);
+        ctx.strokeStyle =
+          "#22c55e" + Math.round((1 - at) * 200).toString(16).padStart(2, "0");
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     };
 
     // Draw JichoSec's monitored African focus regions (highlight only — these
@@ -520,6 +583,39 @@ export default function RealThreatMap({
       });
     };
 
+    // Draw the fixed JichoSec sensor (arc destination) with a persistent label,
+    // so the converging arcs read as "observed by our sensor", not "attack on Kenya".
+    const drawVantage = (phase: number) => {
+      const p = map.latLngToContainerPoint([
+        MONITORING_VANTAGE.lat,
+        MONITORING_VANTAGE.lon,
+      ]);
+      const pulse = 8 + Math.sin(phase) * 2;
+
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, pulse + 12);
+      glow.addColorStop(0, "#22c55e88");
+      glow.addColorStop(1, "#22c55e00");
+      ctx.beginPath();
+      ctx.fillStyle = glow;
+      ctx.arc(p.x, p.y, pulse + 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#22c55e";
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#052e16";
+      ctx.stroke();
+
+      ctx.font = "600 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#0a0a0a"; // shadow for legibility over tiles
+      ctx.fillText(MONITORING_VANTAGE.label, p.x + 11, p.y + 5);
+      ctx.fillStyle = "#86efac";
+      ctx.fillText(MONITORING_VANTAGE.label, p.x + 10, p.y + 4);
+    };
+
     // Animation loop
     let lastProcessTime = 0;
     const animate = (currentTime: number) => {
@@ -531,22 +627,25 @@ export default function RealThreatMap({
       // Process indicators - faster for live data (100ms), slower for replay (300ms)
       const hasPendingLive = stateRef.current.pendingIndicators.length > 0;
       const processInterval = hasPendingLive ? 100 : 300;
-      
+
       if (currentTime - lastProcessTime > processInterval) {
         processPendingIndicators();
         lastProcessTime = currentTime;
       }
 
-      // Advance origin pings; drop them once fully expanded/faded
+      // Advance arcs; keep them briefly past arrival so the sensor ping breathes.
       const activeSignals: Signal[] = [];
       for (const signal of stateRef.current.signals) {
-        signal.progress += 0.008;
-        if (signal.progress < 1) {
+        signal.progress += 0.009;
+        if (signal.progress < 1.25) {
           drawSignal(signal);
           activeSignals.push(signal);
         }
       }
       stateRef.current.signals = activeSignals;
+
+      // Draw the sensor (arc destination) on top of the arcs.
+      drawVantage(phase);
 
       stateRef.current.animationId = requestAnimationFrame(animate);
     };
