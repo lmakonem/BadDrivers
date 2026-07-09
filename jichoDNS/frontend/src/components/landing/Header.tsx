@@ -17,7 +17,7 @@ const PRODUCTS = [
     href: "/portal",
     anchorHref: "#threat-intelligence",
     description: "Aggregated IOC feeds — malicious domains, IPs, URLs, hashes — enriched with GeoIP and MITRE ATT&CK context.",
-    badge: "14 feeds",
+    badge: "9 feeds",
     tone: ACCENT,
     subItems: [
       { label: "IOC Search & Lookup", href: "/portal",   desc: "Query domains, IPs, URLs, hashes" },

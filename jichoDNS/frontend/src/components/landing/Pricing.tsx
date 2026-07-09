@@ -27,7 +27,7 @@ const plans = [
     features: [
       "Everything in Community",
       "50,000 API queries/month",
-      "All 14 threat feeds",
+      "All 9 threat feeds",
       "Dark web monitoring",
       "Brand protection alerts",
       "30-day data retention",

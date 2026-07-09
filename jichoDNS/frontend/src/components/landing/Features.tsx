@@ -25,7 +25,7 @@ const modules: Array<{
       "Real-time WebSocket stream + REST API",
       "Elasticsearch-backed IOC search",
     ],
-    stat: { value: "14", label: "Live feeds" },
+    stat: { value: "9", label: "Live feeds" },
   },
   {
     id: "dark-web",

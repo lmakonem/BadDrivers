@@ -81,7 +81,7 @@ export function DemoSection() {
                 </div>
                 <div>
                   <h3 className="font-display font-medium text-white mb-1">Threat Intelligence Overview</h3>
-                  <p className="text-[#94A3B8] text-sm">See how we aggregate data from 14 threat feeds with Africa-specific coverage</p>
+                  <p className="text-[#94A3B8] text-sm">See how we aggregate data from 9 live threat feeds with Africa-specific coverage</p>
                 </div>
               </div>
 
