@@ -81,6 +81,8 @@ class BrandMonitor(BaseModel):
     last_scan_at: Optional[datetime] = None
     typosquat_count: int = Field(default=0, description="Number of detected typosquats")
     owner_user_id: Optional[int] = Field(default=None, description="Owning JichoDNS user id")
+    country_code: Optional[str] = Field(default=None, description="Brand country (ISO-3166 alpha-2)")
+    industry: Optional[str] = Field(default=None, description="Brand industry sector")
 
 
 class TyposquatDomain(BaseModel):

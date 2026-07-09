@@ -141,8 +141,18 @@ const ALERT_TYPE_ICON: Record<string, string> = {
   ioc_match:            "🎯",
 };
 
-const industryIcon = (ind?: string) =>
-  (ind ?? "").toLowerCase().includes("bank") ? "🏦" : "📡";
+const industryIcon = (ind?: string) => {
+  const i = (ind ?? "").toLowerCase();
+  if (i.includes("bank") || i.includes("financ")) return "🏦";
+  if (i.includes("telecom") || i.includes("mobile")) return "📡";
+  if (i.includes("insur")) return "🛡️";
+  if (i.includes("gov") || i.includes("public")) return "🏛️";
+  if (i.includes("retail") || i.includes("commerce")) return "🛒";
+  if (i.includes("energy") || i.includes("utilit") || i.includes("oil")) return "⚡";
+  if (i.includes("health") || i.includes("medic") || i.includes("pharma")) return "🏥";
+  if (i.includes("tech") || i.includes("software")) return "💻";
+  return "🏢"; // neutral default — never assume telecom
+};
 
 // ── Main component ────────────────────────────────────────────────────────────
 

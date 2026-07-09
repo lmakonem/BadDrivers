@@ -574,7 +574,36 @@ async def get_brand_stats(current_user: User = Depends(get_current_user)):
 _GENERIC_IOC_WORDS = {
     "orange", "telecom", "telkom", "openserve", "mobile", "airtel", "mtn",
     "vodacom", "standard", "first", "national", "bank", "blue", "red",
+    # generic subdomain labels that must never become brand IOC search terms
+    "admin", "mail", "portal", "staging", "financing", "autodiscover", "api",
+    "app", "cdn", "dev", "www", "webmail", "remote", "vpn", "smtp", "test",
 }
+
+# Two-part public suffixes common in African ccTLDs, so we can extract the
+# registrable brand label instead of a subdomain label.
+_TWO_PART_SUFFIXES = {
+    "co.ke", "or.ke", "go.ke", "ac.ke", "co.za", "org.za", "gov.za", "ac.za",
+    "co.tz", "or.tz", "ac.tz", "go.tz", "co.ug", "ac.ug", "go.ug", "com.ng",
+    "gov.ng", "org.ng", "edu.ng", "com.gh", "gov.gh", "gov.cd", "co.zm",
+    "co.zw", "org.zw", "com.eg", "gov.eg", "com.dz", "co.ma", "com.tn",
+    "co.mz", "co.ao", "co.bw", "co.rw", "co.mw", "co.ci", "com.sn",
+}
+
+
+def _registrable_base(domain: str) -> str:
+    """
+    Registrable brand label of a domain (the SLD before the public suffix):
+    safaricom.co.ke -> safaricom, admin.fpi-rdc.cd -> fpi-rdc, www.bmoi.mg -> bmoi.
+    Collapses subdomains to the brand so generic subdomain labels
+    (admin/mail/portal/...) never become IOC search terms.
+    """
+    d = bare_domain(domain)
+    parts = [p for p in d.split(".") if p]
+    if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_PART_SUFFIXES:
+        return parts[-3]
+    if len(parts) >= 2:
+        return parts[-2]
+    return parts[0] if parts else ""
 
 @router.get("/monitors/{monitor_id}/credentials")
 async def get_brand_credentials(
@@ -688,12 +717,18 @@ async def get_brand_intel(
             raise HTTPException(status_code=404, detail="Brand monitor not found")
         domains = monitor.get("domains", [])
 
-        # Extract specific (non-generic) bases from domains
+        # Extract the registrable BRAND label from each domain (not subdomain
+        # labels — those are generic words like admin/mail/portal that match
+        # thousands of unrelated IOCs), plus the monitor's real brand keywords.
         specific_bases = []
         for d in domains:
-            base = d.lstrip("www.").split(".")[0]
-            if len(base) >= 4 and base.lower() not in _GENERIC_IOC_WORDS:
+            base = _registrable_base(d).lower()
+            if len(base) >= 4 and base not in _GENERIC_IOC_WORDS:
                 specific_bases.append(base)
+        for kw in monitor.get("keywords", []):
+            kw = (kw or "").strip().lower()
+            if len(kw) >= 4 and kw not in _GENERIC_IOC_WORDS:
+                specific_bases.append(kw)
         specific_bases = list(set(specific_bases))
 
         if not specific_bases:
