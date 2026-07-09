@@ -6,6 +6,7 @@ Used to find related domains via SSL certificates.
 """
 
 import aiohttp
+import asyncio
 from datetime import datetime
 from typing import List, Any, Optional
 import os
@@ -43,31 +44,58 @@ class CertificateTransparencyImporter(BaseImporter):
     ]
     
     async def fetch(self) -> Any:
-        """Fetch certificates from crt.sh for monitored patterns."""
+        """
+        Fetch certificates from crt.sh for monitored patterns.
+
+        crt.sh's public JSON endpoint is frequently overloaded and returns
+        502/503/504/429 — the previous single-shot fetch just logged the error
+        and stored 0. We now send a proper User-Agent, retry transient 5xx/429
+        with backoff, tolerate a missing JSON content-type, and pace requests so
+        the whole run degrades gracefully instead of returning nothing.
+        """
         all_certs = []
-        
-        async with aiohttp.ClientSession() as session:
+        headers = {
+            "User-Agent": "JichoDNS-CT/1.0 (+https://jichosec.defendanddetect.com)",
+            "Accept": "application/json",
+        }
+        timeout = aiohttp.ClientTimeout(total=90)
+
+        async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
             for pattern in self.MONITORED_PATTERNS[:10]:  # Limit to avoid rate limits
-                try:
-                    url = f"https://crt.sh/?q=%25{pattern}%25&output=json"
-                    
-                    async with session.get(url, timeout=60) as response:
-                        if response.status == 200:
-                            certs = await response.json()
-                            # Only get recent certs (last 7 days processed by parse)
-                            for cert in certs[:100]:  # Limit per pattern
-                                cert["search_pattern"] = pattern
-                            all_certs.extend(certs[:100])
-                        else:
-                            self.logger.warning(f"crt.sh returned {response.status} for {pattern}")
-                            
-                except aiohttp.ClientError as e:
-                    self.logger.warning(f"Error fetching crt.sh for {pattern}: {e}")
-                    continue
-                except Exception as e:
-                    self.logger.warning(f"Unexpected error for {pattern}: {e}")
-                    continue
-        
+                url = f"https://crt.sh/?q=%25{pattern}%25&output=json"
+                for attempt in range(3):
+                    try:
+                        async with session.get(url) as response:
+                            if response.status == 200:
+                                # crt.sh sometimes omits application/json content-type
+                                certs = await response.json(content_type=None)
+                                for cert in certs[:100]:  # Limit per pattern
+                                    cert["search_pattern"] = pattern
+                                all_certs.extend(certs[:100])
+                                break
+                            if response.status in (429, 502, 503, 504):
+                                wait = 2 * (attempt + 1)
+                                self.logger.warning(
+                                    f"crt.sh {response.status} for {pattern}; retry in {wait}s"
+                                )
+                                await asyncio.sleep(wait)
+                                continue
+                            self.logger.warning(
+                                f"crt.sh returned {response.status} for {pattern}"
+                            )
+                            break
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        self.logger.warning(
+                            f"crt.sh error for {pattern} (attempt {attempt + 1}): {e}"
+                        )
+                        await asyncio.sleep(2 * (attempt + 1))
+                        continue
+                    except Exception as e:
+                        self.logger.warning(f"Unexpected crt.sh error for {pattern}: {e}")
+                        break
+                # Be gentle between patterns — crt.sh is easily overloaded.
+                await asyncio.sleep(1)
+
         return all_certs
     
     async def parse(self, raw_data: Any) -> List[Indicator]:
@@ -179,7 +207,14 @@ class CertificateTransparencyImporter(BaseImporter):
             import re
             if re.search(rf"{pattern}\d", domain_lower) or re.search(rf"\d{pattern}", domain_lower):
                 return True
-        
+            # Brand fused with other characters in the SAME label (e.g.
+            # "safaricom-ke", "mpesapay", "airtelmoney") is a classic typosquat
+            # shape — but a label that is EXACTLY the brand (safaricom.co.ke and
+            # its legitimate subdomains) is left alone.
+            for label in domain_lower.split("."):
+                if pattern in label and label != pattern:
+                    return True
+
         return False
     
     def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:

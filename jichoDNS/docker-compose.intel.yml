@@ -66,7 +66,10 @@ services:
       - SF_DEBUG=0
     mem_limit: 512m
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5001/"]
+      # The ctdc/spiderfoot image ships wget (not curl) — the old curl test
+      # never ran ("curl: executable file not found") and marked a healthy
+      # SpiderFoot as unhealthy on every interval.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5001/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -89,4 +92,6 @@ networks:
     # NOT internal — Tor and SpiderFoot need outbound internet access
   jichodns-network:
     external: true
-    name: jichodns-network
+    # Compose-generated name of the main stack's network (project "jichodns").
+    # Was stale ("jichodns-network"), which broke recreating intel services.
+    name: jichodns_jichodns-network

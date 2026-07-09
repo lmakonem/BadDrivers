@@ -77,6 +77,31 @@ def publish_new_iocs(indicators: list, source: str):
         print(f"Failed to publish IOCs to Redis: {e}")
 
 
+async def _record_feed_health(
+    feed_name: str, success: bool, ioc_count: int, duration: float, error: str = None
+) -> None:
+    """
+    Best-effort feed_health record for tasks that do NOT go through
+    _generic_import (e.g. MISP). Without it a feed can run but stay invisible in
+    the health view. Never raises — health recording must not fail a task.
+    """
+    try:
+        from app.services.feed_monitor import feed_monitor
+        from app.services.elasticsearch import es_service
+        await es_service.connect()
+        feed_monitor.client = es_service.client
+        await feed_monitor.ensure_index()
+        await feed_monitor.record_run(
+            feed_name=feed_name,
+            success=success,
+            ioc_count=ioc_count,
+            duration_seconds=duration,
+            error_message=error,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to record feed health for {feed_name}: {e}")
+
+
 # Beat schedule for periodic tasks
 celery_app.conf.beat_schedule = {
     # === HIGH FREQUENCY (every 5 minutes) ===
@@ -199,6 +224,7 @@ _KEY_GATED_FEEDS = {
     "import-abuseipdb": settings.ABUSEIPDB_API_KEY,
     "import-alienvault-otx": settings.OTX_API_KEY,
     "import-malwarebazaar": settings.MALWAREBAZAAR_API_KEY,
+    "import-misp": settings.MISP_API_KEY,  # no key -> misp_client disabled -> no-op
 }
 for _task_name, _key in _KEY_GATED_FEEDS.items():
     if not (_key or "").strip():
@@ -427,6 +453,7 @@ async def _import_misp():
 
         if not attrs:
             logger.info("MISP: No new attributes found")
+            await _record_feed_health("misp", True, 0, time.monotonic() - start)
             return {
                 "source": "misp",
                 "success": True,
@@ -503,6 +530,7 @@ async def _import_misp():
             f"{store_result.get('success', 0)} stored in {duration:.1f}s"
         )
 
+        await _record_feed_health("misp", True, store_result.get("success", 0), duration)
         return {
             "source": "misp",
             "success": True,
@@ -514,6 +542,7 @@ async def _import_misp():
 
     except Exception as e:
         logger.error(f"MISP import error: {e}", exc_info=True)
+        await _record_feed_health("misp", False, 0, time.monotonic() - start, str(e))
         return {
             "source": "misp",
             "success": False,
