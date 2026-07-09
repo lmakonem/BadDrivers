@@ -416,16 +416,11 @@ class ElasticsearchService:
         ]
         
         if since:
-            # Check both last_seen and created_at to catch newly imported indicators
-            filter_clauses.append({
-                "bool": {
-                    "should": [
-                        {"range": {"last_seen": {"gte": since.isoformat()}}},
-                        {"range": {"created_at": {"gte": since.isoformat()}}},
-                    ],
-                    "minimum_should_match": 1
-                }
-            })
+            # Filter by ACTUAL observation time (last_seen), not ingest time
+            # (created_at). A "last N hours" feed must mean threats genuinely
+            # SEEN in that window — not month-old indicators that merely got
+            # re-imported recently (created_at within the window but last_seen old).
+            filter_clauses.append({"range": {"last_seen": {"gte": since.isoformat()}}})
         
         # Prefer indicators WITH geo data, but include others too
         body = {
@@ -439,7 +434,7 @@ class ElasticsearchService:
             },
             "sort": [
                 {"_score": {"order": "desc"}},
-                {"created_at": {"order": "desc"}},
+                {"last_seen": {"order": "desc"}},
             ],
             "size": limit,
             "_source": [
