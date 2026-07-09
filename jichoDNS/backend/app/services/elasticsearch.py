@@ -1,6 +1,7 @@
 """Elasticsearch service for IOC storage and search."""
 
 import asyncio
+import hashlib
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
@@ -178,8 +179,17 @@ class ElasticsearchService:
             ).isoformat()
             doc["active"] = True
 
-            # Use upsert: create full doc if new, only update last_seen if exists
-            doc_id = f"{indicator.indicator_type.value}:{indicator.indicator}"
+            # Use upsert: create full doc if new, only update last_seen if exists.
+            # ES caps _id at 512 bytes; a long URL indicator blows past it and
+            # rejects the WHOLE bulk request (action_request_validation_exception),
+            # failing the entire feed import — this silently broke phishtank. Hash
+            # oversized ids so one long URL can't kill the batch, keeping them
+            # deterministic (same indicator -> same doc, upsert-safe).
+            raw_id = f"{indicator.indicator_type.value}:{indicator.indicator}"
+            doc_id = raw_id if len(raw_id.encode("utf-8")) <= 480 else (
+                f"{indicator.indicator_type.value}:"
+                f"{hashlib.sha1(indicator.indicator.encode('utf-8')).hexdigest()}"
+            )
             action = {
                 "_op_type": "update",
                 "_index": self.ioc_index,

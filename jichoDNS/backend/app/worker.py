@@ -191,6 +191,20 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+# ── Key-gated feeds ──────────────────────────────────────────────────────────
+# Feeds that REQUIRE an API key are only scheduled when that key is configured;
+# otherwise they fail on every run and pollute feed health with a "feed" the
+# platform cannot actually ingest. They auto-enable the moment a key is set.
+_KEY_GATED_FEEDS = {
+    "import-abuseipdb": settings.ABUSEIPDB_API_KEY,
+    "import-alienvault-otx": settings.OTX_API_KEY,
+    "import-malwarebazaar": settings.MALWAREBAZAAR_API_KEY,
+}
+for _task_name, _key in _KEY_GATED_FEEDS.items():
+    if not (_key or "").strip():
+        celery_app.conf.beat_schedule.pop(_task_name, None)
+        logger.info("Feed %s not scheduled (no API key configured)", _task_name)
+
 # Alias for Celery to find the app
 app = celery_app
 
