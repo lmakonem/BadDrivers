@@ -1649,15 +1649,19 @@ class AttackSurfaceManager:
                     retry_on_conflict=3,
                 )
             
-            # Store vulnerabilities
-            for vuln in result.vulnerabilities:
-                await self.es_client.index(
-                    index=self.vulnerabilities_index,
-                    id=vuln.id,
-                    document=vuln.to_es_doc(),
-                )
-            
-            logger.info(f"Stored {len(result.assets)} assets and {len(result.vulnerabilities)} vulnerabilities")
+            # Base-discovery Vulnerability objects are intentionally NOT persisted.
+            # They use a legacy schema (uuid id, affected_asset_value, no `status`)
+            # that no read path consumes, and each scan minted a fresh uuid with no
+            # upsert — so the findings index accumulated ~200k stale duplicates.
+            # run_full_scan() re-emits these same vulns as proper ENTERPRISE findings
+            # via make_finding() (deterministic id + status="open"), which is what the
+            # UI/API actually reads; result.vulnerabilities stays in-memory for that
+            # conversion and for the on-demand check_vulnerabilities() endpoint.
+            logger.info(
+                f"Stored {len(result.assets)} assets "
+                f"({len(result.vulnerabilities)} base vulns kept in-memory only, "
+                f"persisted as enterprise findings by the caller)"
+            )
             
         except Exception as e:
             logger.error(f"Failed to store discovery results: {e}")
