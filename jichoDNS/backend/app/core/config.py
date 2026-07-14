@@ -101,7 +101,11 @@ class Settings(BaseSettings):
     # MISP
     MISP_URL: str = Field(default="https://misp.afisac.africa")
     MISP_API_KEY: str = Field(default="")
-    MISP_VERIFY_SSL: bool = Field(default=False)
+    # Verify the MISP server's TLS cert by default — the API key is sent in the
+    # request, so an unverified connection exposes it to on-path MITM (and lets
+    # an attacker inject forged IOCs into the corpus that feeds client PDFs).
+    # Only set False for a MISP with a self-signed cert you explicitly trust.
+    MISP_VERIFY_SSL: bool = Field(default=True)
     MISP_TIMEOUT: int = Field(default=120)  # seconds — MISP can be very slow
     MISP_PULL_LIMIT: int = Field(default=100)
     MISP_ENABLED: bool = Field(default=True)

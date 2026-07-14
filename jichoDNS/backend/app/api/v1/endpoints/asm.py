@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func, text, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,23 @@ from collections import defaultdict, deque
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
-from app.core.net_guard import resolve_public_ips, extract_host, SSRFError
+from app.core.net_guard import assert_public_url, resolve_public_ips, extract_host, SSRFError
+
+
+def _validate_webhook_url(v: Optional[str]) -> Optional[str]:
+    """
+    Reject SSRF-unsafe webhook URLs at write time (in addition to the runtime
+    guard in send_webhook), so a bad URL never gets stored and the user gets an
+    immediate 422 instead of silent scheduled-scan SSRF attempts.
+    """
+    if not v:
+        return v
+    v = v.strip()
+    try:
+        assert_public_url(v)
+    except SSRFError as e:
+        raise ValueError(f"webhook_url is not allowed: {e}")
+    return v
 from app.models.user import User
 from app.models.asm import ASMClient, ASMDiscoveryGroup
 from app.services.attack_surface import AttackSurfaceManager, AssetType, ChangeType
@@ -239,6 +255,8 @@ class ClientCreate(BaseModel):
     # Allowed: 0, 30, 60, 240, 360, 480, 720, 1440
     scan_interval_minutes: int = 1440
 
+    _v_webhook = field_validator("webhook_url")(_validate_webhook_url)
+
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
@@ -252,6 +270,8 @@ class ClientUpdate(BaseModel):
     notify_on: Optional[List[str]] = None
     scan_interval_minutes: Optional[int] = None
     is_active: Optional[bool] = None
+
+    _v_webhook = field_validator("webhook_url")(_validate_webhook_url)
 
 
 class DiscoveryGroupCreate(BaseModel):

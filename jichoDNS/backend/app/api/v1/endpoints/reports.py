@@ -407,6 +407,21 @@ async def get_report(
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
 
 
+# Reports embed only user-authored text + our own markup — never scripts — so a
+# no-JS CSP is safe and gives defense-in-depth against stored XSS (report fields
+# are HTML-escaped at generation, but an admin views others' reports at this same
+# origin, so belt-and-suspenders). frame-ancestors 'none' blocks clickjacking.
+_REPORT_HTML_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
+    "font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
+_REPORT_HTML_HEADERS = {
+    "Content-Security-Policy": _REPORT_HTML_CSP,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+}
+
+
 @router.get("/{report_id}/html")
 async def view_report_html(
     report_id: str,
@@ -415,7 +430,8 @@ async def view_report_html(
     """Return the report as a rendered HTML page."""
     sample = _get_sample_if_exists(report_id)
     if sample:
-        return Response(content=sample["html"], media_type="text/html")
+        return Response(content=sample["html"], media_type="text/html",
+                        headers=_REPORT_HTML_HEADERS)
 
     await _ensure_index()
     if not es_service.client:
@@ -430,7 +446,7 @@ async def view_report_html(
         raise
     except Exception:
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
-    return Response(content=html, media_type="text/html")
+    return Response(content=html, media_type="text/html", headers=_REPORT_HTML_HEADERS)
 
 
 @router.get("/{report_id}/download")

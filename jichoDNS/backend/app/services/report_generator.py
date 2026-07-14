@@ -17,6 +17,7 @@ that render with realistic static data (no ES required).
 
 import logging
 from datetime import datetime, timezone, timedelta
+from html import escape as _escape
 from typing import Any, Dict, List, Optional
 
 from app.services.elasticsearch import es_service
@@ -109,6 +110,14 @@ def _default_title(report_type: str) -> str:
 
 def _build_result(report_type, title, now, date_range, ioc_stats, dw_stats,
                    cred_stats, top_iocs, darkweb_posts, focus_area) -> Dict[str, Any]:
+    # SECURITY: title and focus_area are user-supplied (report title / custom
+    # prompt) and are interpolated raw into the report HTML, which is served as
+    # text/html and viewable by admins (who bypass owner scoping). Escape here —
+    # the single choke point for every report type and both the real and sample
+    # paths — to prevent stored XSS in the report/admin origin.
+    title = _escape(title or "", quote=True)
+    if focus_area:
+        focus_area = _escape(focus_area, quote=True)
     top_threats = list(ioc_stats.get("by_type", {}).items())
     top_countries = list(ioc_stats.get("by_country", {}).items())[:10]
 

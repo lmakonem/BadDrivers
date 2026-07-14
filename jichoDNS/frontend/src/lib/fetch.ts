@@ -9,7 +9,7 @@
  *   - POST/PUT/PATCH: 60 seconds (report generation can take a while)
  */
 
-import { getAccessToken, refreshAccessToken, clearTokens } from "./auth";
+import { getAccessToken, refreshAccessToken } from "./auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -73,9 +73,13 @@ export async function apiFetch(
         // fall through to return original 401
       }
     }
-    clearTokens();
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
+    // Refresh failed. Only bounce to /login if the session was actually
+    // invalidated (refreshAccessToken clears tokens on a definitive 401/403).
+    // A transient refresh failure (5xx/network) leaves tokens in place — return
+    // the 401 and let the caller surface an error instead of a spurious logout.
+    if (typeof window !== "undefined" && !getAccessToken()) {
+      const here = window.location.pathname + window.location.search;
+      window.location.href = `/login?next=${encodeURIComponent(here)}`;
     }
   }
 

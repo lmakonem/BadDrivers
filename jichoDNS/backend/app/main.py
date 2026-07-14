@@ -126,10 +126,31 @@ async def custom_openapi(request: Request):
         )
     return JSONResponse(app.openapi_schema)
 
-# CORS middleware
+# Security response headers. Applied to every response (API + admin panel).
+# A strict CSP is intentionally NOT set globally here — it would break the
+# sqladmin HTML panel and the token-gated /docs; the report-HTML endpoints set
+# their own no-JS CSP. Browser-facing CSP lives in the frontend (next.config).
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Safe behind the always-HTTPS Cloudflare tunnel.
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+    )
+    return response
+
+
+# CORS middleware. In production, drop any non-HTTPS origin from the allow-list
+# — credentials are allowed, so a cleartext origin would be MITM-abusable.
+_cors_origins = settings.CORS_ORIGINS
+if settings.is_production:
+    _cors_origins = [o for o in _cors_origins if o.startswith("https://")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],

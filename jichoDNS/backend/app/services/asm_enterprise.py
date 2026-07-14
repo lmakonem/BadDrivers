@@ -54,7 +54,7 @@ from uuid import uuid4
 import httpx
 
 from app.core.config import settings
-from app.core.net_guard import resolve_public_ips, SSRFError
+from app.core.net_guard import assert_public_url, resolve_public_ips, SSRFError
 
 logger = logging.getLogger(__name__)
 
@@ -521,6 +521,16 @@ async def send_webhook(
     POST a JSON payload to the webhook URL.
     Signs with HMAC-SHA256 if signing_secret is provided.
     """
+    # SECURITY: the webhook URL is tenant-supplied (ClientCreate/Update) and this
+    # fires from the server (incl. the 30-min scheduled rescan), so it must pass
+    # the SSRF guard like every other server-side fetch — otherwise it is a blind
+    # SSRF primitive into the internal/metadata plane (169.254.169.254, RFC1918).
+    try:
+        assert_public_url(url)
+    except SSRFError as e:
+        logger.warning(f"Webhook blocked (SSRF guard) for {url}: {e}")
+        return False
+
     body = json.dumps(payload, default=str)
     headers = {"Content-Type": "application/json", "User-Agent": "JichoSec-ASM/1.0"}
     if signing_secret:
@@ -528,7 +538,9 @@ async def send_webhook(
         headers["X-JichoSec-Signature"] = f"sha256={sig}"
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        # follow_redirects=False: a 30x to an internal host would otherwise
+        # re-target the POST past the guard.
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             r = await client.post(url, content=body, headers=headers)
             return r.status_code < 300
     except Exception as e:

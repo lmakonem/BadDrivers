@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
-import { apiFetchJSON } from "@/lib/fetch";
+import { apiFetchJSON, apiFetchJSONOrThrow } from "@/lib/fetch";
 
 interface PlatformUser {
   id: number;
@@ -79,41 +79,55 @@ export default function SettingsPage() {
     if (selectedClient) fetchClientAccess(selectedClient.id);
   }, [selectedClient, fetchClientAccess]);
 
+  // Mutations use apiFetchJSONOrThrow so a 403/500/network failure actually
+  // reaches the catch — apiFetchJSON swallows errors to null, which made these
+  // report "granted"/"revoked" even when the change never happened. On success
+  // we refetch the authoritative access list so the UI reflects real state.
   const grantAccess = async (clientId: number, userId: number, level: string) => {
     try {
-      await apiFetchJSON(`/api/v1/asm/clients/${clientId}/access`, {
+      await apiFetchJSONOrThrow(`/api/v1/asm/clients/${clientId}/access`, {
         method: "POST",
         body: JSON.stringify({ user_id: userId, access_level: level }),
       });
       setAccessMsg(`Access granted`);
-      fetchClientAccess(clientId);
-    } catch { setAccessMsg("Failed to grant access"); }
+    } catch (e) {
+      setAccessMsg(e instanceof Error ? `Failed to grant access: ${e.message}` : "Failed to grant access");
+    }
+    fetchClientAccess(clientId);
     setTimeout(() => setAccessMsg(null), 3000);
   };
 
   const revokeAccess = async (clientId: number, userId: number) => {
     try {
-      await apiFetchJSON(`/api/v1/asm/clients/${clientId}/access/${userId}`, { method: "DELETE" });
+      await apiFetchJSONOrThrow(`/api/v1/asm/clients/${clientId}/access/${userId}`, { method: "DELETE" });
       setAccessMsg("Access revoked");
-      fetchClientAccess(clientId);
-    } catch { setAccessMsg("Failed to revoke access"); }
+    } catch (e) {
+      setAccessMsg(e instanceof Error ? `Failed to revoke access: ${e.message}` : "Failed to revoke access");
+    }
+    fetchClientAccess(clientId);
     setTimeout(() => setAccessMsg(null), 3000);
   };
 
   const bulkGrant = async (userId: number, level: string) => {
     try {
-      await apiFetchJSON(`/api/v1/asm/access/bulk-grant?user_id=${userId}&access_level=${level}`, { method: "POST" });
+      await apiFetchJSONOrThrow(`/api/v1/asm/access/bulk-grant?user_id=${userId}&access_level=${level}`, { method: "POST" });
       setAccessMsg(`All clients granted to user`);
-    } catch { setAccessMsg("Failed"); }
+    } catch (e) {
+      setAccessMsg(e instanceof Error ? `Failed: ${e.message}` : "Failed");
+    }
+    if (selectedClient) fetchClientAccess(selectedClient.id);
     setTimeout(() => setAccessMsg(null), 3000);
   };
 
   const bulkRevoke = async (userId: number) => {
     if (!confirm("Revoke this user's access to all clients?")) return;
     try {
-      await apiFetchJSON(`/api/v1/asm/access/bulk-revoke?user_id=${userId}`, { method: "POST" });
+      await apiFetchJSONOrThrow(`/api/v1/asm/access/bulk-revoke?user_id=${userId}`, { method: "POST" });
       setAccessMsg("Access revoked from all clients");
-    } catch { setAccessMsg("Failed"); }
+    } catch (e) {
+      setAccessMsg(e instanceof Error ? `Failed: ${e.message}` : "Failed");
+    }
+    if (selectedClient) fetchClientAccess(selectedClient.id);
     setTimeout(() => setAccessMsg(null), 3000);
   };
 

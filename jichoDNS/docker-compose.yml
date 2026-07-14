@@ -7,6 +7,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: jichodns-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: jichodns
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jichodns_dev}
@@ -28,6 +29,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:23.8-alpine
     container_name: jichodns-clickhouse
+    restart: unless-stopped
     environment:
       CLICKHOUSE_USER: jichodns
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-jichodns_dev}
@@ -50,6 +52,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: jichodns-redis
+    restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -72,6 +75,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: jichodns-api
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://jichodns:${POSTGRES_PASSWORD:-jichodns_dev}@postgres:5432/jichodns
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
@@ -121,6 +125,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: jichodns-worker
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://jichodns:${POSTGRES_PASSWORD:-jichodns_dev}@postgres:5432/jichodns
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
@@ -185,6 +190,7 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: jichodns-frontend
+    restart: unless-stopped
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_MAPBOX_TOKEN=${MAPBOX_TOKEN}

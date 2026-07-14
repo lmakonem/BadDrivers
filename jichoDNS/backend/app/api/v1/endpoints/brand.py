@@ -600,7 +600,7 @@ async def get_brand_credentials(
         if not _current_user.is_admin and monitor.get("owner_user_id") != _current_user.id:
             raise HTTPException(status_code=404, detail="Brand monitor not found")
         domains = monitor.get("domains", [])
-        bare_domains = list(set(d.lstrip("www.") for d in domains if d))
+        bare_domains = list(set(bare_domain(d) for d in domains if d))
 
         if not bare_domains:
             return {"total": 0, "records": [], "by_severity": {}, "by_source": {}, "domains_checked": []}
@@ -706,7 +706,7 @@ async def get_brand_intel(
             return {"total": 0, "records": [], "by_threat_type": {}, "by_source": {}}
 
         # Also match on exact domain values
-        bare_domains = list(set(d.lstrip("www.") for d in domains if d))
+        bare_domains = list(set(bare_domain(d) for d in domains if d))
 
         should = (
             [{"terms": {"indicator": bare_domains}}] +

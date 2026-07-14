@@ -528,23 +528,28 @@ async def _import_misp():
         store_result = {"success": success_count, "errors": error_count}
         await es_service.close()
 
-        # Publish to WebSocket for live map
-        if stored_docs:
+        # Health/broadcast must reflect the STORAGE outcome, not the fetch — an
+        # ES outage (client is None, or nothing indexed) must NOT report a green
+        # feed or fan stale docs to the live map. Mirrors _generic_import.
+        stored_ok = success_count > 0 or (len(indicators) == 0)
+
+        if stored_ok and stored_docs:
             publish_new_iocs(stored_docs, "misp")
 
         duration = time.monotonic() - start
         logger.info(
             f"MISP import complete: {len(indicators)} fetched, "
-            f"{store_result.get('success', 0)} stored in {duration:.1f}s"
+            f"{success_count} stored in {duration:.1f}s"
         )
 
-        await _record_feed_health("misp", True, store_result.get("success", 0), duration)
+        health_err = None if stored_ok else "ES unavailable or nothing stored"
+        await _record_feed_health("misp", stored_ok, success_count, duration, health_err)
         return {
             "source": "misp",
-            "success": True,
+            "success": stored_ok,
             "total_fetched": len(attrs),
             "total_imported": len(indicators),
-            "total_stored": store_result.get("success", 0),
+            "total_stored": success_count,
             "duration_seconds": duration,
         }
 

@@ -199,7 +199,13 @@ export async function resendVerification(email: string): Promise<string> {
   );
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
+// Single-flight guard: the dashboard fires several authed requests at once, so
+// a burst of 401s would otherwise each spawn a competing refresh (and one
+// failing sibling could wipe tokens another just stored). All concurrent
+// callers share one in-flight refresh.
+let _refreshInFlight: Promise<string | null> | null = null;
+
+async function _doRefresh(): Promise<string | null> {
   const refresh = getRefreshToken();
   if (!refresh) return null;
 
@@ -208,10 +214,17 @@ export async function refreshAccessToken(): Promise<string | null> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
+      signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
     });
 
-    if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      // Definitively rejected — the refresh token is bad/expired. Clear it.
       clearTokens();
+      return null;
+    }
+    if (!res.ok) {
+      // Transient (5xx, 408, gateway hiccup) — keep the session; the caller
+      // can retry. Clearing here would log users out on a flaky tunnel.
       return null;
     }
 
@@ -219,9 +232,17 @@ export async function refreshAccessToken(): Promise<string | null> {
     setTokens(tokens.access_token, tokens.refresh_token);
     return tokens.access_token;
   } catch {
-    clearTokens();
+    // Network error / timeout — transient, do NOT clear the session.
     return null;
   }
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (_refreshInFlight) return _refreshInFlight;
+  _refreshInFlight = _doRefresh().finally(() => {
+    _refreshInFlight = null;
+  });
+  return _refreshInFlight;
 }
 
 async function fetchMe(accessToken: string): Promise<AuthUser> {
