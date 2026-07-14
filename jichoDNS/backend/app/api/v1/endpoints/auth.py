@@ -52,8 +52,10 @@ def normalize_email(email: str) -> str:
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    name: Optional[str] = None
-    organization: Optional[str] = None
+    # Length caps match the VARCHAR(255) columns — without them an oversized
+    # value raises DataError past the IntegrityError handler (a 500).
+    name: Optional[str] = Field(default=None, max_length=255)
+    organization: Optional[str] = Field(default=None, max_length=255)
 
 
 class LoginRequest(BaseModel):

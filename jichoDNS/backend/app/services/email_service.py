@@ -12,11 +12,14 @@ Design constraints:
 """
 
 import asyncio
+import html
 import logging
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
 from email.utils import formataddr
+from urllib.parse import quote
 
 from app.core.config import settings
 
@@ -93,13 +96,31 @@ async def send_email(
 
 def _verification_link(token: str) -> str:
     base = settings.PUBLIC_BASE_URL.rstrip("/")
-    return f"{base}/verify-email?token={token}"
+    return f"{base}/verify-email?token={quote(token, safe='')}"
+
+
+def _safe_display_name(name: str | None) -> str:
+    """
+    Neutralize a registration-supplied display name before it enters an email
+    we sign and send. Anyone can register with SOMEONE ELSE'S address and an
+    attacker-chosen name — without this, JichoSec becomes a relay for
+    legitimately-DKIM-signed phishing content. Collapse whitespace/newlines,
+    cap length; HTML-escaping happens at the HTML insertion point.
+    """
+    if not name:
+        return ""
+    # Mail clients auto-linkify URLs even in plain text, so a URL inside a
+    # display name is a clickable lure — drop it entirely.
+    name = re.sub(r"(?:https?://|www\.)\S+", "", name, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", name).strip()[:80]
 
 
 async def send_verification_email(to_email: str, name: str | None, token: str) -> bool:
     """Send the 'confirm your email address' message for a new registration."""
     link = _verification_link(token)
-    greeting = f"Hi {name}," if name else "Hi,"
+    safe_name = _safe_display_name(name)
+    greeting = f"Hi {safe_name}," if safe_name else "Hi,"
+    greeting_html = html.escape(greeting)
     hours = settings.EMAIL_VERIFICATION_EXPIRE_HOURS
 
     text = (
@@ -111,12 +132,12 @@ async def send_verification_email(to_email: str, name: str | None, token: str) -
         f"If you did not create this account, you can ignore this email.\n\n"
         f"— The JichoSec team\n"
     )
-    html = f"""\
+    html_body = f"""\
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;
             background:#0B1220;color:#E7ECF4;padding:32px;border-radius:12px">
   <h2 style="color:#F5B301;margin:0 0 8px">JichoSec</h2>
   <p style="color:#9AA7BD;margin:0 0 24px">The watchful eye over Africa's cyberspace</p>
-  <p>{greeting}</p>
+  <p>{greeting_html}</p>
   <p>Welcome to JichoSec. Please confirm your email address to finish setting up
      your account. This link is valid for {hours} hours.</p>
   <p style="text-align:center;margin:32px 0">
@@ -136,5 +157,5 @@ async def send_verification_email(to_email: str, name: str | None, token: str) -
         to_email,
         "Verify your email — JichoSec",
         text,
-        html,
+        html_body,
     )

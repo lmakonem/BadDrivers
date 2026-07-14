@@ -118,6 +118,45 @@ def test_smtp_success_path(monkeypatch):
     asyncio.run(run())
 
 
+def test_hostile_display_name_neutralized(monkeypatch):
+    """Registration `name` is attacker-controlled and the recipient may be a
+    victim's address — HTML must be escaped and newlines collapsed."""
+    monkeypatch.setattr(email_service.settings, "SMTP_HOST", "smtp.example.com")
+    captured = {}
+
+    def _capture(msg):
+        body = msg.get_body(("html",))
+        captured["html"] = body.get_content() if body else ""
+        captured["text"] = msg.get_body(("plain",)).get_content()
+
+    monkeypatch.setattr(email_service, "_smtp_send", _capture)
+
+    hostile = '<a href="https://evil.example">Reset your bank password</a>\r\nX' * 20
+
+    async def run():
+        ok = await email_service.send_verification_email(
+            "victim@example.com", hostile, "tok"
+        )
+        assert ok is True
+        assert "<a href=\"https://evil.example\"" not in captured["html"]
+        assert "&lt;a href=" in captured["html"]
+        # collapsed + capped in both bodies
+        first_text_line = next(
+            l for l in captured["text"].splitlines() if l.startswith("Hi ")
+        )
+        assert "\r" not in first_text_line and len(first_text_line) < 100
+        # URLs in display names are stripped (mail clients linkify plain text)
+        assert "evil.example" not in first_text_line
+
+    asyncio.run(run())
+
+
+def test_verification_token_urlencoded():
+    assert (
+        "?token=a%2Fb%3Dc" in email_service._verification_link("a/b=c")
+    )
+
+
 def test_verification_link_uses_public_base_url(monkeypatch):
     monkeypatch.setattr(
         email_service.settings, "PUBLIC_BASE_URL", "https://example.org/"
