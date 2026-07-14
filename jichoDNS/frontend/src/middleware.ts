@@ -15,6 +15,7 @@ const PUBLIC_PATHS = new Set([
   "/about",
   "/contact",
   "/forgot-password",
+  "/verify-email",
   "/terms",
   "/privacy",
   "/api-docs",

@@ -125,3 +125,62 @@ async def clear_login_failures(email: str, ip: str) -> None:
         await r.delete(f"login_fail:acct:{email.lower()}", f"login_fail:ip:{ip}")
     except Exception as e:
         logger.error("login-throttle: clear error: %s", e)
+
+
+# ── Registration throttle ─────────────────────────────────────────────────────
+# The register endpoint is anti-enumeration (always returns the same 202), so
+# there is no per-account counter — only a per-IP cap on how many accounts one
+# source can create. This stops mass/bulk signup (DB flooding, spam accounts,
+# and blind account-existence probing). Fixed-window, fail-OPEN like the login
+# throttle so a Redis outage never blocks legitimate signups.
+REGISTER_WINDOW_SECONDS = 3600   # 1-hour window
+MAX_REGISTRATIONS_PER_IP = 10    # accounts one IP may create per window
+
+# Resend-verification is an unauthenticated mail-sending endpoint, so cap it
+# harder than registration — it is otherwise a mailbox-flooding primitive.
+RESEND_WINDOW_SECONDS = 3600
+MAX_RESENDS_PER_IP = 6
+
+
+async def _check_ip_cap(key: str, cap: int, window: int, label: str) -> Optional[int]:
+    """
+    Fixed-window per-IP counter shared by the register/resend throttles.
+
+    Returns None if allowed, or seconds to wait (Retry-After) once `cap`
+    attempts have been counted inside `window`.
+    """
+    r = _get_redis()
+    if r is None:
+        return None  # fail-open
+    try:
+        n = await r.incr(key)
+        if n == 1:
+            await r.expire(key, window)
+        if n > cap:
+            ttl = await r.ttl(key)
+            return max(int(ttl or 0), 1)
+        return None
+    except Exception as e:
+        logger.error("%s: check failed, allowing attempt: %s", label, e)
+        return None  # fail-open
+
+
+async def check_register_allowed(ip: str) -> Optional[int]:
+    """
+    Count this registration attempt against the per-IP cap.
+
+    Returns None if allowed, or the number of seconds to wait (Retry-After) if
+    the source IP has exceeded MAX_REGISTRATIONS_PER_IP within the window.
+    """
+    return await _check_ip_cap(
+        f"register:ip:{ip}", MAX_REGISTRATIONS_PER_IP, REGISTER_WINDOW_SECONDS,
+        "register-throttle",
+    )
+
+
+async def check_email_resend_allowed(ip: str) -> Optional[int]:
+    """Per-IP cap for POST /resend-verification (unauthenticated mail sender)."""
+    return await _check_ip_cap(
+        f"resend_verify:ip:{ip}", MAX_RESENDS_PER_IP, RESEND_WINDOW_SECONDS,
+        "resend-throttle",
+    )

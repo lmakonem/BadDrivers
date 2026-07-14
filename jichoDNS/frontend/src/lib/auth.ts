@@ -74,6 +74,35 @@ export function setCachedUser(user: AuthUser): void {
 
 // ── Auth API calls ───────────────────────────────────────────────────────────
 
+/**
+ * Canonical email form, mirroring the backend: trimmed + lowercased. Mobile
+ * keyboards auto-capitalize; without this a user could sign up as
+ * "Name@x.com" and then fail to log in as "name@x.com".
+ */
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** Cap auth requests so a hung fetch surfaces an error instead of freezing the form. */
+const AUTH_TIMEOUT_MS = 20_000;
+
+/**
+ * Extract a human-readable message from a FastAPI error body. `detail` is a
+ * string for HTTPException but an ARRAY of objects for 422 validation errors —
+ * naively passing it to Error() renders "[object Object]".
+ */
+function apiErrorMessage(data: unknown, fallback: string): string {
+  const detail = (data as { detail?: unknown })?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d as { msg?: string })?.msg)
+      .filter((m): m is string => typeof m === "string");
+    if (msgs.length) return msgs.join(" — ");
+  }
+  return fallback;
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
@@ -88,12 +117,13 @@ export async function login(
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: normalizeEmail(email), password }),
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || "Invalid email or password.");
+    throw new Error(apiErrorMessage(data, "Invalid email or password."));
   }
 
   const tokens: LoginResponse = await res.json();
@@ -111,22 +141,62 @@ export async function register(body: {
   name?: string;
   organization?: string;
 }): Promise<AuthUser> {
+  const email = normalizeEmail(body.email);
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, email }),
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || "Registration failed.");
+    throw new Error(apiErrorMessage(data, "Registration failed."));
   }
 
   // The register endpoint returns a generic { message } (HTTP 202) to avoid
   // account enumeration — NOT a user object. Complete sign-in and return the
   // AuthUser that login() resolves (login() also caches it).
-  const user = await login(body.email, body.password);
+  const user = await login(email, body.password);
   return user;
+}
+
+/** POST /verify-email with the token from the emailed link. */
+export async function verifyEmail(token: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      apiErrorMessage(data, "Verification failed. The link may have expired.")
+    );
+  }
+  return (
+    (data as { message?: string }).message ||
+    "Email verified. Your account is fully active."
+  );
+}
+
+/** Request a fresh verification email. Resolves to the generic server message. */
+export async function resendVerification(email: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/resend-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: normalizeEmail(email) }),
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(apiErrorMessage(data, "Could not send verification email."));
+  }
+  return (
+    (data as { message?: string }).message ||
+    "If an unverified account exists for that address, a new verification email has been sent."
+  );
 }
 
 export async function refreshAccessToken(): Promise<string | null> {

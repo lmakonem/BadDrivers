@@ -72,6 +72,28 @@ def create_refresh_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_email_verification_token(user_id: int, email: str) -> str:
+    """
+    Create a short-lived, single-purpose JWT proving control of an email inbox.
+
+    Carries type="email_verify" so it can never be replayed as an access or
+    refresh token (decode_token enforces the type claim), and embeds the email
+    it was issued for so verification can be invalidated by an address change.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(
+        hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS
+    )
+    to_encode = {
+        "sub": str(user_id),
+        "email": email,
+        "exp": expire,
+        "type": "email_verify",
+    }
+    if settings.JWT_AUDIENCE:
+        to_encode["aud"] = settings.JWT_AUDIENCE
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_token(
     token: str,
     require_type: Optional[str] = None,

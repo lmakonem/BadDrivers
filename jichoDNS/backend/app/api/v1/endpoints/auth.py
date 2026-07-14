@@ -3,9 +3,9 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from app.core.security import (
     dummy_verify,
     create_access_token,
     create_refresh_token,
+    create_email_verification_token,
     decode_token,
     get_token_subject,
 )
@@ -23,12 +24,27 @@ from app.core.ratelimit import (
     check_login_allowed,
     record_login_failure,
     clear_login_failures,
+    check_register_allowed,
+    check_email_resend_allowed,
     client_ip,
 )
 from app.models.user import User
 from app.api.deps import get_current_user
+from app.services.email_service import send_verification_email
 
 router = APIRouter()
+
+
+def normalize_email(email: str) -> str:
+    """
+    Canonical form for storage and lookup: trimmed + lowercased.
+
+    Email local parts are case-sensitive per RFC 5321, but no real provider
+    treats them that way — while mobile keyboards auto-capitalize the first
+    letter. Without this, a user who registers as "Name@x.com" can never log
+    in as "name@x.com" (and could register both as separate accounts).
+    """
+    return email.strip().lower()
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -47,6 +63,14 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
 
 
 class TokenResponse(BaseModel):
@@ -74,24 +98,44 @@ class UserResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=status.HTTP_202_ACCEPTED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    body: RegisterRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Register a new user account.
 
     To avoid account enumeration this endpoint returns the SAME generic 202
     response and takes ~the same time whether or not the email was already
     registered. The client completes sign-in via POST /login afterwards.
+    A verification email is dispatched AFTER the response (BackgroundTasks),
+    so mail latency/failures neither slow registration nor leak timing.
+
+    Per-IP rate limited to stop mass/bulk signup and blind existence probing.
     """
+    ip = client_ip(request)
+    retry_after = await check_register_allowed(ip)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = normalize_email(body.email)
+
     # Hash first so the duplicate path costs the same bcrypt as the create path
     # (equal timing → no enumeration by response time).
     hashed = hash_password(body.password)
 
-    result = await db.execute(select(User).where(User.email == body.email))
+    result = await db.execute(select(User).where(User.email == email))
     existing = result.scalar_one_or_none()
 
     if existing is None:
         user = User(
-            email=body.email,
+            email=email,
             hashed_password=hashed,
             name=body.name,
             organization=body.organization,
@@ -108,10 +152,99 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         except IntegrityError:
             # Lost a race — the email was registered concurrently. Same reply.
             await db.rollback()
+        else:
+            token = create_email_verification_token(user.id, email)
+            background_tasks.add_task(
+                send_verification_email, email, body.name, token
+            )
 
     return {
         "message": "If the email address is valid, the account is ready. "
-                   "You can now sign in.",
+                   "Check your inbox for a verification email — you can sign "
+                   "in right away.",
+    }
+
+
+@router.post("/verify-email")
+async def verify_email(body: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Confirm an email address from the signed token sent in the verification
+    email. Idempotent: re-verifying an already-verified account succeeds.
+    Deliberately a POST (the frontend page submits it) so mail scanners that
+    prefetch GET links cannot consume/act on the token.
+    """
+    payload = decode_token(body.token, require_type="email_verify")
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link. "
+                   "Request a new verification email.",
+        )
+
+    user_id = get_token_subject(payload)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token payload.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    # The token must still match the account's current email — an address
+    # change after issuance invalidates old verification links.
+    if (
+        not user
+        or not user.is_active
+        or normalize_email(user.email) != normalize_email(payload.get("email") or "")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link. "
+                   "Request a new verification email.",
+        )
+
+    if not user.is_verified:
+        user.is_verified = True
+        await db.flush()
+
+    return {"message": "Email verified. Your account is fully active."}
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+async def resend_verification(
+    body: ResendVerificationRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-send the verification email. Anti-enumeration: always the same generic
+    202 whether or not the account exists / is already verified. Per-IP rate
+    limited (unauthenticated mail-sending endpoint).
+    """
+    ip = client_ip(request)
+    retry_after = await check_email_resend_allowed(ip)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = normalize_email(body.email)
+    result = await db.execute(
+        select(User).where(func.lower(User.email) == email)
+    )
+    user = result.scalars().first()
+
+    if user and user.is_active and not user.is_verified:
+        token = create_email_verification_token(user.id, email)
+        background_tasks.add_task(send_verification_email, email, user.name, token)
+
+    return {
+        "message": "If an unverified account exists for that address, a new "
+                   "verification email has been sent.",
     }
 
 
@@ -124,8 +257,9 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     against user-enumeration by timing (a bcrypt is always run).
     """
     ip = client_ip(request)
+    email = normalize_email(body.email)
 
-    retry_after = await check_login_allowed(body.email, ip)
+    retry_after = await check_login_allowed(email, ip)
     if retry_after is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -133,8 +267,12 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
             headers={"Retry-After": str(retry_after)},
         )
 
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
+    # Case-insensitive match tolerates rows created before emails were
+    # normalized to lowercase at registration time.
+    result = await db.execute(
+        select(User).where(func.lower(User.email) == email)
+    )
+    user = result.scalars().first()
 
     # Always spend one bcrypt: verify the real hash when present, otherwise burn
     # equivalent CPU against a dummy hash so a missing account and a wrong
@@ -146,7 +284,7 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
         password_ok = False
 
     if not user or not user.hashed_password or not password_ok:
-        await record_login_failure(body.email, ip)
+        await record_login_failure(email, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -158,7 +296,16 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
             detail="Account is disabled.",
         )
 
-    await clear_login_failures(body.email, ip)
+    from app.core.config import settings as _settings
+
+    if _settings.REQUIRE_EMAIL_VERIFICATION and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email address not verified. Check your inbox or request "
+                   "a new verification email.",
+        )
+
+    await clear_login_failures(email, ip)
 
     from app.core.config import settings
 

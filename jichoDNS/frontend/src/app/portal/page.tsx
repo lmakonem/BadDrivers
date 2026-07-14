@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/fetch";
 import { JichoMark } from "@/components/brand/JichoMark";
+import VerifyEmailBanner from "@/components/VerifyEmailBanner";
 
 // Types
 interface OverviewStats {
@@ -389,6 +390,8 @@ export default function PortalDashboard() {
     <div className="relative mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Ambient brand glow — the watchful eye's ambient light */}
       <div aria-hidden className="glow-gold pointer-events-none absolute inset-x-0 -top-4 h-72" />
+
+      <VerifyEmailBanner />
 
       {/* Page header */}
       <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

@@ -106,6 +106,25 @@ class Settings(BaseSettings):
     MISP_PULL_LIMIT: int = Field(default=100)
     MISP_ENABLED: bool = Field(default=True)
 
+    # Email (SMTP). When SMTP_HOST is empty, outbound mail is NOT sent — the
+    # rendered message (including any verification link) is written to the app
+    # log instead, so registration/verification never hard-depends on a mail
+    # provider being configured.
+    SMTP_HOST: str = Field(default="")
+    SMTP_PORT: int = Field(default=587)
+    SMTP_USERNAME: str = Field(default="")
+    SMTP_PASSWORD: str = Field(default="")
+    SMTP_STARTTLS: bool = Field(default=True)   # ignored when SMTP_PORT == 465 (implicit TLS)
+    EMAIL_FROM: str = Field(default="no-reply@defendanddetect.com")
+    EMAIL_FROM_NAME: str = Field(default="JichoSec")
+    # Base URL used to build links inside emails (verification, resets).
+    PUBLIC_BASE_URL: str = Field(default="https://jichosec.defendanddetect.com")
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = Field(default=48)
+    # When True, /login rejects accounts that have not verified their email.
+    # Default False so enabling email verification never locks out the existing
+    # user base; flip on once historical accounts are verified/migrated.
+    REQUIRE_EMAIL_VERIFICATION: bool = Field(default=False)
+
     # Stripe
     STRIPE_SECRET_KEY: str = Field(default="")
     STRIPE_WEBHOOK_SECRET: str = Field(default="")
