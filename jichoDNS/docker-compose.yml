@@ -53,14 +53,21 @@ services:
     image: redis:7-alpine
     container_name: jichodns-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    # requirepass: Redis is the Celery broker AND the WS pub/sub bus, and it
+    # shares jichodns-network with the intel stack (SpiderFoot/TorBot). Without a
+    # password, any container on that network can inject Celery tasks = RCE in the
+    # worker. The dev default keeps local `docker-compose up` working; prod sets
+    # REDIS_PASSWORD in .env (and REDIS_URL carries it — see api/worker/scheduler).
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-jichodns_redis_dev}
     volumes:
       - redis_data:/data
     ports:
       # Bind to localhost only — unauthenticated Redis must never be reachable off-host.
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Authenticated ping — an unauth ping now returns NOAUTH and would flap the
+      # container unhealthy, blocking the service_healthy gate on api/worker.
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-jichodns_redis_dev}", "--no-auth-warning", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,7 +86,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://jichodns:${POSTGRES_PASSWORD:-jichodns_dev}@postgres:5432/jichodns
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-jichodns_redis_dev}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
       # so the JWT key can rotate independently. Required in production.
@@ -129,7 +136,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://jichodns:${POSTGRES_PASSWORD:-jichodns_dev}@postgres:5432/jichodns
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-jichodns_redis_dev}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
       # so the JWT key can rotate independently. Required in production.
@@ -167,7 +174,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://jichodns:${POSTGRES_PASSWORD:-jichodns_dev}@postgres:5432/jichodns
       - CLICKHOUSE_URL=clickhouse://jichodns:${CLICKHOUSE_PASSWORD:-jichodns_dev}@clickhouse:9000/jichodns
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-jichodns_redis_dev}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       # Signs the admin (sqladmin) session cookie — kept distinct from SECRET_KEY
       # so the JWT key can rotate independently. Required in production.
