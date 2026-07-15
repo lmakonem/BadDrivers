@@ -27,6 +27,15 @@ ansible/vault_password.txt
 *.vault_pass
 
 # ---------------------------------------------------------------------------
+# Client report deliverables & scan artifacts - NEVER commit these
+# ---------------------------------------------------------------------------
+# reports/ holds real client-facing external-exposure assessments (gov clients:
+# DGI/DGDA/BCC/FPI) plus raw scan output and target cert data. This is sensitive
+# third-party data that must never enter git history — including the report
+# tooling, which stays local-only by request.
+reports/
+
+# ---------------------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------------------
 __pycache__/
