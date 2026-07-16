@@ -17,6 +17,7 @@ import {
   clearTokens,
   checkMe,
   refreshAccessToken,
+  revokeSession,
 } from "./auth";
 
 interface AuthContextValue {
@@ -29,7 +30,7 @@ interface AuthContextValue {
     name?: string;
     organization?: string;
   }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -110,7 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Revoke server-side first (best-effort) so the tokens are dead even if
+    // they were exfiltrated; then clear locally and redirect.
+    await revokeSession();
     clearTokens();
     setUser(null);
     window.location.href = "/login";

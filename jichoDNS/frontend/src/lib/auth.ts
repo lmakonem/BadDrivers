@@ -288,7 +288,33 @@ export async function checkMe(accessToken: string): Promise<MeResult> {
   }
 }
 
-export function logout(): void {
+/**
+ * Best-effort server-side revocation: tell the backend to denylist this
+ * session's access + refresh tokens so they're dead even if copied elsewhere.
+ * Never throws and never blocks local logout — if it fails (offline, 5xx), the
+ * tokens still expire on their own and we proceed to clear them locally.
+ */
+export async function revokeSession(): Promise<void> {
+  const access = getAccessToken();
+  const refresh = getRefreshToken();
+  if (!access && !refresh) return;
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(access ? { Authorization: `Bearer ${access}` } : {}),
+      },
+      body: JSON.stringify({ refresh_token: refresh }),
+      signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+    });
+  } catch {
+    /* revocation is best-effort — local logout proceeds regardless */
+  }
+}
+
+export async function logout(): Promise<void> {
+  await revokeSession();
   clearTokens();
   window.location.href = "/login";
 }

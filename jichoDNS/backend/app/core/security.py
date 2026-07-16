@@ -54,7 +54,9 @@ def create_access_token(
             minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         )
     
-    to_encode.update({"exp": expire, "type": "access"})
+    # jti: a unique token id so a specific token can be revoked (logout) via the
+    # Redis denylist without rotating SECRET_KEY (which would kill every session).
+    to_encode.update({"exp": expire, "type": "access", "jti": secrets.token_hex(16)})
     if settings.JWT_AUDIENCE:
         to_encode["aud"] = settings.JWT_AUDIENCE
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -66,10 +68,23 @@ def create_refresh_token(data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
     )
-    to_encode.update({"exp": expire, "type": "refresh"})
+    to_encode.update({"exp": expire, "type": "refresh", "jti": secrets.token_hex(16)})
     if settings.JWT_AUDIENCE:
         to_encode["aud"] = settings.JWT_AUDIENCE
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def token_remaining_seconds(payload: dict) -> int:
+    """
+    Seconds until a decoded token's `exp`, clamped to >= 0. Used to bound a
+    denylist entry's TTL so it self-expires exactly when the token would anyway
+    (a revoked token never needs to outlive its own expiry in Redis).
+    """
+    exp = payload.get("exp")
+    if not exp:
+        return 0
+    remaining = int(exp) - int(datetime.now(timezone.utc).timestamp())
+    return max(remaining, 0)
 
 
 def create_email_verification_token(user_id: int, email: str) -> str:

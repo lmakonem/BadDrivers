@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_token, get_token_subject
+from app.core.ratelimit import is_token_denied
 from app.models.user import User
 
 # HTTP Bearer scheme — expects "Authorization: Bearer <token>"
@@ -40,6 +41,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if await is_token_denied(payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -124,6 +132,9 @@ async def get_optional_user(
 
     payload = decode_token(credentials.credentials, require_type="access")
     if not payload:
+        return None
+
+    if await is_token_denied(payload.get("jti")):
         return None
 
     user_id = get_token_subject(payload)

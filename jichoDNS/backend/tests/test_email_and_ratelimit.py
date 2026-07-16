@@ -14,6 +14,7 @@ class _FakeRedis:
     def __init__(self):
         self.store: dict[str, int] = {}
         self.ttls: dict[str, int] = {}
+        self.kv: dict[str, str] = {}
 
     async def incr(self, key):
         self.store[key] = self.store.get(key, 0) + 1
@@ -24,6 +25,14 @@ class _FakeRedis:
 
     async def ttl(self, key):
         return self.ttls.get(key, 60)
+
+    async def set(self, key, value, ex=None):
+        self.kv[key] = value
+        if ex is not None:
+            self.ttls[key] = ex
+
+    async def exists(self, key):
+        return 1 if key in self.kv else 0
 
 
 @pytest.fixture()
@@ -63,6 +72,51 @@ def test_throttles_fail_open_without_redis(monkeypatch):
         assert await ratelimit.check_email_resend_allowed("1.2.3.4") is None
 
     asyncio.run(run())
+
+
+# ── JWT revocation denylist ───────────────────────────────────────────────────
+
+def test_denylist_deny_then_check(fake_redis):
+    async def run():
+        assert await ratelimit.is_token_denied("jti-abc") is False
+        assert await ratelimit.deny_token("jti-abc", 300) is True
+        assert await ratelimit.is_token_denied("jti-abc") is True
+        # unrelated jti unaffected
+        assert await ratelimit.is_token_denied("jti-other") is False
+
+    asyncio.run(run())
+
+
+def test_denylist_ignores_empty_jti_or_ttl(fake_redis):
+    async def run():
+        assert await ratelimit.deny_token("", 300) is False
+        assert await ratelimit.deny_token("jti", 0) is False
+        assert await ratelimit.deny_token("jti", -5) is False
+        assert await ratelimit.is_token_denied(None) is False
+
+    asyncio.run(run())
+
+
+def test_denylist_fails_open_without_redis(monkeypatch):
+    """A Redis outage must not reject valid tokens (fail-open)."""
+    monkeypatch.setattr(ratelimit, "_get_redis", lambda: None)
+
+    async def run():
+        assert await ratelimit.deny_token("jti", 300) is False
+        assert await ratelimit.is_token_denied("jti") is False  # not denied → allowed
+
+    asyncio.run(run())
+
+
+def test_token_remaining_seconds():
+    from datetime import datetime, timezone, timedelta
+    from app.core.security import token_remaining_seconds
+
+    future = int((datetime.now(timezone.utc) + timedelta(seconds=100)).timestamp())
+    past = int((datetime.now(timezone.utc) - timedelta(seconds=100)).timestamp())
+    assert 90 <= token_remaining_seconds({"exp": future}) <= 100
+    assert token_remaining_seconds({"exp": past}) == 0   # clamped, never negative
+    assert token_remaining_seconds({}) == 0
 
 
 # ── Email service ─────────────────────────────────────────────────────────────

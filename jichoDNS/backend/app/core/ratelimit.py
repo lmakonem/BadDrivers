@@ -184,3 +184,44 @@ async def check_email_resend_allowed(ip: str) -> Optional[int]:
         f"resend_verify:ip:{ip}", MAX_RESENDS_PER_IP, RESEND_WINDOW_SECONDS,
         "resend-throttle",
     )
+
+
+# ── JWT revocation denylist ───────────────────────────────────────────────────
+# JWTs are stateless, so "logout" can't invalidate a token by itself — a stolen
+# refresh token stays valid until expiry (7d). This denylist records revoked
+# token ids (jti) in Redis with a TTL equal to the token's own remaining life
+# (so entries self-clean and the set never grows unbounded). Auth checks consult
+# it. FAIL-OPEN like the throttles: if Redis is down, a revoked token is honored
+# rather than locking everyone out — the short access-token TTL bounds exposure,
+# and this is defense-in-depth over the signature/expiry checks, not a substitute.
+def _denylist_key(jti: str) -> str:
+    return f"jwt:denied:{jti}"
+
+
+async def deny_token(jti: str, ttl_seconds: int) -> bool:
+    """Revoke a token by jti until it would have expired. Returns True on success."""
+    if not jti or ttl_seconds <= 0:
+        return False
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        await r.set(_denylist_key(jti), "1", ex=ttl_seconds)
+        return True
+    except Exception as e:
+        logger.error("token-denylist: deny failed for jti=%s: %s", jti, e)
+        return False
+
+
+async def is_token_denied(jti: Optional[str]) -> bool:
+    """True if this jti has been revoked. Fail-open (returns False) on Redis error."""
+    if not jti:
+        return False
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        return await r.exists(_denylist_key(jti)) == 1
+    except Exception as e:
+        logger.error("token-denylist: check failed for jti=%s, allowing: %s", jti, e)
+        return False

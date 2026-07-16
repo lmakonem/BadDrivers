@@ -17,6 +17,7 @@ from app.core.security import decode_token
 from app.models.base import Base
 from app.models.user import APIKey, User
 from app.api.v1.endpoints import auth as auth_ep
+from app.api import deps as auth_deps
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -81,6 +82,23 @@ def client(monkeypatch, sent_emails):
     monkeypatch.setattr(auth_ep, "record_login_failure", _noop)
     monkeypatch.setattr(auth_ep, "clear_login_failures", _noop)
 
+    # JWT revocation denylist: in-memory stand-in for the Redis-backed one, so
+    # the logout→revoke→reject flow is exercised end-to-end without Redis.
+    denied: set = set()
+
+    async def _deny(jti, ttl):
+        if jti and ttl and ttl > 0:
+            denied.add(jti)
+            return True
+        return False
+
+    async def _is_denied(jti):
+        return bool(jti) and jti in denied
+
+    monkeypatch.setattr(auth_ep, "deny_token", _deny)
+    monkeypatch.setattr(auth_ep, "is_token_denied", _is_denied)
+    monkeypatch.setattr(auth_deps, "is_token_denied", _is_denied)
+
     with TestClient(app) as c:
         yield c
 
@@ -90,6 +108,14 @@ LOGIN = "/api/v1/auth/login"
 VERIFY = "/api/v1/auth/verify-email"
 RESEND = "/api/v1/auth/resend-verification"
 ME = "/api/v1/auth/me"
+REFRESH = "/api/v1/auth/refresh"
+LOGOUT = "/api/v1/auth/logout"
+
+
+def _login_tokens(client, email, password="s3cret-pass!"):
+    r = client.post(LOGIN, json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def _register(client, email="User.One@Example.COM", password="s3cret-pass!", **kw):
@@ -232,6 +258,70 @@ def test_login_gate_when_verification_required(client, sent_emails, monkeypatch)
     client.post(VERIFY, json={"token": sent_emails[0]["token"]})
     r2 = client.post(LOGIN, json={"email": "gated@example.com", "password": "s3cret-pass!"})
     assert r2.status_code == 200
+
+
+# ── Token revocation / logout ─────────────────────────────────────────────────
+
+def test_tokens_carry_unique_jti(client, sent_emails):
+    from app.core.security import decode_token
+
+    _register(client, email="jti@example.com")
+    t = _login_tokens(client, "jti@example.com")
+    a = decode_token(t["access_token"], require_type="access")
+    r = decode_token(t["refresh_token"], require_type="refresh")
+    assert a.get("jti") and r.get("jti")
+    assert a["jti"] != r["jti"]
+
+
+def test_logout_revokes_access_and_refresh(client, sent_emails):
+    _register(client, email="lo@example.com")
+    t = _login_tokens(client, "lo@example.com")
+    access, refresh = t["access_token"], t["refresh_token"]
+    auth = {"Authorization": f"Bearer {access}"}
+
+    # Works before logout
+    assert client.get(ME, headers=auth).status_code == 200
+
+    # Logout revokes both tokens
+    assert client.post(LOGOUT, headers=auth, json={"refresh_token": refresh}).status_code == 200
+
+    # Access token now rejected (denylisted)
+    r = client.get(ME, headers=auth)
+    assert r.status_code == 401 and "revoked" in r.text.lower()
+
+    # Refresh token now rejected too
+    r = client.post(REFRESH, json={"refresh_token": refresh})
+    assert r.status_code == 401 and "revoked" in r.text.lower()
+
+
+def test_refresh_works_until_logout(client, sent_emails):
+    _register(client, email="rf@example.com")
+    t = _login_tokens(client, "rf@example.com")
+    # Refresh is fine before logout
+    assert client.post(REFRESH, json={"refresh_token": t["refresh_token"]}).status_code == 200
+    # After logging out the ORIGINAL refresh, that original is dead
+    client.post(LOGOUT, json={"refresh_token": t["refresh_token"]})
+    assert client.post(REFRESH, json={"refresh_token": t["refresh_token"]}).status_code == 401
+
+
+def test_logout_is_idempotent_and_tokenless_ok(client):
+    # No tokens at all → still 200 (nothing to reveal, nothing to revoke)
+    assert client.post(LOGOUT, json={}).status_code == 200
+    # Garbage refresh token → 200 (decode fails, nothing denylisted, no error)
+    assert client.post(LOGOUT, json={"refresh_token": "not-a-jwt"}).status_code == 200
+
+
+def test_other_sessions_unaffected_by_logout(client, sent_emails):
+    """Logging out one device must not kill a different device's token."""
+    _register(client, email="multi@example.com")
+    dev1 = _login_tokens(client, "multi@example.com")
+    dev2 = _login_tokens(client, "multi@example.com")
+    # Log out device 1
+    client.post(LOGOUT, headers={"Authorization": f"Bearer {dev1['access_token']}"},
+                json={"refresh_token": dev1["refresh_token"]})
+    # Device 2's tokens still work
+    assert client.get(ME, headers={"Authorization": f"Bearer {dev2['access_token']}"}).status_code == 200
+    assert client.post(REFRESH, json={"refresh_token": dev2["refresh_token"]}).status_code == 200
 
 
 # ── normalize_email unit ──────────────────────────────────────────────────────

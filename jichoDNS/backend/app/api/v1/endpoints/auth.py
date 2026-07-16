@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +20,7 @@ from app.core.security import (
     create_email_verification_token,
     decode_token,
     get_token_subject,
+    token_remaining_seconds,
 )
 from app.core.ratelimit import (
     check_login_allowed,
@@ -26,10 +28,12 @@ from app.core.ratelimit import (
     clear_login_failures,
     check_register_allowed,
     check_email_resend_allowed,
+    deny_token,
+    is_token_denied,
     client_ip,
 )
 from app.models.user import User
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, bearer_scheme
 from app.services.email_service import send_verification_email
 
 router = APIRouter()
@@ -65,6 +69,12 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    # Optional: the client sends its refresh token so it can be revoked too.
+    # The access token is read from the Authorization header.
+    refresh_token: Optional[str] = None
 
 
 class VerifyEmailRequest(BaseModel):
@@ -334,6 +344,12 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
             detail="Invalid or expired refresh token.",
         )
 
+    if await is_token_denied(payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked. Please sign in again.",
+        )
+
     user_id = get_token_subject(payload)
     if user_id is None:
         raise HTTPException(
@@ -368,3 +384,36 @@ async def get_me(current_user: User = Depends(get_current_user)):
     Return the profile for the currently authenticated user.
     """
     return current_user
+
+
+@router.post("/logout")
+async def logout(
+    body: LogoutRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """
+    Revoke this session's tokens server-side (a real kill switch — JWTs are
+    otherwise valid until expiry, so client-side logout alone leaves a stolen
+    refresh token live for days).
+
+    Deliberately token-bearing rather than auth-gated: possessing a token is the
+    authority to revoke it, and an *expired* access token must still be able to
+    kill its refresh token. Idempotent — always 200, nothing to reveal. Each
+    revoked jti is denylisted only for its own remaining lifetime.
+    """
+    # Access token from the Authorization header (revoked only if still valid;
+    # an already-expired one needs no denylisting).
+    if credentials:
+        access_payload = decode_token(credentials.credentials, require_type="access")
+        if access_payload:
+            await deny_token(access_payload.get("jti"),
+                             token_remaining_seconds(access_payload))
+
+    # Refresh token from the body — the important one (7-day life).
+    if body.refresh_token:
+        refresh_payload = decode_token(body.refresh_token, require_type="refresh")
+        if refresh_payload:
+            await deny_token(refresh_payload.get("jti"),
+                             token_remaining_seconds(refresh_payload))
+
+    return {"message": "Logged out."}
