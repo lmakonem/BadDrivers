@@ -9,10 +9,12 @@ cert-anomaly, which is itself a valid detection (detections N6 "cert first-seen 
 |---|---|
 | Proxmox | pve @ 192.168.36.225 |
 | VMID / name | **117 / httpx-redir** (linked clone of template 105 ubuntu-22.04) |
-| Network | vmbr1023 **tag=20** (the 10.23.20.0/24 C2 VLAN, same as Mythic) |
-| IP | **10.23.20.201** (DHCP, gw 10.23.20.254) |
+| Network | **dual-homed**: net0 vmbr1023 tag=20 (10.23.20/24 upstream) + net1 vmbr0 (192.168.36/24 callback) |
+| Callback IP (clients beacon here) | **192.168.36.117**/24 (ens19, static, default via 192.168.36.1) |
+| Upstream IP (to Mythic) | **10.23.20.201**/24 (ens18, DHCP, connected route to 10.23.20.10) |
 | Listener | nginx 1.18 on 0.0.0.0:443, self-signed `CN=assets-portal.io` |
-| Upstream | `http://10.23.20.10:82` (Mythic httpx `mythic_httpx_se`, host-net) |
+| Upstream | `http://10.23.20.10:82` via ens18 (Mythic httpx `mythic_httpx_se`, host-net) |
+| Flow | client -> 192.168.36.117:443 (nginx TLS) -> proxy over 10-side -> Mythic 10.23.20.10:82 |
 | Match | LockBit profile: `GET /_next.css` + `POST /boards` with UA `Chrome/120.0.0.0 Safari/537.36` -> proxied; else 302 -> `https://www.microsoft.com/` |
 | Config | `/etc/nginx/sites-available/httpx-redir` (this repo: `lab-httpx-redir.nginx.conf`); backup `/root/httpx-redir.conf.deployed` |
 | Enabled on boot | yes |

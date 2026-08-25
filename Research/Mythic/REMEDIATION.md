@@ -79,3 +79,12 @@ link to light H2/H3). Steps in `track3-apollo-agent/HOST-EMULATION-LOCKBIT.md` +
 - **F4: build card ready** (`track3-apollo-agent/F4-BUILD-CARD.md`) — operator builds in the UI
   (callback via 10.23.20.201:443 + LockBit profile + smb pipename=fullduplex_84 + spawnto=wuauclt),
   then runs the two tasks to fire **H2/H3**.
+
+## Redirector dual-homed for 192.168.36 callbacks (2026-08-25)
+
+VM 117 now has two NICs: **net1 vmbr0 = 192.168.36.117** (callback-facing, ens19, default via
+192.168.36.1) + net0 vmbr1023/tag20 = 10.23.20.201 (upstream to Mythic, ens18). nginx binds
+0.0.0.0:443, so clients beacon to **https://192.168.36.117:443** and nginx proxies matching
+LockBit-profile requests over the 10-side to Mythic 10.23.20.10:82. Verified end-to-end from a
+192.168.36 client: beacon-UA proxied (404 from Mythic), wrong-UA/`/` -> 302 decoy. **Callback IP is
+now 192.168.36.117.** netplan: `redirectors/lab-httpx-redir.netplan-60-mgmt.yaml`.

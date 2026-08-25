@@ -6,7 +6,7 @@ deployed redirector. Mythic UI: Payloads -> Create Payload -> Apollo -> Windows.
 ## C2 profile: httpx  (egress, actor-attributed = LockBit)
 | Param | Value |
 |---|---|
-| httpx_callback_domains | `https://10.23.20.201:443`  (redirector VM 117, self-signed) |
+| httpx_callback_domains | `https://192.168.36.117:443`  (redirector VM 117, 192-side, self-signed) |
 | httpx_raw_c2_config | paste the contents of `../profiles/lockbit-icbc.httpx.toml` |
 | httpx_callback_interval | 62 |
 | httpx_callback_jitter | 37 |
@@ -27,8 +27,8 @@ deployed redirector. Mythic UI: Payloads -> Create Payload -> Apollo -> Windows.
 
 ## Deliver + callback
 - Deliver to WS01 (VMID 121, tag=10) via the lab access shim (certutil) — labeled shim, F5.
-- **PRE-CHECK from WS01:** `Test-NetConnection 10.23.20.201 -Port 443` must succeed (the
-  GOADAI-router routes tag10<->tag20). If it fails, the beacon can't reach the redirector.
+- **PRE-CHECK from WS01:** `Test-NetConnection 192.168.36.117 -Port 443` must succeed (WS01 net1
+  is on vmbr0/192.168.36). If it fails, the beacon can't reach the redirector.
 - Confirm the callback appears in Mythic.
 
 ## Tasks to fire the detections
