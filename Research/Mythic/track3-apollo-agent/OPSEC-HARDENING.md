@@ -9,6 +9,7 @@
 
 | Indicator | Current Config | Detection Risk | Notes |
 |-----------|---------------|----|-------|
+| **JA4H (HTTP client) vs User-Agent** | .NET runtime fingerprint under a browser UA | 🔴 Critical — **UNFIXABLE at httpx/managed-agent layer** | The strongest Mythic tell (detections **N1**). Apollo is .NET FW; its `HttpClient` JA4H says .NET while the UA claims Chrome. **No amount of UA/port/transform hardening changes this** — it requires a native agent (Xenon/Kharon). Do not treat UA/port fixes as "hardened" while this stands. |
 | **Port** | 82 (HTTP) | 🔴 Critical | Non-standard, anomalous in network logs |
 | **Domain** | cdn.examplestatic.io | 🔴 Critical | Fake/spoofed, obvious to inspection |
 | **Protocol** | HTTP unencrypted outer | 🟠 High | Pattern visible in packet capture |
