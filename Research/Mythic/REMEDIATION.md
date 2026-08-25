@@ -69,3 +69,13 @@ Tier 2 (operator-run, not yet executed): F2 ops build behind a redirector (needs
 host + a lab cert; real LE not obtainable in an isolated lab), and the F4 host-emulation run
 (build payload with spawnto=wuauclt + smb pipename=fullduplex_84, deliver to WS01, run injection +
 link to light H2/H3). Steps in `track3-apollo-agent/HOST-EMULATION-LOCKBIT.md` + DEPLOYMENT.md 5b.
+
+## Tier 2 progress (2026-08-25)
+
+- **F2 redirector: DONE.** Dedicated VM **117 `httpx-redir` @ 10.23.20.201** (vmbr1023/tag20),
+  nginx 1.18 on 443 (self-signed `CN=assets-portal.io`), proxies the LockBit profile URIs to
+  Mythic `:82`, 302-decoys everything else. Verified. See `redirectors/lab-httpx-redir.md`.
+  Achieves **N6** (TLS now terminates on nginx/OpenSSL, not Mythic's Go listener).
+- **F4: build card ready** (`track3-apollo-agent/F4-BUILD-CARD.md`) — operator builds in the UI
+  (callback via 10.23.20.201:443 + LockBit profile + smb pipename=fullduplex_84 + spawnto=wuauclt),
+  then runs the two tasks to fire **H2/H3**.
