@@ -112,6 +112,22 @@ Domain Rotation: fail-over (to backup domains)
 
 ## OPSEC Hardening Checklist
 
+### Detection priority — fix in THIS order (F7)
+
+A mature blue team almost never catches you on body encoding. Reordering base64/xor moves
+**zero** of the analytics in `../detections/elastic-sysmon.md`. Prioritise by what actually
+detects a beacon:
+
+1. **Client fingerprint (JA4H / JARM / JA3S)** — highest fidelity. A .NET JA4H under a browser
+   User-Agent (N1) is the strongest Mythic tell and is **unfixable at the httpx/managed-agent
+   layer** (see the JA4H row in the Detected Indicators table, F8). This dominates everything below.
+2. **Timing model** — long, high-jitter, low-volume sleeps starve RITA (N2); short/periodic does
+   not. Match the *actor's* cadence, don't invent one (see Behavioral, below).
+3. **Infrastructure consistency** — Host/SNI/destination-ASN agreement (N4), real cert on the
+   redirector (N6), low URI cardinality (N3). This is where a redirector earns its keep.
+4. **Body encoding (xor/base64/base64url)** — lowest fidelity. Do it for correctness, not evasion;
+   the key MUST be per-op random (never a framework name — see Traffic-Level, below).
+
 ### Network-Level Evasion
 
 - [ ] **Use port 443** instead of 82
@@ -136,9 +152,12 @@ Domain Rotation: fail-over (to backup domains)
   - Already in hardened config
   - Gets randomized per request
   
-- [ ] **Advanced transforms** (XOR + Base64url)
-  - Already in hardened config
-  - Harder for signature detection
+- [ ] **Transforms** (XOR + Base64url) — *lowest-fidelity control; do not overweight*
+  - Already in the ops config
+  - Does **not** move periodicity (N2) or fingerprint (N1) detections — see Detection priority
+  - **XOR key MUST be per-op random** (`openssl rand -hex 16`). Never `"mythic"` or any framework
+    name: a static/known key is a self-identifying IOC recoverable from one known-plaintext block
+    (fixed in `c2_profile/generic_cdn_beacon.ops.toml`, F7)
   
 - [ ] **Realistic User-Agent**
   - Already in hardened config
@@ -150,9 +169,12 @@ Domain Rotation: fail-over (to backup domains)
 
 ### Behavioral Evasion
 
-- [ ] **Variable callback interval**
-  - Command: Payload → httpx_callback_interval: `60` + httpx_callback_jitter: `50%`
-  - Results in 30-90 second range (less predictable)
+- [ ] **Actor-specific callback interval** (not a generic 60s/50%)
+  - Match the modeled actor: **LockBit ICBC = interval `62` / jitter `37`** (the documented
+    value; already in `../profiles/lockbit-icbc.httpx.toml` and `generic_cdn_beacon.ops.toml`, F7)
+  - Jitter does **not** defeat RITA (N2) — it perturbs the interval, not the population rhythm.
+    The real timing evasion is *long, high-jitter, low-volume* sleep, which forces the SOC to
+    lengthen its window. Emulate the actor's real cadence; treat N2 firing as the lesson, not a fail
   
 - [ ] **Domain rotation across multiple domains**
   - Command: Payload → httpx_domain_rotation: `round-robin`

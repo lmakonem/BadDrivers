@@ -13,7 +13,16 @@
 # never a raw IP or a non-standard port.
 # ==========================================================================================
 
+# F7: the xor key below MUST be a per-op random value, NOT a static/literal string.
+#     Generate one per engagement, e.g.  openssl rand -hex 16  , and replace SET_PER_OP_RANDOM
+#     in all four transform blocks. Never ship "mythic" (or any framework name) as the key --
+#     it is a self-identifying IOC recoverable from a single known-plaintext transform.
+# F7: timing mirrors the modeled actor (LockBit ICBC: 62s interval / 37% jitter), not a generic
+#     60s/50%. Note that even the real value is catchable by RITA over a long window (that is the
+#     lesson, see detections N2) -- so this is fidelity, not evasion.
 name = "generic_cdn_beacon"
+callback_interval = 62
+callback_jitter = 37
 
 [get]
 verb = "GET"
@@ -33,7 +42,7 @@ name = ""
 
 [[get.client.transforms]]
 action = "xor"
-value = "mythic"
+value = "SET_PER_OP_RANDOM"
 
 [[get.client.transforms]]
 action = "base64url"
@@ -51,7 +60,7 @@ value = ""
 
 [[get.server.transforms]]
 action = "xor"
-value = "mythic"
+value = "SET_PER_OP_RANDOM"
 
 [post]
 verb = "POST"
@@ -68,7 +77,7 @@ name = ""
 
 [[post.client.transforms]]
 action = "xor"
-value = "mythic"
+value = "SET_PER_OP_RANDOM"
 
 [[post.client.transforms]]
 action = "base64url"
@@ -84,4 +93,4 @@ value = ""
 
 [[post.server.transforms]]
 action = "xor"
-value = "mythic"
+value = "SET_PER_OP_RANDOM"
