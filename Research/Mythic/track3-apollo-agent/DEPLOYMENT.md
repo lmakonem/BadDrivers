@@ -191,7 +191,14 @@ then drive one injection task (exercises H2/H3). See `HOST-EMULATION-LOCKBIT.md`
 > The **generic** `generic_cdn_beacon.ops.toml` may be used for network-hygiene testing (N3/N6)
 > but is **not** actor coverage. Only the actor profiles above count as LockBit/Qilin coverage.
 
-### Phase 6: Deploy to Target (2 min)
+### Phase 6: Deploy to Target (2 min) — LAB ACCESS SHIM
+
+> **Lab access shim, not actor initial access (F5).** `certutil -urlcache` from an attacker HTTP
+> server is a heavily-signatured LOLBIN and reflects **none** of the modeled actors' delivery
+> (FIN7 = spearphish + more_eggs T1566/T1218; LockBit = Citrix Bleed CVE-2023-4966 T1539; FIN8 =
+> `msxsl.exe`). It exists only to get the agent running; do **not** count it as FIN7/FIN8/LockBit
+> initial-access coverage. Adopt the CTID FIN7 plan for real initial access — see
+> `../tasks/F5-fin7-killchain-ordering.md`.
 
 #### Transfer Payload
 ```bash

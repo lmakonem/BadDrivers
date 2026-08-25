@@ -43,7 +43,13 @@ Mythic UI -> Create Payload -> Windows -> Apollo -> httpx:
 - Injection target `wuauclt.exe`; SMB pipe `fullduplex_84` if building the P2P variant.
 - Output: WinExe (or service/DLL as the scenario needs).
 
-## 4. Deliver in GOAD (reuse the Episode 1 chain)
+## 4. Deliver in GOAD (reuse the Episode 1 chain) — LAB ACCESS SHIM
+
+> **Lab access shim, not actor initial access (F5).** The SQL RCE path (xp_cmdshell + certutil)
+> is a convenience to get the agent running; it reflects none of the modeled actors' delivery
+> (FIN7 spearphish/more_eggs, LockBit Citrix Bleed, FIN8 msxsl.exe). Do not count it as
+> initial-access coverage. For FIN7 ordering/initial access adopt the CTID FIN7 plan —
+> see `tasks/F5-fin7-killchain-ordering.md`.
 
 Host the payload on Kali and deliver via the documented SQL RCE path (xp_cmdshell on castelblack,
 certutil LOLBIN or PowerShell cradle), exactly as in the Episode 1 writeup. Verify the callback
