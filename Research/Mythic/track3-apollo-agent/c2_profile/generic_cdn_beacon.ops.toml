@@ -20,7 +20,7 @@
 # F7: timing mirrors the modeled actor (LockBit ICBC: 62s interval / 37% jitter), not a generic
 #     60s/50%. Note that even the real value is catchable by RITA over a long window (that is the
 #     lesson, see detections N2) -- so this is fidelity, not evasion.
-name = "generic_cdn_beacon"
+name = "generic_cdn_beacon_ops"
 callback_interval = 62
 callback_jitter = 37
 

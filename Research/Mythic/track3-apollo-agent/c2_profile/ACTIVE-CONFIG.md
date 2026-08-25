@@ -48,6 +48,15 @@ tally.
    non-TLS binary protocol on TCP/443 and is not representable in httpx. Real FIN8 coverage is
    the Track-2 build (see `../../tasks/F1-sardonic-fin8-payload.md`).
 
+## Deployed server-side default keys (httpx agent_configs.json)
+
+The Mythic httpx container's default set was realigned off the `fin8_cdn` misnomer to match this repo:
+
+| Server default key | inner `name` | maps to repo file |
+|---|---|---|
+| `generic_cdn_beacon` | `generic_cdn_beacon` | `generic_cdn_beacon.lab.toml` |
+| `generic_cdn_beacon_ops` | `generic_cdn_beacon_ops` | `generic_cdn_beacon.ops.toml` |
+
 ## Removed in F9 (redundant / broken)
 
 - `httpx_config.toml` -- invalid `headers = { ... }` inline-table shape

@@ -79,7 +79,7 @@ Callback Jitter: 37%
 
 ```toml
 # generic_cdn_beacon.ops.toml
-name = "generic_cdn_beacon"
+name = "generic_cdn_beacon_ops"
 [get]
 uris = ["/cdn/jquery.min.js", "/assets/bootstrap.min.js", "/js/app.bundle.js"]
 [get.client]

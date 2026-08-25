@@ -51,3 +51,21 @@ they can be measured — flagged in each task spec, not silently counted.
 
 LockBit profile fidelity, Qilin OCSP tell, the nginx redirector, `detections/elastic-sysmon.md`,
 and the README attribution honesty are untouched and now version-controlled (baseline commit).
+
+## Lab deployment (2026-08-25, GOADAI-mythic 10.23.20.10 via jump 192.168.36.225)
+
+Tier 1 (config/state) deployed to the running lab:
+
+- **Server-side httpx default set realigned** in
+  `/opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json`:
+  `fin8_cdn` -> `generic_cdn_beacon`, `fin8_cdn_hardened` -> `generic_cdn_beacon_ops`
+  (top-level key + inner `name`). Backup: `agent_configs.json.pre-rename.20260825-122800.bak`.
+  Rollback: restore the .bak and `sudo docker restart httpx`.
+- **httpx container restarted** and verified healthy (clean `./main` start, no parse errors),
+  serving the renamed keys. No active beacon traffic at deploy time.
+- **Source-of-truth tree synced** to `~/mythic-emulation/Mythic/` on the Mythic server.
+
+Tier 2 (operator-run, not yet executed): F2 ops build behind a redirector (needs a redirector
+host + a lab cert; real LE not obtainable in an isolated lab), and the F4 host-emulation run
+(build payload with spawnto=wuauclt + smb pipename=fullduplex_84, deliver to WS01, run injection +
+link to light H2/H3). Steps in `track3-apollo-agent/HOST-EMULATION-LOCKBIT.md` + DEPLOYMENT.md 5b.
