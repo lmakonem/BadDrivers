@@ -84,16 +84,16 @@ while (Alive)
 
 ### 2. HTTPX Profile Configuration
 
-**File:** `c2_profile/httpx_agent_configs.json`
+**File:** `c2_profile/ACTIVE-CONFIG.md` (source-of-truth pointer; configs are `generic_cdn_beacon.lab.toml` / `generic_cdn_beacon.ops.toml`)
 
-Configured FIN8-style CDN profile with:
+Configured a **generic CDN-shaped beacon** (LAB) with (NOTE: NOT FIN8 — FIN8/Sardonic is a non-TLS binary protocol on TCP/443, not a CDN beacon; renamed from `fin8_cdn`, F1):
 - **Callback Domains:** `http://10.23.20.10:82` (live Mythic server)
 - **Callback Interval:** 62 seconds (realistic for production malware)
 - **Callback Jitter:** 37% (LockBit/Qilin pattern)
 - **Domain Rotation:** fail-over (redundancy)
 - **Encryption:** EKE (RSA-4096 key exchange) mandatory
 - **Encoding:** Base64 transforms on GET/POST messages
-- **Profile:** `fin8_cdn` - mimics legitimate CDN traffic
+- **Profile:** `generic_cdn_beacon` - generic CDN-shaped traffic (renamed from the misnomer `fin8_cdn`; not actor coverage — F1). Actor coverage = `../profiles/{lockbit-icbc,qilin-ocsp}.httpx.toml`
 
 ## Deployment
 
@@ -243,7 +243,9 @@ track3-apollo-agent/
 ├── agent_code/
 │   └── Apollo.cs              (Fixed Start() method)
 ├── c2_profile/
-│   └── httpx_agent_configs.json  (fin8_cdn profile config)
+│   ├── ACTIVE-CONFIG.md            (source-of-truth pointer)
+│   ├── generic_cdn_beacon.lab.toml (LAB-ONLY, not actor coverage)
+│   └── generic_cdn_beacon.ops.toml (generic hardened shape)
 ├── payload_type/              (Placeholder for mythic integration)
 ├── README.md                  (This file)
 └── DEPLOYMENT.md              (Extended deployment guide)
@@ -254,7 +256,7 @@ track3-apollo-agent/
 - Mythic C2 Framework: https://mythicc2.github.io/
 - Apollo Agent: https://github.com/its-a-feature/Apollo
 - HTTPX Profile: Malleable C2 profile with transform chains
-- FIN8 Malware: CDN-based beaconing patterns (LockBit, Qilin)
+- Actor emulation: LockBit/Qilin CDN-shaped HTTPS beacons (see `../profiles/`). NOTE: FIN8 is a non-TLS binary protocol, NOT a CDN beacon — do not conflate (F1).
 
 ## Testing Status
 
@@ -263,7 +265,7 @@ track3-apollo-agent/
 | **Callback** | ✓ Pass | 2026-08-25 | Appears in UI within 62s |
 | **Tasking** | ✓ Pass | 2026-08-25 | Shell whoami executes, returns output |
 | **Encryption** | ✓ Pass | 2026-08-25 | EKE handshake successful, session encrypted |
-| **Profile** | ✓ Pass | 2026-08-25 | httpx container healthy, fin8_cdn loads |
+| **Profile** | ✓ Pass | 2026-08-25 | httpx container healthy, generic_cdn_beacon loads |
 | **Jitter** | ✓ Pass | 2026-08-25 | Randomization observed in beacon timing |
 
 ---

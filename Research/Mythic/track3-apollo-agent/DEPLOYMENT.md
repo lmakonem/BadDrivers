@@ -91,8 +91,8 @@ sudo cp /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json \
 # Deploy updated config with callback_domains
 cat > /tmp/agent_configs_update.json << 'EOF'
 {
-  "fin8_cdn": {
-    "name": "fin8_cdn",
+  "generic_cdn_beacon": {
+    "name": "generic_cdn_beacon",
     "callback_domains": ["http://10.23.20.10:82"],
     "callback_interval": 62,
     "callback_jitter": 37,
@@ -106,7 +106,7 @@ sudo cp /tmp/agent_configs_update.json \
         /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json
 
 # Verify
-sudo jq .fin8_cdn.callback_domains /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json
+sudo jq .generic_cdn_beacon.callback_domains /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json
 # Expected: ["http://10.23.20.10:82"]
 ```
 
@@ -434,7 +434,7 @@ echo "[*] Deploy fixed Apollo.cs..."
 # [Copy fixed Apollo.cs here]
 
 echo "[*] Verify httpx config..."
-sudo jq .fin8_cdn.callback_domains /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json
+sudo jq .generic_cdn_beacon.callback_domains /opt/mythic/InstalledServices/httpx/httpx/c2_code/agent_configs.json
 
 echo "[+] Deployment complete"
 REMOTE
