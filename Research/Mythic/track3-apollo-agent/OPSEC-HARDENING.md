@@ -133,18 +133,21 @@ detects a beacon:
 - [ ] **Use port 443** instead of 82
   - Command: Payload → httpx_callback_domains: `https://[real-domain]:443`
   
-- [ ] **Domain fronting** (if available)
-  - Use CDN like Cloudflare, Akamai, or JSDelivr
-  - Command: Payload → httpx_domain_front: `real-cdn.com`
+- [ ] **Egress shape — actor-accurate, NOT domain fronting** (F6)
+  - Domain fronting is **dead** on the majors (Cloudflare 2015; CloudFront/Google 2018; Azure
+    Front Door Jan 2024; Fastly Feb 2024). Do not rely on it, and never point callback at a real CDN
+  - LockBit: fail-over across 2-3 **aged registered** redirector domains you own (Host spoof is in
+    the profile). Qilin: forged `ocsp.verisign.com` on your own VPS. FIN8: `sslip.io` wildcard IP
+    naming + 3-server fallback (and note FIN8 is non-TLS binary — Track-2 build, F1)
   
 - [ ] **Use HTTPS** instead of HTTP
   - Requires valid certificate or self-signed (with pinning bypass)
   
-- [ ] **Legitimate callback domain**
-  - ✓ Real CDN (jsDelivr, unpkg)
-  - ✓ Legitimate service (GitHub, AWS S3)
-  - ✓ Compromised site (red team's responsibility)
-  - ✗ Fake example.com domains
+- [ ] **Callback domain — your redirector, actor-shaped** (F6)
+  - ✓ Redirector FQDN on 443 with a real LE cert (aged/categorised registered domain you own)
+  - ✓ Actor-accurate egress per the item above
+  - ✗ Pointing callback at a real CDN (jsDelivr/unpkg/cdnjs) — you cannot C2 *through* it
+  - ✗ Fake `example.com` domains; ✗ raw IP / non-standard port
 
 ### Traffic-Level Evasion
 

@@ -458,7 +458,9 @@ echo "Rollback complete"
 - **Payload Uniqueness:** Each apollo.exe has unique RSA keypair; reusing payloads compromises operational security
 - **Kill Date:** Always set kill date to operation end date (prevents stale beacons)
 - **HTTPS:** Use HTTPS callback domains for production (requires valid certificate)
-- **Domain Fronting:** Configure domain_front parameter to spoof legitimate domains
+- **Egress (not fronting):** Domain fronting is dead on the major CDNs — leave `domain_front`
+  empty and use actor-accurate egress (redirector on 443 + aged registered domains; FIN8 `sslip.io`;
+  Qilin forged-OCSP host). See `PAYLOAD-CONFIG-REFERENCE.md` and `OPSEC-HARDENING.md` (F6)
 - **Proxy:** Configure proxy_* parameters if target has outbound proxy
 
 ## References
