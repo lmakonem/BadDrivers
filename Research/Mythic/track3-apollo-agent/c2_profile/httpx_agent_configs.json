@@ -1,0 +1,84 @@
+{
+  "fin8_cdn": {
+    "name": "fin8_cdn",
+    "callback_domains": ["http://10.23.20.10:82"],
+    "callback_interval": 62,
+    "callback_jitter": 37,
+    "get": {
+      "verb": "GET",
+      "uris": ["/js/lib.min.js"],
+      "client": {
+        "headers": {
+          "Accept-Encoding": "gzip, deflate",
+          "Host": "cdn.examplestatic.io",
+          "Referer": "https://cdn.examplestatic.io/"
+        },
+        "parameters": null,
+        "domain_specific_headers": null,
+        "message": {
+          "location": "body",
+          "name": ""
+        },
+        "transforms": [
+          {
+            "action": "base64",
+            "value": ""
+          }
+        ]
+      },
+      "server": {
+        "headers": {
+          "Cache-Control": "max-age=0, no-cache",
+          "Connection": "keep-alive",
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Pragma": "no-cache",
+          "Server": "NetDNA-cache/2.2"
+        },
+        "transforms": [
+          {
+            "action": "base64",
+            "value": ""
+          }
+        ]
+      }
+    },
+    "post": {
+      "verb": "POST",
+      "uris": ["/js/lib.min.js"],
+      "client": {
+        "headers": {
+          "Accept-Encoding": "gzip, deflate",
+          "Host": "cdn.examplestatic.io",
+          "Referer": "https://cdn.examplestatic.io/"
+        },
+        "parameters": null,
+        "domain_specific_headers": null,
+        "message": {
+          "location": "body",
+          "name": ""
+        },
+        "transforms": [
+          {
+            "action": "base64",
+            "value": ""
+          }
+        ]
+      },
+      "server": {
+        "headers": {
+          "Cache-Control": "max-age=0, no-cache",
+          "Connection": "keep-alive",
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Pragma": "no-cache",
+          "Server": "NetDNA-cache/2.2"
+        },
+        "transforms": [
+          {
+            "action": "base64",
+            "value": ""
+          }
+        ]
+      }
+    }
+  }
+}
