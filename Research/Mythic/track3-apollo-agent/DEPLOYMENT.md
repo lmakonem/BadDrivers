@@ -118,7 +118,12 @@ sudo grep "c2_profiles = " /opt/mythic/InstalledServices/apollo/apollo/mythic/ag
 # Expected: ["http", "httpx", "smb", "tcp", "websocket", "azure_blob"]
 ```
 
-### Phase 5: Access Mythic UI & Create Payload (3 min)
+### Phase 5: Access Mythic UI & Create Payload (3 min) — LAB-ONLY
+
+> **LAB-ONLY build.** The parameters in this phase (raw IP `10.23.20.10`, port `82`, empty
+> `httpx_raw_c2_config`, cleartext HTTP) reproduce **no documented actor** and MUST NOT be
+> counted as FIN8/LockBit/Qilin coverage. This is the Run-1 baseline (static tells) only.
+> For a monitored / actor-attributed run, use **Phase 5b** below instead.
 
 #### Setup SSH Tunnel to Web UI
 ```bash
@@ -162,6 +167,29 @@ ssh -L 7443:127.0.0.1:7443 -J root@192.168.36.225 localuser@10.23.20.10
 | httpx_timeout | 240 |
 
 **Click:** GENERATE → Download apollo.exe
+
+### Phase 5b: Ops-representative build (MONITORED runs) — actor-attributed
+
+Use this for any run against monitoring. It callbacks to the **redirector FQDN on 443** and
+loads an **actor profile** as `raw_c2_config`. See `c2_profile/ACTIVE-CONFIG.md`.
+
+**C2 Profile Parameters (LockBit example):**
+| Parameter | Value |
+|-----------|-------|
+| httpx_callback_domains | `https://<REDIR_FQDN>:443` (redirector, real LE cert — exercises N6) |
+| httpx_raw_c2_config | contents of `../profiles/lockbit-icbc.httpx.toml` |
+| httpx_callback_interval | 62 |
+| httpx_callback_jitter | 37 |
+| httpx_domain_rotation | fail-over |
+| httpx_failover_threshold | 5 |
+| httpx_encrypted_exchange_check | true |
+| httpx_domain_front | (leave empty — fronting is dead on major CDNs, see PAYLOAD-CONFIG-REFERENCE.md) |
+
+Host-side actor items (LockBit): set `spawnto` = `wuauclt.exe` and the SMB pipe `fullduplex_84`,
+then drive one injection task (exercises H2/H3). See `HOST-EMULATION-LOCKBIT.md`.
+
+> The **generic** `generic_cdn_beacon.ops.toml` may be used for network-hygiene testing (N3/N6)
+> but is **not** actor coverage. Only the actor profiles above count as LockBit/Qilin coverage.
 
 ### Phase 6: Deploy to Target (2 min)
 
