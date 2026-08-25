@@ -278,6 +278,16 @@ Apollo Agent
 
 ---
 
+## Accepted / out-of-scope IOCs (F3)
+
+Some real-actor IOCs **cannot** be reproduced by Apollo (a .NET/SChannel managed agent) and are
+logged here as accepted gaps rather than forced. The blue team should know these are NOT exercised
+by this agent, so "hunt for them" is not a test this lab passes or fails.
+
+| IOC | Actor | Why not reproduced | Disposition |
+|---|---|---|---|
+| **JA3 `a0e9f5d64349fb13191bc781f81f42e1`** | LockBit (recovered CS beacon) | Apollo is .NET FW / SChannel; it emits a **.NET** JA3/JA4H, not the Cobalt Strike malleable JA3. The client TLS stack is not shapeable at the managed-agent layer. | **Accepted, out of scope.** Reproducing it requires a native agent (Xenon/Kharon) — a Track-2 decision, not an httpx tweak. Meanwhile N1 (JA4H-vs-UA) still fires. |
+
 ## Testing & Validation
 
 Before operational deployment, verify:
