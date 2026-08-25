@@ -1,4 +1,19 @@
-name = "fin8_cdn_hardened"
+# generic_cdn_beacon  --  OPS traffic-hardening reference  (source-of-truth: OPS-hygiene intent)
+#
+# ======================= GENERIC TRAFFIC SHAPE -- NOT ACTOR COVERAGE =======================
+# Hardened GENERIC beacon for exercising NETWORK-HYGIENE analytics (N3 low URI cardinality,
+# N6 real-cert TLS via the redirector) on the ops path. It is NOT attributed to any actor and
+# MUST NOT be counted as FIN8/LockBit/Qilin coverage.
+#
+# For ACTOR-ATTRIBUTED emulation, do NOT use this file -- load one of the well-aligned actor
+# profiles as raw_c2_config instead:
+#   ../../profiles/lockbit-icbc.httpx.toml   (LockBit ICBC beacon)
+#   ../../profiles/qilin-ocsp.httpx.toml     (Qilin OCSP-spoof)
+# Build-time callback for the ops path MUST be the redirector FQDN on 443 (see ACTIVE-CONFIG.md),
+# never a raw IP or a non-standard port.
+# ==========================================================================================
+
+name = "generic_cdn_beacon"
 
 [get]
 verb = "GET"

@@ -1,5 +1,12 @@
 # Apollo HTTPX Deployment Guide
 
+> **Active C2 config (source-of-truth): [`c2_profile/ACTIVE-CONFIG.md`](c2_profile/ACTIVE-CONFIG.md).**
+> There is one config per intent: `generic_cdn_beacon.lab.toml` (LAB-ONLY, HTTP:82, **not** actor
+> coverage) and `generic_cdn_beacon.ops.toml` (generic hardened shape). For **actor-attributed**
+> runs, load `../profiles/lockbit-icbc.httpx.toml` or `../profiles/qilin-ocsp.httpx.toml` as
+> `raw_c2_config` on the redirector:443 ops build. The old `fin8_cdn`/`httpx_config_*`/
+> `httpx_minimal.json` variants were removed (F9); `fin8_cdn` was a misnomer (F1).
+
 ## Quick Start (5 min)
 
 ```bash

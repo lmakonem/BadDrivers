@@ -1,0 +1,70 @@
+# generic_cdn_beacon  --  LAB-ONLY config  (source-of-truth: LAB intent)
+#
+# ============================ DO NOT COUNT AS ACTOR COVERAGE ============================
+# This is a GENERIC CDN-shaped HTTP beacon. It reproduces NO documented actor's tradecraft.
+# It exists to exercise the Run-1 baseline (static tells) only: default-ish URI, cleartext
+# HTTP, base64 body. Formerly mis-named "fin8_cdn" -- FIN8/Sardonic is a NON-TLS binary
+# protocol on TCP/443 and cannot be represented in httpx (see ../../tasks/... F1 and the audit).
+#
+# Use ONLY on the unmonitored lab range. Build-time callback is set LAB-ONLY:
+#   callback_domains = ["http://10.23.20.10:82"]   (raw IP, non-standard port -- intentional)
+# For any MONITORED / ops run, do NOT use this file. See ACTIVE-CONFIG.md.
+# =======================================================================================
+
+name = "generic_cdn_beacon"
+
+[get]
+verb = "GET"
+uris = ["/js/lib.min.js"]
+
+[get.client]
+headers.Accept-Encoding = "gzip, deflate"
+headers.Host = "cdn.examplestatic.io"        # LAB placeholder host (obvious to inspection -- by design)
+headers.Referer = "https://cdn.examplestatic.io/"
+
+[get.client.message]
+location = "body"
+name = ""
+
+[[get.client.transforms]]
+action = "base64"
+value = ""
+
+[get.server]
+headers.Cache-Control = "max-age=0, no-cache"
+headers.Connection = "keep-alive"
+headers.Content-Type = "application/javascript; charset=utf-8"
+headers.Pragma = "no-cache"
+headers.Server = "NetDNA-cache/2.2"
+
+[[get.server.transforms]]
+action = "base64"
+value = ""
+
+[post]
+verb = "POST"
+uris = ["/js/lib.min.js"]
+
+[post.client]
+headers.Accept-Encoding = "gzip, deflate"
+headers.Host = "cdn.examplestatic.io"
+headers.Referer = "https://cdn.examplestatic.io/"
+
+[post.client.message]
+location = "body"
+name = ""
+
+[[post.client.transforms]]
+action = "base64"
+value = ""
+
+[post.server]
+headers.Cache-Control = "max-age=0, no-cache"
+headers.Connection = "keep-alive"
+headers.Content-Type = "application/javascript; charset=utf-8"
+headers.Pragma = "no-cache"
+headers.Server = "NetDNA-cache/2.2"
+
+[[post.server.transforms]]
+action = "base64"
+value = ""
