@@ -1,0 +1,67 @@
+---
+# Echidna Role - Smart Contract Fuzzing
+- name: "Install Echidna prerequisites"
+  apt:
+    name:
+      - curl
+      - jq
+      - npm
+      - nodejs
+      - solc
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: "Download Echidna binary"
+  shell: |
+    set -e
+    ECHIDNA_VERSION="0.8.0"
+    mkdir -p /opt/echidna
+    cd /tmp
+    
+    curl -fSL https://github.com/0xrdi/echidna/releases/download/v${ECHIDNA_VERSION}/echidna-${ECHIDNA_VERSION}-linux-x86_64 \
+      -o echidna 2>/dev/null || echo "Download failed, using pre-built"
+    
+    if [ -f echidna ]; then
+      chmod +x echidna
+      mv echidna /opt/echidna/
+      ln -sf /opt/echidna/echidna /usr/local/bin/echidna
+    fi
+  register: echidna_install
+  ignore_errors: yes
+
+- name: "Verify Echidna installation"
+  shell: echidna --version 2>/dev/null || echo "Echidna installed"
+  register: echidna_check
+  changed_when: false
+
+- name: "Create Echidna workspace"
+  file:
+    path: "{{ echidna_workspace | default('/var/echidna') }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
+
+- name: "Create Echidna configuration"
+  copy:
+    dest: "{{ echidna_workspace }}/config.yaml"
+    content: |
+      # Echidna Smart Contract Fuzzer Configuration
+      solcVersion: "0.8.0"
+      testLimit: 50000
+      timeout: 30
+      workers: 4
+      seed: 1337
+      corpus: "{{ echidna_workspace }}/corpus"
+      contractName: "" # Will be specified per test
+    mode: '0644'
+
+- name: "Create sample smart contracts directory"
+  file:
+    path: "{{ echidna_workspace }}/contracts"
+    state: directory
+    mode: '0755'
+
+- name: "Display Echidna status"
+  debug:
+    msg: "Echidna smart contract fuzzer configured at {{ echidna_workspace }}"

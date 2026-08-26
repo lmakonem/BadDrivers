@@ -1,0 +1,19 @@
+---
+# Echidna Smart Contract Fuzzing Tool Deployment
+- name: "Phase 8: Echidna (Smart Contract Fuzzer)"
+  hosts: all
+  gather_facts: yes
+  
+  vars:
+    echidna_workspace: /var/echidna
+    deploy_user: localuser
+  
+  tasks:
+    - name: "Include Echidna role"
+      include_role:
+        name: echidna
+      when: "'echidna' in group_names or enable_echidna | default(false)"
+    
+    - name: "Echidna deployment phase complete"
+      debug:
+        msg: "Echidna smart contract fuzzer configured"

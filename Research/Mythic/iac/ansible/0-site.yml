@@ -139,3 +139,10 @@
         name: dnsmasq
         state: restarted
         daemon_reload: yes
+
+    - name: "Phase 8: Echidna (Smart Contract Fuzzer)"
+      include_tasks: 8-echidna.yml
+      tags:
+        - echidna
+        - offensive
+      when: enable_echidna | default(false)
