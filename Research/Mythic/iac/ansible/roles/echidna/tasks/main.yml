@@ -1,5 +1,5 @@
 ---
-# Echidna Role - Smart Contract Fuzzing
+# Echidna Role - Smart Contract Fuzzing with Spark qwen3.8-coding Model
 - name: "Install Echidna prerequisites"
   apt:
     name:
@@ -9,59 +9,86 @@
       - nodejs
       - solc
     state: present
+    update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: "Download Echidna binary"
-  shell: |
-    set -e
-    ECHIDNA_VERSION="0.8.0"
-    mkdir -p /opt/echidna
-    cd /tmp
-    
-    curl -fSL https://github.com/0xrdi/echidna/releases/download/v${ECHIDNA_VERSION}/echidna-${ECHIDNA_VERSION}-linux-x86_64 \
-      -o echidna 2>/dev/null || echo "Download failed, using pre-built"
-    
-    if [ -f echidna ]; then
-      chmod +x echidna
-      mv echidna /opt/echidna/
-      ln -sf /opt/echidna/echidna /usr/local/bin/echidna
-    fi
-  register: echidna_install
-  ignore_errors: yes
-
-- name: "Verify Echidna installation"
-  shell: echidna --version 2>/dev/null || echo "Echidna installed"
-  register: echidna_check
-  changed_when: false
-
-- name: "Create Echidna workspace"
+- name: "Create Echidna install directory"
   file:
-    path: "{{ echidna_workspace | default('/var/echidna') }}"
+    path: "/home/{{ deploy_user | default('localuser') }}/echidna"
     state: directory
     mode: '0755'
     owner: "{{ deploy_user | default('localuser') }}"
     group: "{{ deploy_user | default('localuser') }}"
 
-- name: "Create Echidna configuration"
+- name: "Download Echidna binary safely"
+  get_url:
+    url: "https://github.com/0xrdi/echidna/releases/download/v0.8.0/echidna-0.8.0-linux-x86_64"
+    dest: "/home/{{ deploy_user | default('localuser') }}/echidna/echidna"
+    mode: '0755'
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
+    checksum: "sha256:{{ echidna_checksum | default('') }}"
+  ignore_errors: yes
+  register: echidna_download
+
+- name: "Create Echidna workspace"
+  file:
+    path: "{{ echidna_workspace | default('/home/' + deploy_user | default('localuser') + '/.echidna') }}"
+    state: directory
+    mode: '0700'
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
+
+- name: "Create Echidna config with Spark qwen3.8-coding"
   copy:
     dest: "{{ echidna_workspace }}/config.yaml"
     content: |
       # Echidna Smart Contract Fuzzer Configuration
+      # Integrated with Spark qwen3.8-coding model for exploit synthesis
+      
       solcVersion: "0.8.0"
       testLimit: 50000
       timeout: 30
       workers: 4
       seed: 1337
       corpus: "{{ echidna_workspace }}/corpus"
-      contractName: "" # Will be specified per test
-    mode: '0644'
+      
+      # Spark qwen3.8-coding model integration
+      spark:
+        enabled: true
+        model: "qwen3.8-coding"
+        endpoint: "http://192.168.36.122:11435"
+        exploit_synthesis: true
+        vulnerability_analysis: true
+      
+      # Property definitions
+      properties:
+        - name: "no_reentrancy"
+          description: "Contract should not have reentrancy vulnerabilities"
+        - name: "safe_state_changes"
+          description: "State changes should be atomic and consistent"
+        - name: "access_control"
+          description: "Access control functions should be enforced"
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
+    mode: '0600'
 
-- name: "Create sample smart contracts directory"
+- name: "Create Echidna contract samples directory"
   file:
     path: "{{ echidna_workspace }}/contracts"
     state: directory
     mode: '0755'
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
 
-- name: "Display Echidna status"
+- name: "Create Echidna corpus directory"
+  file:
+    path: "{{ echidna_workspace }}/corpus"
+    state: directory
+    mode: '0755'
+    owner: "{{ deploy_user | default('localuser') }}"
+    group: "{{ deploy_user | default('localuser') }}"
+
+- name: "Echidna role complete"
   debug:
-    msg: "Echidna smart contract fuzzer configured at {{ echidna_workspace }}"
+    msg: "Echidna smart contract fuzzer configured with Spark qwen3.8-coding at {{ echidna_workspace }}"
