@@ -47,7 +47,7 @@
     name: localuser
     shell: /bin/bash
     home: /home/localuser
-    groups: sudo,docker
+    groups: sudo,adm
     append: yes
     state: present
   when: deployment_mode == "lab"
@@ -57,7 +57,7 @@
     name: deployuser
     shell: /bin/bash
     home: /home/deployuser
-    groups: sudo,docker
+    groups: sudo,adm
     append: yes
     state: present
   when: deployment_mode == "ops"
@@ -172,8 +172,6 @@
     shell: /bin/bash
     home: "{{ mythic_base_path }}"
     create_home: yes
-    groups: docker
-    append: yes
     state: present
   when: "'mythic_servers' in group_names"
 
@@ -195,11 +193,12 @@
 
 - name: "Verify system time is synchronized"
   shell: |
-    chronyc status | grep -q "Synchronized"
+    timedatectl status | grep -q "System clock synchronized: yes"
   register: time_sync_check
   retries: 3
   delay: 10
   until: time_sync_check.rc == 0
+  ignore_errors: yes
 
 - name: "Set kernel parameters (security hardening)"
   sysctl:

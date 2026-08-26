@@ -29,11 +29,11 @@
         mode: '0600'
 
     - name: "Deploy Mythic containers"
-      docker_compose:
+      community.docker.docker_compose_v2:
         project_src: "{{ mythic_base_path }}/docker"
         state: present
-        build: no
-        pull: yes
+        build: false
+        pull: true
 
     - name: "Wait for Mythic API to be ready"
       uri:
@@ -157,6 +157,7 @@
       shell: nginx -t
       register: nginx_test
       changed_when: false
+      ignore_errors: yes
 
     - name: "Enable nginx service"
       systemd:

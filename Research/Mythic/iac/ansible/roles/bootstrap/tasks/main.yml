@@ -24,7 +24,7 @@
   user:
     name: "{{ deploy_user }}"
     shell: /bin/bash
-    groups: sudo,docker,adm
+    groups: sudo,adm
     append: yes
     create_home: yes
 

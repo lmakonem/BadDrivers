@@ -30,21 +30,6 @@
           - ansible_version.minor >= 9
         fail_msg: "Ansible 2.9+ required"
 
-    - name: "Create deployment log directory"
-      file:
-        path: "/tmp/mythic-deployment-logs"
-        state: directory
-        mode: '0755'
-      delegate_to: localhost
-      run_once: true
-
-    - name: "Start deployment log"
-      lineinfile:
-        path: "/tmp/mythic-deployment-logs/deployment.log"
-        line: "Deployment started at {{ ansible_date_time.iso8601 }} in {{ deployment_mode }} mode"
-        create: yes
-      delegate_to: localhost
-      run_once: true
 
   tasks:
     - name: "Phase 1: Bootstrap (SSH keys, users, sudo)"
@@ -105,13 +90,6 @@
       vars:
         start_time: "{{ ansible_date_time.epoch }}"
 
-    - name: "Log completion"
-      lineinfile:
-        path: "/tmp/mythic-deployment-logs/deployment.log"
-        line: "Deployment completed at {{ ansible_date_time.iso8601 }}"
-        insertafter: EOF
-      delegate_to: localhost
-      run_once: true
 
   handlers:
     - name: "restart sshd"
@@ -147,5 +125,17 @@
     - name: "restart nginx"
       systemd:
         name: nginx
+        state: restarted
+        daemon_reload: yes
+
+    - name: "restart socat"
+      systemd:
+        name: socat-relay
+        state: restarted
+        daemon_reload: yes
+
+    - name: "restart dnsmasq"
+      systemd:
+        name: dnsmasq
         state: restarted
         daemon_reload: yes

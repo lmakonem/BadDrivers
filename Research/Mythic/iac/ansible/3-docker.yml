@@ -368,13 +368,14 @@
 
 - name: "Pull Docker base images"
   docker_image:
-    name: "{{ item }}"
+    name: "{{ item.name }}"
     source: pull
   loop: "{{ docker_images }}"
   ignore_errors: yes
   async: 3600
   poll: 0
   register: image_pulls
+  when: "'mythic_servers' in group_names"
 
 - name: "Wait for Docker image pulls to complete"
   async_status:
@@ -384,7 +385,9 @@
   retries: 120
   delay: 10
   loop: "{{ image_pulls.results }}"
-  when: item.ansible_job_id is defined
+  when:
+    - item.ansible_job_id is defined
+    - "'mythic_servers' in group_names"
 
 - name: "Create Docker network for Mythic"
   docker_network:

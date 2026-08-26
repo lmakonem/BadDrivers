@@ -1,5 +1,6 @@
 ---
 # Mythic Server Group Variables
+mythic_version: "0.3.1"
 mythic_container_port: 7681
 mythic_webhook_port: 8000
 mythic_https_port: 7443

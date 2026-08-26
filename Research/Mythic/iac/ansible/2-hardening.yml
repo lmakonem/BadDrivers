@@ -204,6 +204,7 @@
     rm /tmp/moduli.all
   changed_when: false
   ignore_errors: yes
+  when: "'mythic_servers' in group_names"
 
 - name: "Set restrictive SSH config permissions"
   file:
@@ -224,6 +225,7 @@
     - /root/.ssh
     - /root/.ssh/authorized_keys
     - /root/.bash_history
+  ignore_errors: yes
 
 - name: "Disable unnecessary services"
   systemd:
