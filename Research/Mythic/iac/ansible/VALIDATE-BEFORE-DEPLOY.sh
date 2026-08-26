@@ -4,6 +4,9 @@
 
 set -e
 
+# Cleanup on exit
+trap 'rm -f /tmp/test_inventory.ini /tmp/validate_$$.tmp 2>/dev/null' EXIT
+
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║     Mythic IaC Pre-Deployment Validation                 ║"
 echo "╚══════════════════════════════════════════════════════════╝"
@@ -54,7 +57,7 @@ echo "────────────────────────�
 
 # Test Mythic SSH
 echo -n "→ SSH to mythic-01 (${MYTHIC_IP}) ... "
-if ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no ${SSH_USER}@${MYTHIC_IP} "echo 'SSH OK'" 2>/dev/null | grep -q "SSH OK"; then
+if ssh -o ConnectTimeout=3 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new ${SSH_USER}@${MYTHIC_IP} "echo 'SSH OK'" 2>/dev/null | grep -q "SSH OK"; then
   echo "✓ Connected"
 else
   echo "✗ Failed (check credentials/keys)"
@@ -63,7 +66,7 @@ fi
 
 # Test Redirector SSH
 echo -n "→ SSH to redirector-01 (${REDIRECTOR_IP}) ... "
-if ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no ${SSH_USER}@${REDIRECTOR_IP} "echo 'SSH OK'" 2>/dev/null | grep -q "SSH OK"; then
+if ssh -o ConnectTimeout=3 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new ${SSH_USER}@${REDIRECTOR_IP} "echo 'SSH OK'" 2>/dev/null | grep -q "SSH OK"; then
   echo "✓ Connected"
 else
   echo "✗ Failed (check credentials/keys)"
@@ -120,11 +123,7 @@ echo ""
 echo "[5] Ansible Connectivity Test"
 echo "─────────────────────────────"
 
-# Copy current inventory to temp and update IPs if needed
-TEMP_INV=$(mktemp)
-cat inventory/lab.ini | sed "s/10\.23\.20\.[0-9]*/${MYTHIC_IP}/g" | sed "s/192\.168\.36\.[0-9]*/redirector-ip-auto/g" > ${TEMP_INV}
-
-# Use a dynamic inventory for testing
+# Create dynamic inventory with proper permissions
 cat > /tmp/test_inventory.ini << INVEOF
 [mythic_servers]
 mythic-01 ansible_host=${MYTHIC_IP} ansible_user=${SSH_USER}
@@ -136,6 +135,8 @@ redirector-01 ansible_host=${REDIRECTOR_IP} ansible_user=${SSH_USER}
 ansible_python_interpreter=/usr/bin/python3
 INVEOF
 
+chmod 600 /tmp/test_inventory.ini
+
 echo -n "→ Testing Ansible connectivity ... "
 if ansible all -i /tmp/test_inventory.ini -m ping 2>/dev/null | grep -q "SUCCESS"; then
   echo "✓ All hosts responding"
@@ -145,8 +146,6 @@ else
   echo "Detailed test:"
   ansible all -i /tmp/test_inventory.ini -m ping -vvv
 fi
-
-rm -f ${TEMP_INV} /tmp/test_inventory.ini
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
