@@ -53,14 +53,6 @@ locals {
   })
 }
 
-# Data source: Reference template VM
-data "proxmox_virtual_environment_vms" "template_vm" {
-  node_name = var.proxmox_node
-  filter    = "name = '${var.template_name}'"
-}
-
-# Output template ID for reference
-output "template_id" {
-  value       = data.proxmox_virtual_environment_vms.template_vm.virtual_machines[0].vm_id
-  description = "Template VM ID retrieved from Proxmox"
-}
+# Note: Template VM must be manually created or identified before running Terraform
+# Use: qm list on Proxmox to find template VM ID, then set var.template_vmid = <id>
+# The template_vmid variable is used directly in vm_template.tf for cloning

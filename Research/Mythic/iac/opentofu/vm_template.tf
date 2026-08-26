@@ -1,20 +1,10 @@
 # VM Template Configuration for Mythic Infrastructure
 # Handles Ubuntu 22.04 LTS template cloning and cloud-init provisioning
 
-# Data source to retrieve template VM information
-data "proxmox_virtual_environment_vms" "cloud_init_template" {
-  node_name = var.proxmox_node
-  filter    = "name = '${var.template_name}'"
-}
-
 locals {
-  # Template VM details
-  template_vm = try(
-    data.proxmox_virtual_environment_vms.cloud_init_template.virtual_machines[0],
-    null
-  )
-
-  template_id = local.template_vm != null ? local.template_vm.vm_id : var.template_vmid
+  # Template VM ID - retrieved manually from Proxmox
+  # Run: qm list on Proxmox node to find template VM ID
+  template_id = var.template_vmid
 
   # Cloud-init configuration shared across all VMs
   cloud_init_base = {
@@ -34,9 +24,9 @@ output "template_info" {
   value = {
     name  = var.template_name
     vmid  = local.template_id
-    ready = local.template_vm != null ? true : false
+    node  = var.proxmox_node
   }
-  description = "Template VM information"
+  description = "Template VM information (manually verified)"
 }
 
 # Module for cloud-init configuration

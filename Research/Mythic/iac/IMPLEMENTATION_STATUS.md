@@ -1,8 +1,8 @@
 # IaC Implementation Status
 
 **Date:** 2026-08-26  
-**Stage:** Phase 1 Complete (Templates & Fixes)  
-**Progress:** 60% - Critical templates created, Terraform remediation in progress  
+**Stage:** Phase 1 Complete (Templates), Phase 2 Blocked (Terraform API Incompatibility)  
+**Progress:** 55% - Critical Ansible templates created ✓, Terraform data sources fixed ✓, VM resources need major refactor ✗  
 
 ---
 
@@ -33,24 +33,36 @@
 
 ---
 
-## Blockers - Terraform API Compatibility ⚠️
+## Blockers - Terraform Provider API Incompatibility ⚠️ MAJOR
 
-The workflow identified a critical provider incompatibility. The IaC uses **bpg/proxmox v0.45.0+**, but the data sources and resource arguments assume an older provider API:
+The workflow identified a **critical provider incompatibility**. The generated IaC uses **bpg/proxmox v0.45.1**, but the resource definitions assume an older provider API (telmate/proxmox). This requires extensive refactoring of all VM resources.
 
-### Issue 1: `filter` argument not supported
-**File:** `main.tf` line 59, `vm_template.tf` line 7  
-**Error:** `data "proxmox_virtual_environment_vms"` does not accept `filter` argument  
-**Fix:** Replace with `nodes` + `vms` loop or use `names` filter if available
+### Fixed Issues ✓
+- [x] Issue 1: `filter` argument not supported → Removed data source, using template_vmid variable
+- [x] Issue 2: Missing data source → Removed proxmox_virtual_environment_storage, using manual setup path
 
-### Issue 2: Missing data source
-**File:** `storage.tf` line 21  
-**Error:** `data "proxmox_virtual_environment_storage"` does not exist in bpg/proxmox  
-**Fix:** Remove storage data source (manual Proxmox setup) or use local-lvm directly
+### Remaining Issues (VM Resources) ✗
+**Scope:** All VM resources (vm_mythic.tf, vm_redirector.tf, vm_payload.tf, vm_echidna.tf, monitoring.tf)  
+**Count:** 50+ argument mismatches across 5 files  
+**Effort:** 8-12 hours for full rewrite + testing
 
-### Issue 3: Track 2 Provider Mismatch
+### Major Argument Incompatibilities
+
+| Old (telmate) | New (bpg) | Impact |
+|---|---|---|
+| `vmid` | `vm_id` | All VM resources |
+| `disk { size, storage }` | `disk { interface, ... }` | Missing interface argument |
+| `network { disabled }` | `network_device { ... }` | Structure change |
+| `init_config { hostname }` | `initialization { ... }` | Cloud-init structure |
+| `ciuser, cipassword` | `initialization { user_account }` | Auth method change |
+| `user_data_base64` | `initialization { cloud_init_data }` | Cloud-init path |
+| `cpu_limit, cpu_sockets` | `cpu { cores, sockets }` | CPU structure |
+| `watchdog_device, backup` blocks | Different block structure | Block structure |
+
+### Track 2 Provider Mismatch
 **File:** `track2-sardonic-agent/iac/main.tf`  
-**Error:** Uses `telmate/proxmox` provider (old API), conflicts with main IaC using `bpg/proxmox`  
-**Fix:** Migrate Track 2 Terraform to bpg/proxmox syntax
+**Status:** Still uses `telmate/proxmox` provider  
+**Recommendation:** Either migrate to bpg/proxmox or pin to telmate version
 
 ---
 

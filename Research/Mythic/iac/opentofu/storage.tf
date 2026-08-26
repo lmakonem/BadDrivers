@@ -16,19 +16,16 @@ locals {
   retention_ops_days = local.is_ops_env ? 30 : var.snapshot_retention_days
 }
 
-# Storage pool reference (data source)
-# In production, configure backing storage on Proxmox before running Terraform
-data "proxmox_virtual_environment_storage" "storage" {
-  storage = local.storage_pool
-}
-
+# Note: Storage pool must exist on Proxmox before running Terraform
+# Default: local-lvm (LVM-based local storage)
+# Configure: pvesm list on Proxmox to verify storage pool exists
 output "storage_pool_info" {
   value = {
-    name    = data.proxmox_virtual_environment_storage.storage.storage
-    type    = data.proxmox_virtual_environment_storage.storage.type
-    content = data.proxmox_virtual_environment_storage.storage.content_types
+    name    = local.storage_pool
+    type    = "dir or lvmthin (manual verification required)"
+    content = "images"
   }
-  description = "Storage pool configuration"
+  description = "Storage pool configured (manual setup required)"
 }
 
 # Local variable for disk configuration used in VM modules
