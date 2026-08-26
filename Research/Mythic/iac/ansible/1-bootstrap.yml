@@ -1,0 +1,257 @@
+---
+# 1-bootstrap.yml - Bootstrap Phase
+# Tasks: SSH keys, deployment user creation, sudo setup, system updates
+
+- name: "Update system packages"
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: "Install required packages"
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - build-essential
+      - python3-pip
+      - python3-venv
+      - openssh-client
+      - openssh-server
+      - openssh-sftp-server
+      - sudo
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+      - software-properties-common
+      - unzip
+      - jq
+      - net-tools
+      - ufw
+      - fail2ban
+      - auditd
+      - audispd-plugins
+      - apparmor-utils
+      - chrony
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: "Set timezone"
+  timezone:
+    name: "{{ timezone }}"
+
+- name: "Create deployment user (localuser)"
+  user:
+    name: localuser
+    shell: /bin/bash
+    home: /home/localuser
+    groups: sudo,docker
+    append: yes
+    state: present
+  when: deployment_mode == "lab"
+
+- name: "Create deployment user (deployuser)"
+  user:
+    name: deployuser
+    shell: /bin/bash
+    home: /home/deployuser
+    groups: sudo,docker
+    append: yes
+    state: present
+  when: deployment_mode == "ops"
+
+- name: "Create .ssh directory for localuser"
+  file:
+    path: /home/localuser/.ssh
+    state: directory
+    owner: localuser
+    group: localuser
+    mode: '0700'
+  when: deployment_mode == "lab"
+
+- name: "Create .ssh directory for deployuser"
+  file:
+    path: /home/deployuser/.ssh
+    state: directory
+    owner: deployuser
+    group: deployuser
+    mode: '0700'
+  when: deployment_mode == "ops"
+
+- name: "Add SSH public key for localuser"
+  authorized_key:
+    user: localuser
+    key: "{{ lookup('file', item) }}"
+    state: present
+  loop: "{{ ssh_public_keys | default([]) }}"
+  when:
+    - deployment_mode == "lab"
+    - ssh_public_keys is defined
+
+- name: "Add SSH public key for deployuser"
+  authorized_key:
+    user: deployuser
+    key: "{{ lookup('file', item) }}"
+    state: present
+  loop: "{{ ssh_public_keys | default([]) }}"
+  when:
+    - deployment_mode == "ops"
+    - ssh_public_keys is defined
+
+- name: "Configure sudo for localuser (NOPASSWD)"
+  lineinfile:
+    path: /etc/sudoers.d/localuser
+    line: "localuser ALL=(ALL) NOPASSWD: ALL"
+    create: yes
+    mode: '0440'
+    validate: '/usr/sbin/visudo -cf %s'
+  when: deployment_mode == "lab"
+
+- name: "Configure sudo for deployuser (NOPASSWD)"
+  lineinfile:
+    path: /etc/sudoers.d/deployuser
+    line: "deployuser ALL=(ALL) NOPASSWD: ALL"
+    create: yes
+    mode: '0440'
+    validate: '/usr/sbin/visudo -cf %s'
+  when: deployment_mode == "ops"
+
+- name: "Disable root SSH login"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+    state: present
+  notify: restart sshd
+
+- name: "Disable password authentication"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+    state: present
+  notify: restart sshd
+
+- name: "Enable public key authentication"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PubkeyAuthentication"
+    line: "PubkeyAuthentication yes"
+    state: present
+  notify: restart sshd
+
+- name: "Disable empty password login"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitEmptyPasswords"
+    line: "PermitEmptyPasswords no"
+    state: present
+  notify: restart sshd
+
+- name: "Disable X11 forwarding"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?X11Forwarding"
+    line: "X11Forwarding no"
+    state: present
+  notify: restart sshd
+
+- name: "Set SSH max auth tries"
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?MaxAuthTries"
+    line: "MaxAuthTries {{ ssh_max_auth_tries }}"
+    state: present
+  notify: restart sshd
+
+- name: "Create mythic system user"
+  user:
+    name: "{{ mythic_user }}"
+    shell: /bin/bash
+    home: "{{ mythic_base_path }}"
+    create_home: yes
+    groups: docker
+    append: yes
+    state: present
+  when: "'mythic_servers' in group_names"
+
+- name: "Create redirector system user"
+  user:
+    name: "{{ redirector_user | default('redirector') }}"
+    shell: /bin/bash
+    home: /var/redirector
+    create_home: yes
+    state: present
+  when: "'redirectors' in group_names"
+
+- name: "Configure chronyd (time sync)"
+  systemd:
+    name: chrony
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: "Verify system time is synchronized"
+  shell: |
+    chronyc status | grep -q "Synchronized"
+  register: time_sync_check
+  retries: 3
+  delay: 10
+  until: time_sync_check.rc == 0
+
+- name: "Set kernel parameters (security hardening)"
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - name: "net.ipv4.ip_forward"
+      value: "0"
+    - name: "net.ipv4.conf.all.send_redirects"
+      value: "0"
+    - name: "net.ipv4.conf.default.send_redirects"
+      value: "0"
+    - name: "net.ipv4.conf.all.accept_redirects"
+      value: "0"
+    - name: "net.ipv4.conf.default.accept_redirects"
+      value: "0"
+    - name: "net.ipv4.icmp_echo_ignore_broadcasts"
+      value: "1"
+    - name: "net.ipv4.conf.all.log_martians"
+      value: "1"
+    - name: "net.ipv4.conf.default.log_martians"
+      value: "1"
+
+- name: "Create required directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ mythic_base_path }}"
+    - "/var/log/mythic"
+    - "/opt/scripts"
+
+- name: "Set up log rotation for mythic"
+  copy:
+    content: |
+      /var/log/mythic/*.log {
+        daily
+        missingok
+        rotate 14
+        compress
+        delaycompress
+        notifempty
+        create 0640 {{ mythic_user }} adm
+        sharedscripts
+      }
+    dest: /etc/logrotate.d/mythic
+    mode: '0644'
+  when: "'mythic_servers' in group_names"
+
+- name: "Bootstrap phase complete"
+  debug:
+    msg: "Bootstrap phase completed successfully"

@@ -1,0 +1,10 @@
+---
+# Bootstrap Role - Default Variables
+deploy_user: "{{ ansible_user | default('localuser') }}"
+timezone: UTC
+enable_ntp: true
+ntp_servers:
+  - 0.ubuntu.pool.ntp.org
+  - 1.ubuntu.pool.ntp.org
+  - 2.ubuntu.pool.ntp.org
+  - 3.ubuntu.pool.ntp.org

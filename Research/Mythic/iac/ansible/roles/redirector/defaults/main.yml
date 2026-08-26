@@ -1,0 +1,10 @@
+---
+# Redirector Role - Default Variables
+redirector_user: redirector
+redirector_listen_port: 443
+redirector_backend_host: 10.23.20.10
+redirector_backend_port: 7443
+nginx_enabled: true
+dnsmasq_enabled: true
+socat_enabled: true
+dns_records: []

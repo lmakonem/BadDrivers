@@ -1,0 +1,265 @@
+---
+# 4-services.yml - Services Deployment Phase
+# Tasks: Start Mythic containers, httpx profile, socat, dnsmasq, nginx
+
+- name: "Mythic server configuration"
+  block:
+    - name: "Create Mythic configuration directory"
+      file:
+        path: "{{ mythic_base_path }}/docker"
+        state: directory
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0755'
+
+    - name: "Create docker-compose.yml for Mythic"
+      template:
+        src: mythic-docker-compose.yml.j2
+        dest: "{{ mythic_base_path }}/docker/docker-compose.yml"
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0640'
+
+    - name: "Create Mythic environment file"
+      template:
+        src: mythic-env.j2
+        dest: "{{ mythic_base_path }}/docker/.env"
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0600'
+
+    - name: "Deploy Mythic containers"
+      docker_compose:
+        project_src: "{{ mythic_base_path }}/docker"
+        state: present
+        build: no
+        pull: yes
+
+    - name: "Wait for Mythic API to be ready"
+      uri:
+        url: "https://localhost:{{ mythic_https_port }}/api"
+        method: GET
+        validate_certs: no
+        status_code: 200
+      register: mythic_health
+      retries: 30
+      delay: 10
+      until: mythic_health.status is defined and mythic_health.status == 200
+
+    - name: "Deploy httpx C2 profile"
+      copy:
+        src: lockbit-icbc-hardened.toml
+        dest: "{{ mythic_base_path }}/payloads/httpx/config.toml"
+        mode: '0644'
+      when: deployment_mode == "lab"
+
+    - name: "Configure Mythic webhook"
+      uri:
+        url: "https://localhost:{{ mythic_https_port }}/api/v1.4/webhooks"
+        method: POST
+        validate_certs: no
+        body_format: json
+        body:
+          webhook_url: "http://localhost:{{ mythic_webhook_port }}/webhook"
+          event_type: "all"
+        headers:
+          Authorization: "Bearer {{ mythic_jwt_token }}"
+      register: webhook_result
+      changed_when: webhook_result.status == 201
+      failed_when: webhook_result.status not in [200, 201]
+
+  when: "'mythic_servers' in group_names"
+
+- name: "Socat TCP/UDP relay setup"
+  block:
+    - name: "Install socat"
+      apt:
+        name: socat
+        state: present
+
+    - name: "Create socat systemd service"
+      template:
+        src: socat.service.j2
+        dest: /etc/systemd/system/socat-relay.service
+        mode: '0644'
+      notify: restart socat
+
+    - name: "Enable socat service"
+      systemd:
+        name: socat-relay
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  when: "('redirectors' in group_names or 'mythic_servers' in group_names)"
+
+- name: "Dnsmasq DNS spoofing setup"
+  block:
+    - name: "Install dnsmasq"
+      apt:
+        name: dnsmasq
+        state: present
+
+    - name: "Create dnsmasq configuration"
+      template:
+        src: dnsmasq.conf.j2
+        dest: /etc/dnsmasq.conf
+        backup: yes
+        mode: '0644'
+      notify: restart dnsmasq
+
+    - name: "Create dnsmasq hosts file for DNS spoofing"
+      copy:
+        dest: /etc/dnsmasq.hosts
+        content: |
+          {% for record in dns_records %}
+          {{ record.ip }}  {{ record.domain }}
+          {% endfor %}
+        mode: '0644'
+      notify: restart dnsmasq
+
+    - name: "Enable dnsmasq service"
+      systemd:
+        name: dnsmasq
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  when: "'redirectors' in group_names or deployment_mode == 'lab'"
+
+- name: "Nginx reverse proxy setup"
+  block:
+    - name: "Install nginx"
+      apt:
+        name: nginx
+        state: present
+
+    - name: "Create nginx configuration directory"
+      file:
+        path: /etc/nginx/sites-available
+        state: directory
+        mode: '0755'
+
+    - name: "Create nginx C2 proxy configuration"
+      template:
+        src: nginx-c2-proxy.conf.j2
+        dest: /etc/nginx/sites-available/c2-proxy
+        mode: '0644'
+      notify: restart nginx
+
+    - name: "Enable nginx C2 proxy site"
+      file:
+        src: /etc/nginx/sites-available/c2-proxy
+        dest: /etc/nginx/sites-enabled/c2-proxy
+        state: link
+
+    - name: "Test nginx configuration"
+      shell: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: "Enable nginx service"
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  when: "'redirectors' in group_names"
+
+- name: "Create monitoring and health check scripts"
+  block:
+    - name: "Create health check script"
+      template:
+        src: healthcheck.sh.j2
+        dest: /opt/scripts/healthcheck.sh
+        mode: '0755'
+
+    - name: "Create container status monitor script"
+      template:
+        src: monitor-containers.sh.j2
+        dest: /opt/scripts/monitor-containers.sh
+        mode: '0755'
+
+    - name: "Create systemd timer for health checks"
+      template:
+        src: healthcheck.timer.j2
+        dest: /etc/systemd/system/mythic-healthcheck.timer
+        mode: '0644'
+      notify: reload systemd
+
+    - name: "Create systemd service for health checks"
+      template:
+        src: healthcheck.service.j2
+        dest: /etc/systemd/system/mythic-healthcheck.service
+        mode: '0644'
+
+    - name: "Enable health check timer"
+      systemd:
+        name: mythic-healthcheck.timer
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  when: "'mythic_servers' in group_names"
+
+- name: "Create log aggregation scripts"
+  block:
+    - name: "Create log collection script"
+      template:
+        src: collect-logs.sh.j2
+        dest: /opt/scripts/collect-logs.sh
+        mode: '0755'
+
+    - name: "Set up log rotation for Mythic containers"
+      copy:
+        dest: /etc/logrotate.d/docker-mythic
+        content: |
+          /var/lib/docker/containers/*/*.log {
+            daily
+            missingok
+            rotate 5
+            compress
+            delaycompress
+            notifempty
+            copytruncate
+          }
+        mode: '0644'
+
+  when: "'mythic_servers' in group_names"
+
+- name: "Configure firewall for services"
+  block:
+    - name: "Allow Socat ports through UFW"
+      ufw:
+        rule: allow
+        port: "{{ item.listen_port }}"
+        proto: "{{ item.protocol }}"
+        comment: "Socat relay"
+      loop: "{{ socat_rules }}"
+      when: socat_enabled
+
+    - name: "Allow Dnsmasq through UFW"
+      ufw:
+        rule: allow
+        port: 53
+        proto: udp
+        comment: "Dnsmasq DNS"
+      when: dnsmasq_enabled
+
+    - name: "Allow Nginx through UFW"
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        comment: "Nginx proxy"
+      loop:
+        - 80
+        - 443
+      when: nginx_enabled
+
+  when: "'redirectors' in group_names"
+
+- name: "Services deployment phase complete"
+  debug:
+    msg: "Services deployment phase completed successfully"

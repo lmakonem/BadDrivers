@@ -1,0 +1,8 @@
+---
+# Monitoring Role - Default Variables
+enable_prometheus: true
+enable_node_exporter: true
+enable_filebeat: true
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 15s
+filebeat_log_paths: []

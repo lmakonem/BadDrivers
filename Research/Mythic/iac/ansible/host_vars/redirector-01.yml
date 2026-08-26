@@ -1,0 +1,63 @@
+---
+# Redirector-01 Host Variables (Lab)
+hostname: redirector-01
+ansible_host: 192.168.36.100
+domain_name: redirector.lab.internal
+ip_address: 192.168.36.100
+netmask: 255.255.255.0
+gateway: 192.168.36.1
+dns_servers:
+  - 8.8.8.8
+  - 1.1.1.1
+
+# Secondary Network Interface (Mythic LAN)
+secondary_interface: eth1
+secondary_ip: 10.23.20.100
+secondary_netmask: 255.255.255.0
+
+# System Resources
+vm_memory_gb: 8
+vm_cpu_cores: 4
+disk_size_gb: 50
+
+# Redirector Configuration
+nginx_domains:
+  - underdvr.exe
+  - api.underdvr.exe
+  - beacon.lockbit.local
+
+# SSL/TLS Configuration
+tls_cert_provider: "{{ 'letsencrypt' if deployment_mode == 'ops' else 'self_signed' }}"
+tls_cert_email: "ops@example.com"
+tls_cert_renewal_days: 30
+
+# DNS Spoofing
+dns_spoof_domains:
+  - underdvr.exe=192.168.36.100
+  - api.underdvr.exe=192.168.36.100
+  - beacon.lockbit.local=192.168.36.100
+
+# Load Balancing (ops mode)
+lb_pool_members: []  # Filled in ops inventory
+lb_algorithm: round_robin
+
+# Monitoring
+prometheus_targets:
+  - localhost:9100
+  - localhost:9113  # nginx prometheus exporter
+
+# Log Rotation
+nginx_access_log_retention: 30
+nginx_error_log_retention: 30
+
+# Rate Limiting
+nginx_rate_limit: "10r/s"
+nginx_burst_limit: 20
+nginx_nodelay: true
+
+# Security Headers
+security_headers:
+  - "X-Frame-Options: DENY"
+  - "X-Content-Type-Options: nosniff"
+  - "X-XSS-Protection: 1; mode=block"
+  - "Strict-Transport-Security: max-age=31536000; includeSubDomains"

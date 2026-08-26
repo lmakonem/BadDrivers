@@ -1,0 +1,14 @@
+---
+# Mythic Role - Default Variables
+mythic_user: mythic
+mythic_group: mythic
+mythic_base_path: /opt/mythic
+mythic_version: "3.4.1"
+mythic_container_port: 7681
+mythic_https_port: 7443
+mythic_webhook_port: 8000
+postgres_version: "13"
+postgres_user: mythic_user
+postgres_db: mythic
+postgres_port: 5432
+docker_images: []

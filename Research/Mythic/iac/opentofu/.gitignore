@@ -1,0 +1,26 @@
+# Terraform/OpenTofu files
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate*
+*.tfstate
+*.tfstate.*.backup
+*.tfvars.json
+!terraform.tfvars.example
+.terraformrc
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+
+# Backup
+*.backup
+*.bak

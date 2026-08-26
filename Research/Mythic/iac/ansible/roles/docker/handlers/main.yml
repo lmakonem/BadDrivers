@@ -1,0 +1,7 @@
+---
+# Docker Role - Handlers
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+    daemon_reload: yes

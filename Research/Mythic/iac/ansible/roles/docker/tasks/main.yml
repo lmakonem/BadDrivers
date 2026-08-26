@@ -1,0 +1,72 @@
+---
+# Docker Role - Main Tasks
+- name: "Add Docker GPG key"
+  apt_key:
+    url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+    state: present
+
+- name: "Add Docker repository"
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: "Install Docker packages"
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: "Create docker group"
+  group:
+    name: docker
+    state: present
+
+- name: "Add user to docker group"
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: "Create Docker daemon configuration directory"
+  file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+
+- name: "Configure Docker daemon"
+  copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "5"
+        },
+        "storage-driver": "overlay2",
+        "icc": false,
+        "default-ulimits": {
+          "nofile": {
+            "Hard": 4096,
+            "Soft": 4096
+          }
+        }
+      }
+    mode: '0644'
+  notify: restart docker
+
+- name: "Enable Docker service"
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: "Docker role complete"
+  debug:
+    msg: "Docker role tasks completed"

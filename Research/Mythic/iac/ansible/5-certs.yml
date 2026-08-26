@@ -1,0 +1,285 @@
+---
+# 5-certs.yml - TLS Certificate Generation and Management
+# Tasks: Generate self-signed or Let's Encrypt certificates, install certs
+
+- name: "Create certificate directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /etc/ssl/certs
+    - /etc/ssl/private
+    - /var/lib/letsencrypt
+
+- name: "Generate self-signed certificate for lab environment"
+  block:
+    - name: "Generate private key"
+      openssl_privatekey:
+        path: "{{ tls_key_path }}"
+        size: 4096
+        type: RSA
+        mode: '0600'
+
+    - name: "Generate certificate signing request"
+      openssl_csr:
+        path: "/tmp/mythic.csr"
+        privatekey_path: "{{ tls_key_path }}"
+        common_name: "{{ domain_name | default('mythic.lab') }}"
+        subject_alt_name:
+          - "DNS:{{ domain_name | default('mythic.lab') }}"
+          - "DNS:*.{{ domain_name | default('mythic.lab') }}"
+          - "IP:{{ ip_address }}"
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        extended_key_usage:
+          - serverAuth
+        mode: '0644'
+
+    - name: "Generate self-signed certificate"
+      openssl_certificate:
+        path: "{{ tls_cert_path }}"
+        privatekey_path: "{{ tls_key_path }}"
+        csr_path: "/tmp/mythic.csr"
+        provider: selfsigned
+        selfsigned_version: 3
+        selfsigned_digest: sha256
+        valid_in: "{{ tls_cert_validity_days }}"
+        mode: '0644'
+
+    - name: "Remove CSR file"
+      file:
+        path: "/tmp/mythic.csr"
+        state: absent
+
+  when:
+    - tls_cert_source == 'self_signed' or deployment_mode == 'lab'
+
+- name: "Install Let's Encrypt certificate for ops environment"
+  block:
+    - name: "Install certbot"
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+    - name: "Create certbot configuration directory"
+      file:
+        path: /etc/letsencrypt
+        state: directory
+        mode: '0755'
+
+    - name: "Create certbot renewal script"
+      template:
+        src: certbot-renew.sh.j2
+        dest: /opt/scripts/certbot-renew.sh
+        mode: '0755'
+
+    - name: "Generate Let's Encrypt certificate"
+      shell: |
+        certbot certonly --non-interactive --agree-tos \
+          --email {{ tls_cert_email }} \
+          --standalone \
+          -d {{ domain_name }}
+      register: certbot_result
+      changed_when: "'Successfully received certificate' in certbot_result.stdout"
+      failed_when: certbot_result.rc != 0 and 'existing certificate' not in certbot_result.stderr
+
+    - name: "Copy Let's Encrypt certificate to standard location"
+      shell: |
+        cp /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem {{ tls_cert_path }}
+        cp /etc/letsencrypt/live/{{ domain_name }}/privkey.pem {{ tls_key_path }}
+        chmod 644 {{ tls_cert_path }}
+        chmod 600 {{ tls_key_path }}
+      changed_when: true
+
+    - name: "Create certbot renewal cron job"
+      cron:
+        name: "Renew Let's Encrypt certificates"
+        minute: "0"
+        hour: "*/12"
+        job: "/opt/scripts/certbot-renew.sh"
+        state: present
+
+  when:
+    - tls_cert_source == 'letsencrypt' and deployment_mode == 'ops'
+
+- name: "Install certificate for Mythic"
+  block:
+    - name: "Create Mythic cert directory"
+      file:
+        path: "{{ mythic_base_path }}/certs"
+        state: directory
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0755'
+
+    - name: "Copy certificate to Mythic directory"
+      copy:
+        src: "{{ tls_cert_path }}"
+        dest: "{{ mythic_base_path }}/certs/mythic.crt"
+        remote_src: yes
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0644'
+
+    - name: "Copy private key to Mythic directory"
+      copy:
+        src: "{{ tls_key_path }}"
+        dest: "{{ mythic_base_path }}/certs/mythic.key"
+        remote_src: yes
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0600'
+
+    - name: "Configure Mythic to use certificate"
+      template:
+        src: mythic-tls-config.j2
+        dest: "{{ mythic_base_path }}/config/tls.config"
+        owner: "{{ mythic_user }}"
+        group: "{{ mythic_group }}"
+        mode: '0640'
+      notify: restart mythic
+
+  when: "'mythic_servers' in group_names"
+
+- name: "Install certificate for Redirector/Nginx"
+  block:
+    - name: "Create nginx cert directory"
+      file:
+        path: /etc/nginx/certs
+        state: directory
+        mode: '0755'
+
+    - name: "Copy certificate to Nginx directory"
+      copy:
+        src: "{{ tls_cert_path }}"
+        dest: /etc/nginx/certs/server.crt
+        remote_src: yes
+        mode: '0644'
+
+    - name: "Copy private key to Nginx directory"
+      copy:
+        src: "{{ tls_key_path }}"
+        dest: /etc/nginx/certs/server.key
+        remote_src: yes
+        mode: '0600'
+
+    - name: "Copy certificate chain (if exists)"
+      copy:
+        src: "{{ tls_chain_path | default(tls_cert_path) }}"
+        dest: /etc/nginx/certs/chain.crt
+        remote_src: yes
+        mode: '0644'
+      when: tls_chain_path is defined
+
+    - name: "Configure Nginx to use certificate"
+      template:
+        src: nginx-ssl.conf.j2
+        dest: /etc/nginx/snippets/ssl-redirect.conf
+        mode: '0644'
+      notify: restart nginx
+
+  when: "'redirectors' in group_names"
+
+- name: "Verify certificate installation"
+  block:
+    - name: "Check certificate expiration"
+      openssl_certificate_info:
+        path: "{{ tls_cert_path }}"
+      register: cert_info
+
+    - name: "Display certificate information"
+      debug:
+        msg: |
+          Certificate Info:
+          Subject: {{ cert_info.subject }}
+          Issuer: {{ cert_info.issuer }}
+          Valid From: {{ cert_info.not_before }}
+          Valid Until: {{ cert_info.not_after }}
+          Serial: {{ cert_info.serial_number }}
+
+    - name: "Check certificate validity"
+      assert:
+        that:
+          - cert_info.valid_at is defined
+        fail_msg: "Certificate is not valid"
+
+- name: "Create certificate monitoring script"
+  copy:
+    dest: /opt/scripts/check-cert-expiry.sh
+    content: |
+      #!/bin/bash
+      # Check certificate expiration
+      CERT_FILE="{{ tls_cert_path }}"
+      WARN_DAYS=30
+
+      if [ ! -f "$CERT_FILE" ]; then
+        echo "CRITICAL: Certificate file not found: $CERT_FILE"
+        exit 2
+      fi
+
+      EXPIRY=$(openssl x509 -enddate -noout -in "$CERT_FILE" | cut -d= -f2)
+      EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+      NOW_EPOCH=$(date +%s)
+      DAYS_LEFT=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+
+      if [ $DAYS_LEFT -lt 0 ]; then
+        echo "CRITICAL: Certificate has expired"
+        exit 2
+      elif [ $DAYS_LEFT -lt $WARN_DAYS ]; then
+        echo "WARNING: Certificate expires in $DAYS_LEFT days"
+        exit 1
+      else
+        echo "OK: Certificate expires in $DAYS_LEFT days"
+        exit 0
+      fi
+    mode: '0755'
+
+- name: "Create systemd timer for certificate expiry checks"
+  copy:
+    dest: /etc/systemd/system/cert-check.timer
+    content: |
+      [Unit]
+      Description=Daily Certificate Expiry Check
+      Requires=cert-check.service
+
+      [Timer]
+      OnBootSec=1h
+      OnUnitActiveSec=24h
+
+      [Install]
+      WantedBy=timers.target
+    mode: '0644'
+
+- name: "Create systemd service for certificate checks"
+  copy:
+    dest: /etc/systemd/system/cert-check.service
+    content: |
+      [Unit]
+      Description=Certificate Expiry Check
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/scripts/check-cert-expiry.sh
+      StandardOutput=journal
+      StandardError=journal
+    mode: '0644'
+
+- name: "Enable certificate check timer"
+  systemd:
+    name: cert-check.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: "Certificate phase complete"
+  debug:
+    msg: |
+      Certificate installation complete
+      Certificate Path: {{ tls_cert_path }}
+      Key Path: {{ tls_key_path }}
+      Certificate Source: {{ tls_cert_source | upper }}

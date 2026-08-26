@@ -1,0 +1,52 @@
+---
+# Mythic-01 Host Variables (Lab)
+hostname: mythic-01
+ansible_host: 10.23.20.10
+domain_name: mythic.lab.internal
+ip_address: 10.23.20.10
+netmask: 255.255.255.0
+gateway: 10.23.20.1
+dns_servers:
+  - 8.8.8.8
+  - 1.1.1.1
+
+# System Resources
+vm_memory_gb: 16
+vm_cpu_cores: 8
+disk_size_gb: 100
+
+# Mythic-Specific Configuration
+mythic_jwt_token: "{{ vault_mythic_jwt_token }}"
+mythic_admin_user: admin
+mythic_admin_password: "{{ vault_mythic_admin_password }}"
+mythic_default_payload_type: apollo
+mythic_default_profile: httpx
+
+# Database Configuration
+postgres_replication_enabled: false
+postgres_backup_dir: /var/backups/postgres
+
+# Container Registry Credentials (if using private registry)
+docker_registry_url: docker.io
+docker_registry_username: "{{ vault_docker_registry_username }}"
+docker_registry_password: "{{ vault_docker_registry_password }}"
+
+# Backup Configuration
+backup_destination: /mnt/backups
+backup_script_path: /opt/mythic/scripts/backup.sh
+
+# Monitoring
+prometheus_targets:
+  - localhost:9090
+  - localhost:9100
+
+# Log Retention
+syslog_retention_days: 30
+audit_log_retention_days: 90
+docker_log_max_size: 10m
+docker_log_max_file: 5
+
+# Enable Advanced Features
+enable_ha_replication: false
+enable_vault_integration: false
+enable_ldap_auth: false

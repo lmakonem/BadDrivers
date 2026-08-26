@@ -1,0 +1,73 @@
+---
+# Mythic Role - Main Tasks
+- name: "Create Mythic system user"
+  user:
+    name: "{{ mythic_user }}"
+    shell: /bin/bash
+    home: "{{ mythic_base_path }}"
+    create_home: yes
+    groups: docker
+    append: yes
+
+- name: "Create Mythic directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ mythic_user }}"
+    group: "{{ mythic_group }}"
+    mode: '0755'
+  loop:
+    - "{{ mythic_base_path }}"
+    - "{{ mythic_base_path }}/docker"
+    - "{{ mythic_base_path }}/config"
+    - "{{ mythic_base_path }}/payloads"
+    - "{{ mythic_base_path }}/logs"
+
+- name: "Create docker-compose.yml"
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ mythic_base_path }}/docker/docker-compose.yml"
+    owner: "{{ mythic_user }}"
+    group: "{{ mythic_group }}"
+    mode: '0640'
+
+- name: "Create Mythic environment file"
+  template:
+    src: env.j2
+    dest: "{{ mythic_base_path }}/docker/.env"
+    owner: "{{ mythic_user }}"
+    group: "{{ mythic_group }}"
+    mode: '0600'
+
+- name: "Create Docker network"
+  docker_network:
+    name: mythic-net
+    state: present
+
+- name: "Deploy Mythic containers"
+  docker_compose:
+    project_src: "{{ mythic_base_path }}/docker"
+    state: present
+    pull: yes
+
+- name: "Wait for Mythic API"
+  uri:
+    url: "https://localhost:{{ mythic_https_port }}/api"
+    method: GET
+    validate_certs: no
+  register: mythic_ready
+  retries: 30
+  delay: 10
+  until: mythic_ready.status == 200
+
+- name: "Deploy C2 profile"
+  copy:
+    src: "{{ c2_profile_file }}"
+    dest: "{{ mythic_base_path }}/payloads/profile.toml"
+    owner: "{{ mythic_user }}"
+    group: "{{ mythic_group }}"
+  when: c2_profile_file is defined
+
+- name: "Mythic role complete"
+  debug:
+    msg: "Mythic role tasks completed"

@@ -1,0 +1,34 @@
+[Unit]
+Description=Socat TCP/UDP Relay for Mythic C2
+Documentation=man:socat(1)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStartPre=/bin/bash -c 'mkdir -p /var/log/socat && chown root:root /var/log/socat'
+
+# Build socat command from rules
+ExecStart=/bin/bash -c '\
+  socat -d -d \
+    TCP-LISTEN:443,reuseaddr,fork TCP:{{ redirector_backend_host }}:{{ redirector_backend_port }} \
+    2>&1 | tee /var/log/socat/relay.log'
+
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=socat-relay
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/log/socat
+
+[Install]
+WantedBy=multi-user.target
