@@ -22,8 +22,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <thread>
-#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
