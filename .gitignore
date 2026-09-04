@@ -1,0 +1,20 @@
+# Compiled binaries and executables
+build/
+*.exe
+*.dll
+*.sys
+*.pdb
+
+# Binary driver samples and analysis dumps
+drivers_23/
+samples/
+ghidra/
+artifacts/
+*.dmp
+*.raw
+
+# Local config
+opencode.json
+
+# macOS
+.DS_Store
