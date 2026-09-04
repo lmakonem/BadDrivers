@@ -1,4 +1,0 @@
----
-# Default variables for wazuh-manager role
-
-wazuh_manager_data_path: "/opt/siem/wazuh-manager"

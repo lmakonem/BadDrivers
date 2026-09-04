@@ -1,4 +1,0 @@
----
-# Default variables for misp role
-
-misp_data_path: "/opt/siem/misp"

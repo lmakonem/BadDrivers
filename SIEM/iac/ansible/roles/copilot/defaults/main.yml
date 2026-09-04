@@ -1,4 +1,0 @@
----
-# Default variables for copilot role
-
-copilot_data_path: "/opt/siem/copilot"

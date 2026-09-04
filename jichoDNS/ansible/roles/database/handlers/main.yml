@@ -1,5 +1,0 @@
----
-- name: restart database services
-  ansible.builtin.shell: |
-    cd {{ app_dir }} && docker compose -f docker-compose.db.yml up -d --force-recreate
-  changed_when: true

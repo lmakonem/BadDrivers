@@ -1,4 +1,0 @@
----
-# Default variables for graylog role
-
-graylog_data_path: "/opt/siem/graylog"

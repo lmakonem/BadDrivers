@@ -1,8 +1,0 @@
----
-# Verify Role - Default Variables
-tls_cert_path: /etc/ssl/certs/server.crt
-enable_dns_test: true
-enable_tls_test: true
-enable_firewall_test: true
-enable_ssh_test: true
-enable_auditd_test: true
