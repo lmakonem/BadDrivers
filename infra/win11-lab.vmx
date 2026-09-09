@@ -1,0 +1,71 @@
+.encoding = "UTF-8"
+config.version = "8"
+virtualHW.version = "21"
+
+# x86-64 Windows 11 22H2 — BYOVD research lab
+# Emulated on Apple Silicon via VMware Fusion 26
+guestOS = "windows11-64"
+displayName = "Win11-22H2-BYOVD-Lab"
+
+# Firmware: EFI, Secure Boot OFF (required for unsigned/vulnerable driver load)
+firmware = "efi"
+uefi.secureBoot.enabled = "FALSE"
+uefi.allowAuthBypass = "TRUE"
+
+# Resources
+memsize = "8192"
+numvcpus = "4"
+cpuid.coresPerSocket = "2"
+
+# Nested virtualisation (useful for kernel debugging, not needed for BYOVD itself)
+vhv.enable = "TRUE"
+
+# Disk — edit path after creating the VMDK
+scsi0.present = "TRUE"
+scsi0.virtualDev = "lsilogic"
+scsi0:0.present = "TRUE"
+scsi0:0.fileName = "Win11-22H2-BYOVD-Lab.vmdk"
+scsi0:0.redo = ""
+
+# DVD / ISO — set cdrom0.fileName to your Win11 22H2 x64 ISO path before first boot
+ide1:0.present = "TRUE"
+ide1:0.autodetect = "TRUE"
+ide1:0.deviceType = "cdrom-image"
+ide1:0.fileName = "/path/to/Win11_22H2_x64.iso"
+ide1:0.startConnected = "TRUE"
+
+# Network — isolated host-only (no bridged to keep lab traffic off production net)
+ethernet0.present = "TRUE"
+ethernet0.connectionType = "hostonly"
+ethernet0.virtualDev = "vmxnet3"
+ethernet0.wakeOnPcktRcv = "FALSE"
+ethernet0.addressType = "generated"
+
+# USB / HID
+usb.present = "TRUE"
+usb.generic.autoconnect = "FALSE"
+ehci.present = "TRUE"
+
+# Display
+svga.graphicsMemoryKB = "262144"
+mks.enable3d = "FALSE"
+
+# TPM — present (Win11 requirement) but we disable Secure Boot above
+tpm.present = "TRUE"
+
+# Tools / misc
+toolScripts.afterPowerOn = "TRUE"
+toolScripts.afterResume = "TRUE"
+toolScripts.beforeSuspend = "TRUE"
+toolScripts.beforePowerOff = "TRUE"
+powerType.powerOff = "soft"
+powerType.reset = "soft"
+powerType.suspend = "soft"
+
+# Snapshot / isolation
+isolation.tools.copy.disable = "FALSE"
+isolation.tools.paste.disable = "FALSE"
+isolation.tools.dnd.disable = "FALSE"
+
+# Disable side-channel mitigations for raw perf in lab
+ulm.disableMitigations = "TRUE"

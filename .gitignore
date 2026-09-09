@@ -1,0 +1,44 @@
+# Build artifacts
+build/Release/*.exe
+build/Release/*.dll
+build/Release/mock_driver_test
+*.o
+!build/Release/byovd_dump_bof.o
+
+# Backup files
+*.bak
+*.orig
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VM disk images & snapshots
+*.qcow2
+*.vmdk
+*.iso
+*.fd
+*.vmem
+*.vmss
+*.vmsn
+*.vmsd
+*.lck/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Driver binaries (never commit .sys — fingerprinted by hash)
+*.sys

