@@ -13,7 +13,7 @@ Tools exposed to Claude:
   vm_run_cascade  — run cascade.exe with given args, return stdout
 
 Configuration via environment variables (or edit DEFAULTS below):
-  VM_IP       172.16.157.129
+  VM_IP       127.0.0.1
   VM_USER     user
   VM_PASS     password
   VM_VMX      /Users/user/Virtual Machines.localized/baddrivers_vm.vmwarevm/baddrivers_vm.vmx

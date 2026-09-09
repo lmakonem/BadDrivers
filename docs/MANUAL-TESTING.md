@@ -14,10 +14,10 @@ Isolated lab only. Authorized per CLAUDE.md.
 
 | Item | Value |
 |---|---|
-| Proxmox host | `root@192.168.36.225` |
+| Proxmox host | `root@<PVE_HOST>` (set via env var) |
 | Test VM | **VM 125**, Windows 11 22H2 x64, build 22621 |
-| VM IP | `192.168.36.210` (static) |
-| VM credentials | `localuser:password` |
+| VM IP | `<VM_IP>` (set via env var) |
+| VM credentials | (set via env vars `VM_USER` / `VM_PASS`) |
 | Snapshot (clean) | `byovd-files-ready` (Defender off, cascade.exe + drivers pre-staged at `C:\Users\Public\byovd\`) |
 | Staging path on guest | `C:\Users\Public\byovd\` |
 | EPROCESS offsets (22621) | UniqueProcessId=0x440, ActiveProcessLinks=0x448, Token=0x4B8, Protection=0x87A, ImageFileName=0x5A8 |
@@ -29,7 +29,7 @@ Isolated lab only. Authorized per CLAUDE.md.
 ### Reverting to clean state
 
 ```bash
-ssh root@192.168.36.225 "qm rollback 125 byovd-files-ready && qm start 126"
+ssh root@$PVE_HOST "qm rollback 125 byovd-files-ready && qm start 125"
 sleep 40   # wait for guest agent
 ```
 
@@ -387,7 +387,7 @@ sc stop TestDrv
 sc delete TestDrv
 
 # Or just revert the snapshot:
-# ssh root@192.168.36.225 "qm rollback 125 byovd-files-ready"
+# ssh root@$PVE_HOST "qm rollback 125 byovd-files-ready"
 ```
 
 ---
@@ -422,10 +422,10 @@ After testing each driver, update the matrix below. Copy this table into `notes/
 ```bash
 # 1. Copy .sys from local collection to Proxmox host
 HASH="63e49412093cd7576dbf571f11b6f1c6bac5bb22dcb99e1eb178a52c1d26686a"
-scp drivers_23/bigDrivers/${HASH}.sys root@192.168.36.225:/tmp/TestDriver.sys
+scp drivers_23/bigDrivers/${HASH}.sys root@$PVE_HOST:/tmp/TestDriver.sys
 
 # 2. Push from Proxmox into VM 126 via qm guest exec
-ssh root@192.168.36.225 "
+ssh root@$PVE_HOST "
   cat /tmp/TestDriver.sys | base64 | \
   qm guest exec 125 -- powershell -Command \
     '[IO.File]::WriteAllBytes(\"C:\\Users\\Public\\byovd\\TestDriver.sys\", [Convert]::FromBase64String((Read-Host)))'

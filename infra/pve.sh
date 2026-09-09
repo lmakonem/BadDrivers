@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-PVE_HOST="${PVE_HOST:-192.168.36.225}"
-PVE_PASS="${PVE_PASS:-Lahilabs2018}"
+PVE_HOST="${PVE_HOST:-127.0.0.1}"
+PVE_PASS="${PVE_PASS:?Set PVE_PASS environment variable}"
 PVE_NODE="${PVE_NODE:-pve}"
 PVE="https://${PVE_HOST}:8006"
 
