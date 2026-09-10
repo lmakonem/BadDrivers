@@ -40,12 +40,11 @@ fi
 
 echo "[*] Compiling $SRC -> $OUT"
 $CC -c "$SRC" -o "$OUT" \
-    -masm=intel \
-    -Wall \
-    -Wno-unused-function \
-    -Wno-unused-variable \
-    -D_WIN32_WINNT=0x0A00 \
-    -DWINVER=0x0A00
+    -DBOF \
+    -Os \
+    -w \
+    -mno-stack-arg-probe \
+    -fno-builtin
 
 echo "[+] Done: $OUT ($(wc -c < "$OUT") bytes)"
 echo ""
